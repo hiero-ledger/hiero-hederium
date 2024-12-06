@@ -21,6 +21,7 @@ limiter:
 
 logging:
   level: "debug"
+  DisableCaller: true
 
 apiKeys:
   - key: "FREE-USER-API-KEY-123"

@@ -1,9 +1,11 @@
 package transport
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 type JSONRPCRequest struct {
@@ -32,19 +34,21 @@ func rpcHandler(ctx *gin.Context) {
 		})
 		return
 	}
-
-	result, rpcErr := dispatchMethod(ctx, req.Method, req.Params)
+	methodName := req.Method
+	logger.Info("JSON-RPC method called", zap.String("method", methodName))
+	result, rpcErr := dispatchMethod(ctx, methodName, req.Params)
 	resp := JSONRPCResponse{JSONRPC: "2.0", ID: req.ID}
 	if rpcErr != nil {
 		resp.Error = rpcErr
+		ctx.JSON(http.StatusBadRequest, resp)
 	} else {
 		resp.Result = result
+		ctx.JSON(http.StatusOK, resp)
 	}
-	ctx.JSON(http.StatusOK, resp)
 }
 
-func dispatchMethod(ctx *gin.Context, method string, params interface{}) (interface{}, map[string]interface{}) {
-	switch method {
+func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (interface{}, map[string]interface{}) {
+	switch methodName {
 	case "eth_blockNumber":
 		return ethService.GetBlockNumber()
 	// case "eth_sendRawTransaction":
@@ -59,9 +63,14 @@ func dispatchMethod(ctx *gin.Context, method string, params interface{}) (interf
 	// 	}
 	// 	return ethService.SendRawTransaction(ctx, rawTx)
 	default:
-		return nil, map[string]interface{}{
-			"code":    -32601,
-			"message": "Unsupported JSON-RPC method",
-		}
+		return nil, unsupportedMethodError(methodName)
+	}
+}
+
+func unsupportedMethodError(methodName string) map[string]interface{} {
+	return map[string]interface{}{
+		"code":    -32601,
+		"message": fmt.Sprintf("Unsupported JSON-RPC method: %s", methodName),
+		"name":    "Method not found",
 	}
 }
