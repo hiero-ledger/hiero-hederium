@@ -1,0 +1,32 @@
+environment: "development"
+server:
+  port: 7546
+
+hedera:
+  network: "testnet"
+  operatorId: "0.0.1466"
+  operatorKey: "302e020100300506032b6570042204206bb5ca5c9a33b8a12e2d962fe14587fa40e92306e9c39bcd2bb62951100d7248"
+  hbarBudget: 1000
+
+mirrorNode:
+  baseUrl: "https://testnet.mirrornode.hedera.com"
+  timeoutSeconds: 10
+limiter:
+  free:
+    requestsPerMinute: 100
+    hbarLimit: 10
+  premium:
+    requestsPerMinute: 1000
+    hbarLimit: 10000
+
+logging:
+  level: "debug"
+
+apiKeys:
+  - key: "FREE-USER-API-KEY-123"
+    tier: "free"
+  - key: "PREMIUM-USER-API-KEY-456"
+    tier: "premium"
+
+features:
+  enforceApiKey: false
