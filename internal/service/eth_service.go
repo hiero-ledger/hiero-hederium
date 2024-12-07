@@ -11,14 +11,14 @@ import (
 
 type EthService struct {
 	hClient       *sdkhedera.Client
-	mClient       *infrahedera.MirrorClient
+	mClient       infrahedera.MirrorNodeClient // use the interface here
 	logger        *zap.Logger
 	tieredLimiter *limiter.TieredLimiter
 }
 
 func NewEthService(
 	hClient *sdkhedera.Client,
-	mClient *infrahedera.MirrorClient,
+	mClient infrahedera.MirrorNodeClient, // also change the constructor to accept the interface
 	log *zap.Logger,
 	l *limiter.TieredLimiter,
 ) *EthService {

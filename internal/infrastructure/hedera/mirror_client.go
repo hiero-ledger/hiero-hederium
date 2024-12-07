@@ -10,6 +10,9 @@ import (
 	"go.uber.org/zap"
 )
 
+type MirrorNodeClient interface {
+	GetLatestBlock() (map[string]interface{}, error)
+}
 type MirrorClient struct {
 	BaseURL string
 	Timeout time.Duration
