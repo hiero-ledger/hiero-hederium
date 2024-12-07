@@ -55,17 +55,22 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		return ethService.GetAccounts()
 	case "web3_clientVersion":
 		return web3Service.ClientVersion(), nil
-	// case "eth_sendRawTransaction":
-	// 	paramArr, ok := params.([]interface{})
-	// 	if !ok || len(paramArr) < 1 {
-	// 		return nil, map[string]interface{}{"code": -32602, "message": "Invalid params"}
-	// 	}
-	// 	rawTxHex := paramArr[0].(string)
-	// 	rawTx, err := hex.DecodeString(rawTxHex[2:])
-	// 	if err != nil {
-	// 		return nil, map[string]interface{}{"code": -32602, "message": "Invalid hex"}
-	// 	}
-	// 	return ethService.SendRawTransaction(ctx, rawTx)
+	case "eth_syncing":
+		return ethService.Syncing()
+	case "eth_mining":
+		return ethService.Mining()
+	case "eth_maxPriorityFeePerGas":
+		return ethService.MaxPriorityFeePerGas()
+	case "eth_hashrate":
+		return ethService.Hashrate()
+	case "eth_getUncleCountByBlockNumber":
+		return ethService.GetUncleCountByBlockNumber()
+	case "eth_getUncleByBlockNumberAndIndex":
+		return ethService.GetUncleByBlockNumberAndIndex()
+	case "eth_getUncleCountByBlockHash":
+		return ethService.GetUncleCountByBlockHash()
+	case "eth_getUncleByBlockHashAndIndex":
+		return ethService.GetUncleByBlockHashAndIndex()
 	default:
 		return nil, unsupportedMethodError(methodName)
 	}

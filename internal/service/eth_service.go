@@ -66,39 +66,67 @@ func (s *EthService) GetBlockNumber() (interface{}, map[string]interface{}) {
 	}
 }
 
-// func (s *EthService) SendRawTransaction(c *gin.Context, rawTx []byte) (interface{}, map[string]interface{}) {
-// 	apiKeyVal, _ := c.Get("apiKey")
-// 	tierVal, _ := c.Get("tier")
-// 	apiKey := apiKeyVal.(string)
-// 	tier := tierVal.(string)
-
-// 	hbarCost := 1 // Example cost estimation
-
-// 	if !s.tieredLimiter.DeductHbarUsage(apiKey, tier, hbarCost) {
-// 		return nil, map[string]interface{}{
-// 			"code":    -32000,
-// 			"message": "Hbar budget exceeded",
-// 		}
-// 	}
-
-// 	// Integrate with Hedera SDK to submit transaction (placeholder)
-// 	// Example:
-// 	// tx, err := hedera.TransactionFromBytes(rawTx)
-// 	// if err != nil {
-// 	//   return nil, map[string]interface{}{"code": -32602, "message": "Invalid raw transaction"}
-// 	// }
-// 	// receipt, err := tx.Execute(s.hClient)
-// 	// if err != nil {
-// 	//   return nil, map[string]interface{}{"code": -32000, "message": "Transaction execution failed"}
-// 	// }
-// 	// hash := receipt.TransactionID.String()
-
-// 	return "0x123abc", nil
-// }
+// Methods that return false values, because the Hedera network does not support them
 
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation
 func (s *EthService) GetAccounts() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting accounts")
 	s.logger.Debug("Returning empty accounts array as per specification")
 	return []string{}, nil
+}
+
+// Syncing returns false, because the Hedera network does not support syncing
+func (s *EthService) Syncing() (interface{}, map[string]interface{}) {
+	s.logger.Info("Syncing")
+	s.logger.Debug("Returning false as per specification")
+	return false, nil
+}
+
+// Mining returns false, because the Hedera network does not support mining
+func (s *EthService) Mining() (interface{}, map[string]interface{}) {
+	s.logger.Info("Mining")
+	s.logger.Debug("Returning false as per specification")
+	return false, nil
+}
+
+// MaxPriorityFeePerGas returns 0x0, because the Hedera network does not support it
+func (s *EthService) MaxPriorityFeePerGas() (interface{}, map[string]interface{}) {
+	s.logger.Info("MaxPriorityFeePerGas")
+	s.logger.Debug("Returning 0x0 as per specification")
+	return "0x0", nil
+}
+
+// Hashrate returns 0x0, because the Hedera network does not support it
+func (s *EthService) Hashrate() (interface{}, map[string]interface{}) {
+	s.logger.Info("Hashrate")
+	s.logger.Debug("Returning 0x0 as per specification")
+	return "0x0", nil
+}
+
+// GetUncleCountByBlockNumber returns 0x0, because the Hedera network does not support it
+func (s *EthService) GetUncleCountByBlockNumber() (interface{}, map[string]interface{}) {
+	s.logger.Info("GetUncleCountByBlockNumber")
+	s.logger.Debug("Returning 0x0 as per specification")
+	return "0x0", nil
+}
+
+// GetUncleByBlockNumberAndIndex returns nil, because the Hedera network does not support it
+func (s *EthService) GetUncleByBlockNumberAndIndex() (interface{}, map[string]interface{}) {
+	s.logger.Info("GetUncleByBlockNumberAndIndex")
+	s.logger.Debug("Returning nil as per specification")
+	return nil, nil
+}
+
+// GetUncleCountByBlockHash returns 0x0, because the Hedera network does not support it
+func (s *EthService) GetUncleCountByBlockHash() (interface{}, map[string]interface{}) {
+	s.logger.Info("GetUncleCountByBlockHash")
+	s.logger.Debug("Returning 0x0 as per specification")
+	return "0x0", nil
+}
+
+// GetUncleByBlockHashAndIndex returns nil, because the Hedera network does not support it
+func (s *EthService) GetUncleByBlockHashAndIndex() (interface{}, map[string]interface{}) {
+	s.logger.Info("GetUncleByBlockHashAndIndex")
+	s.logger.Debug("Returning nil as per specification")
+	return nil, nil
 }
