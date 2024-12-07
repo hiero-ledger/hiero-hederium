@@ -51,6 +51,8 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 	switch methodName {
 	case "eth_blockNumber":
 		return ethService.GetBlockNumber()
+	case "eth_accounts":
+		return ethService.GetAccounts()
 	case "web3_clientVersion":
 		return web3Service.ClientVersion(), nil
 	// case "eth_sendRawTransaction":

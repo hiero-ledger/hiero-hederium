@@ -38,3 +38,30 @@ func TestGetBlockNumber(t *testing.T) {
 	// 42 in hex is "0x2a"
 	assert.Equal(t, "0x2a", result)
 }
+
+func TestGetAccounts(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Create a logger for testing
+	cfg := zap.NewDevelopmentConfig()
+	cfg.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+	logger, _ := cfg.Build()
+
+	// Create mock client
+	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
+
+	s := service.NewEthService(
+		nil,        // hClient not needed for this test
+		mockClient, // pass the mock as the interface
+		logger,
+		nil, // tieredLimiter not needed for this test
+	)
+
+	result, errMap := s.GetAccounts()
+	assert.Nil(t, errMap)
+
+	accounts, ok := result.([]string)
+	assert.True(t, ok, "Result should be of type []string")
+	assert.Empty(t, accounts, "Accounts array should be empty")
+}

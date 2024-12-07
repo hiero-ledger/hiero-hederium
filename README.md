@@ -21,7 +21,7 @@ Hederium is designed to implement the Hashio protocol in Go, offering high perfo
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/your-username/Hederium.git
+   git clone https://github.com/georgi-l95/Hederium.git
    cd Hederium
    ```
 
@@ -75,4 +75,4 @@ This project is licensed under the terms of the LICENSE file included in the rep
 
 ## Contact
 
-Project Link: [https://github.com/your-username/Hederium](https://github.com/your-username/Hederium)
+Project Link: [https://github.com/georgi-l95/Hederium](https://github.com/georgi-l95/Hederium)
