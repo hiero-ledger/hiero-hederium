@@ -1,0 +1,29 @@
+import { check } from "k6";
+
+export function getEnvVar(name, defaultValue) {
+  const value = __ENV[name];
+  return value === undefined || value === "" ? defaultValue : value;
+}
+
+// Load configuration from environment variables with defaults
+export const config = {
+  endpoint: getEnvVar("ENDPOINT_URL", "http://localhost:7546"),
+  apiKey: getEnvVar("API_KEY", ""), // empty means no key required
+  vus: parseInt(getEnvVar("VUS", "1"), 10),
+  duration: getEnvVar("DURATION", "10s"),
+};
+
+// A basic check function for JSON-RPC responses
+export function validateJsonRpcResponse(response, methodExpected) {
+  return check(response, {
+    "status is 200": (r) => r.status === 200,
+    "jsonrpc is 2.0": (r) => {
+      const body = r.json();
+      return body.jsonrpc === "2.0";
+    },
+    [`method ${methodExpected} result`]: (r) => {
+      const body = r.json();
+      return body.result !== undefined;
+    },
+  });
+}
