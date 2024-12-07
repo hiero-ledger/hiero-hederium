@@ -30,6 +30,13 @@ func NewEthService(
 	}
 }
 
+// GetBlockNumber retrieves the latest block number from the Hedera network and returns it
+// in hexadecimal format, compatible with Ethereum JSON-RPC specifications.
+// It returns two values:
+//   - interface{}: A hex string representing the block number (e.g., "0x1234") on success,
+//     or nil on failure
+//   - map[string]interface{}: Error details if the operation fails, nil on success.
+//     Error format follows Ethereum JSON-RPC error specifications.
 func (s *EthService) GetBlockNumber() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting block number")
 	block, err := s.mClient.GetLatestBlock()
@@ -88,3 +95,10 @@ func (s *EthService) GetBlockNumber() (interface{}, map[string]interface{}) {
 
 // 	return "0x123abc", nil
 // }
+
+// GetAccounts returns an empty array of accounts, similar to Infura's implementation
+func (s *EthService) GetAccounts() (interface{}, map[string]interface{}) {
+	s.logger.Info("Getting accounts")
+	s.logger.Debug("Returning empty accounts array as per specification")
+	return []string{}, nil
+}
