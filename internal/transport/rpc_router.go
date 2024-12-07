@@ -11,19 +11,21 @@ import (
 )
 
 var ethService *service.EthService
+var web3Service *service.Web3Service
 var logger *zap.Logger
 
 func SetupRouter(
 	hClient *sdkhedera.Client,
 	mClient *hedera.MirrorClient,
 	log *zap.Logger,
+	applicationVersion string,
 	apiKeyStore *limiter.APIKeyStore,
 	tieredLimiter *limiter.TieredLimiter,
 	enforceAPIKey bool,
 ) *gin.Engine {
 	logger = log
 	ethService = service.NewEthService(hClient, mClient, log, tieredLimiter)
-
+	web3Service = service.NewWeb3Service(log, applicationVersion)
 	router := gin.Default()
 
 	if enforceAPIKey {
