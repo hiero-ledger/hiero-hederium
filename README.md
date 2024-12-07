@@ -35,7 +35,7 @@ Hederium is designed to implement the Hashio protocol in Go, offering high perfo
 ### Local Development
 
 ```bash
-go run ./cmd/...
+go run ./cmd/server/main.go
 ```
 
 ### Using Docker
