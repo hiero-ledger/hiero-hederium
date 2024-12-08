@@ -58,10 +58,6 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		return ethService.GetAccounts()
 	case "web3_clientVersion":
 		return web3Service.ClientVersion(), nil
-	case "net_listening":
-		return netService.Listening(), nil
-	case "net_version":
-		return netService.Version(), nil
 	case "eth_syncing":
 		return ethService.Syncing()
 	case "eth_mining":
