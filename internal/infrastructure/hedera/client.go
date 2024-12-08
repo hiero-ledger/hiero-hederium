@@ -6,7 +6,15 @@ import (
 	"github.com/hashgraph/hedera-sdk-go/v2"
 )
 
-func NewHederaClient(network, operatorId, operatorKey string) (*hedera.Client, error) {
+type HederaNodeClient interface {
+	GetNetworkFees() (int64, error)
+}
+
+type HederaClient struct {
+	*hedera.Client
+}
+
+func NewHederaClient(network, operatorId, operatorKey string) (*HederaClient, error) {
 	var client *hedera.Client
 	switch network {
 	case "mainnet":
@@ -34,5 +42,31 @@ func NewHederaClient(network, operatorId, operatorKey string) (*hedera.Client, e
 		return nil, err
 	}
 	client.SetOperator(accID, opKey)
-	return client, nil
+	return &HederaClient{Client: client}, nil
+}
+
+func (h *HederaClient) GetNetworkFees() (int64, error) {
+	// var feeScheduleBytes []byte
+	// feeScheduleBytes, err := hedera.NewFileContentsQuery().
+	// 	SetFileID(hedera.FileID{
+	// 		Shard: 0,
+	// 		Realm: 0,
+	// 		File:  111,
+	// 	}).
+	// 	Execute(c)
+	// if err != nil {
+	// 	return 0, err
+	// }
+
+	// feeSchedule, err := hedera.FeeScheduleFromBytes(feeScheduleBytes)
+	// if err != nil {
+	// 	return 0, err
+	// }
+
+	// for _, txFeeSchedule := range feeSchedule.TransactionFeeSchedules {
+	// 	txFeeSchedule.RequestType.
+	// }
+
+	// Hardcode for now, for simplicity
+	return 72, nil
 }

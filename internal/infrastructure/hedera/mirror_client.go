@@ -7,12 +7,15 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/georgi-l95/Hederium/internal/domain"
 	"go.uber.org/zap"
 )
 
 type MirrorNodeClient interface {
 	GetLatestBlock() (map[string]interface{}, error)
+	GetNetworkFees() (int64, error)
 }
+
 type MirrorClient struct {
 	BaseURL string
 	Timeout time.Duration
@@ -27,7 +30,6 @@ func NewMirrorClient(baseURL string, timeoutSeconds int, logger *zap.Logger) *Mi
 	}
 }
 
-// Example: fetching the latest block information
 func (m *MirrorClient) GetLatestBlock() (map[string]interface{}, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
 	defer cancel()
@@ -60,4 +62,40 @@ func (m *MirrorClient) GetLatestBlock() (map[string]interface{}, error) {
 	return result.Blocks[0], nil
 }
 
-// Additional methods for balance, transaction info, logs etc. can be added similarly.
+func (m *MirrorClient) GetNetworkFees() (int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BaseURL+"/api/v1/network/fees", nil)
+	if err != nil {
+		return 0, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
+	}
+
+	var feeResponse domain.FeeResponse
+
+	if err := json.NewDecoder(resp.Body).Decode(&feeResponse); err != nil {
+		return 0, err
+	}
+	if len(feeResponse.Fees) == 0 {
+		return 0, fmt.Errorf("no fees returned by mirror node")
+	}
+
+	var gasTinybars int64
+	for _, fee := range feeResponse.Fees {
+		if fee.TransactionType == "EthereumTransaction" {
+			gasTinybars = fee.Gas
+			break
+		}
+	}
+	return gasTinybars, nil
+}

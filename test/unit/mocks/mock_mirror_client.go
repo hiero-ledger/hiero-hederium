@@ -47,3 +47,18 @@ func (mr *MockMirrorNodeClientMockRecorder) GetLatestBlock() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestBlock", reflect.TypeOf((*MockMirrorNodeClient)(nil).GetLatestBlock))
 }
+
+// GetNetworkFees mocks base method.
+func (m *MockMirrorNodeClient) GetNetworkFees() (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNetworkFees")
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNetworkFees indicates an expected call of GetNetworkFees.
+func (mr *MockMirrorNodeClientMockRecorder) GetNetworkFees() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNetworkFees", reflect.TypeOf((*MockMirrorNodeClient)(nil).GetNetworkFees))
+}
