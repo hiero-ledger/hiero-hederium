@@ -11,7 +11,6 @@ import (
 
 var ethService *service.EthService
 var web3Service *service.Web3Service
-var netService *service.NetService
 var logger *zap.Logger
 
 func SetupRouter(
@@ -27,7 +26,6 @@ func SetupRouter(
 	logger = log
 	ethService = service.NewEthService(hClient, mClient, log, tieredLimiter, chainId)
 	web3Service = service.NewWeb3Service(log, applicationVersion)
-	netService = service.NewNetService(log, chainId)
 	router := gin.Default()
 
 	if enforceAPIKey {
