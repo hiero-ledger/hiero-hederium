@@ -9,7 +9,7 @@ export function getEnvVar(name, defaultValue) {
 export const config = {
   endpoint: getEnvVar("ENDPOINT_URL", "http://localhost:7546"),
   apiKey: getEnvVar("API_KEY", ""), // empty means no key required
-  vus: parseInt(getEnvVar("VUS", "1"), 10),
+  vus: parseInt(getEnvVar("VUS", "10"), 10),
   duration: getEnvVar("DURATION", "10s"),
 };
 

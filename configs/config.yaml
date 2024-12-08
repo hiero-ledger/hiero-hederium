@@ -10,6 +10,7 @@ hedera:
   network: "testnet"
   operatorId: "0.0.1466"
   operatorKey: "302e020100300506032b6570042204206bb5ca5c9a33b8a12e2d962fe14587fa40e92306e9c39bcd2bb62951100d7248"
+  chainId: 0x128
   hbarBudget: 1000
 
 mirrorNode:

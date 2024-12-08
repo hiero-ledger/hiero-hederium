@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/georgi-l95/Hederium/internal/service"
@@ -10,6 +11,8 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+const defaultChainId = "0x127" // Default chain ID for tests
 
 func TestGetBlockNumber(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -31,6 +34,7 @@ func TestGetBlockNumber(t *testing.T) {
 		mockClient, // pass the mock as the interface
 		logger,
 		nil, // tieredLimiter not needed for this test
+		defaultChainId,
 	)
 
 	result, errMap := s.GetBlockNumber()
@@ -56,6 +60,7 @@ func TestGetAccounts(t *testing.T) {
 		mockClient, // pass the mock as the interface
 		logger,
 		nil, // tieredLimiter not needed for this test
+		defaultChainId,
 	)
 
 	result, errMap := s.GetAccounts()
@@ -73,7 +78,7 @@ func TestSyncing(t *testing.T) {
 
 	logger, _ := zap.NewDevelopment()
 	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
-	s := service.NewEthService(nil, mockClient, logger, nil)
+	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
 
 	// Test
 	result, errMap := s.Syncing()
@@ -88,7 +93,7 @@ func TestMining(t *testing.T) {
 
 	logger, _ := zap.NewDevelopment()
 	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
-	s := service.NewEthService(nil, mockClient, logger, nil)
+	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
 
 	// Test
 	result, errMap := s.Mining()
@@ -103,7 +108,7 @@ func TestMaxPriorityFeePerGas(t *testing.T) {
 
 	logger, _ := zap.NewDevelopment()
 	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
-	s := service.NewEthService(nil, mockClient, logger, nil)
+	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
 
 	// Test
 	result, errMap := s.MaxPriorityFeePerGas()
@@ -118,7 +123,7 @@ func TestHashrate(t *testing.T) {
 
 	logger, _ := zap.NewDevelopment()
 	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
-	s := service.NewEthService(nil, mockClient, logger, nil)
+	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
 
 	// Test
 	result, errMap := s.Hashrate()
@@ -133,7 +138,7 @@ func TestUncleRelatedMethods(t *testing.T) {
 
 	logger, _ := zap.NewDevelopment()
 	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
-	s := service.NewEthService(nil, mockClient, logger, nil)
+	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
 
 	// Test all uncle-related methods
 	t.Run("GetUncleCountByBlockNumber", func(t *testing.T) {
@@ -159,4 +164,107 @@ func TestUncleRelatedMethods(t *testing.T) {
 		assert.Nil(t, errMap)
 		assert.Nil(t, result)
 	})
+}
+
+func TestGetGasPrice(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Create a logger for testing
+	cfg := zap.NewDevelopmentConfig()
+	cfg.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+	logger, _ := cfg.Build()
+
+	// Create mock client
+	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
+	mockClient.EXPECT().
+		GetNetworkFees().
+		Return(int64(100), nil) // Return 100 tinybars
+
+	s := service.NewEthService(
+		nil,        // hClient not needed for this test
+		mockClient, // pass the mock as the interface
+		logger,
+		nil, // tieredLimiter not needed for this test
+		defaultChainId,
+	)
+
+	result, errMap := s.GetGasPrice()
+	assert.Nil(t, errMap)
+
+	// Expected calculation:
+	// 100 tinybars * 10^8 (conversion to weibars) = 10000000000
+	// Add 10% buffer = 11000000000
+	// Convert to hex = 0x28fa6ae00
+	assert.Equal(t, "0x28fa6ae00", result)
+}
+
+func TestGetGasPrice_Error(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger, _ := zap.NewDevelopment()
+	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
+	mockClient.EXPECT().
+		GetNetworkFees().
+		Return(int64(0), fmt.Errorf("network error"))
+
+	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
+
+	result, errMap := s.GetGasPrice()
+	assert.Nil(t, result)
+	assert.NotNil(t, errMap)
+	assert.Equal(t, -32000, errMap["code"])
+	assert.Equal(t, "Failed to fetch gas price", errMap["message"])
+}
+
+func TestGetChainId(t *testing.T) {
+	// Create a logger for testing
+	cfg := zap.NewDevelopmentConfig()
+	cfg.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+	logger, _ := cfg.Build()
+
+	// Create mock client
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
+
+	// Test cases
+	testCases := []struct {
+		name           string
+		chainId        string
+		expectedResult interface{}
+	}{
+		{
+			name:           "Mainnet chain ID",
+			chainId:        "0x127",
+			expectedResult: "0x127",
+		},
+		{
+			name:           "Testnet chain ID",
+			chainId:        "0x128",
+			expectedResult: "0x128",
+		},
+		{
+			name:           "Empty chain ID",
+			chainId:        "",
+			expectedResult: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := service.NewEthService(
+				nil,        // hClient not needed for this test
+				mockClient, // pass the mock as the interface
+				logger,
+				nil, // tieredLimiter not needed for this test
+				tc.chainId,
+			)
+
+			result, errMap := s.GetChainId()
+			assert.Nil(t, errMap)
+			assert.Equal(t, tc.expectedResult, result)
+		})
+	}
 }

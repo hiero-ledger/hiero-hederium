@@ -31,6 +31,7 @@ func main() {
 	}
 
 	applicationVersion := viper.GetString("application.version")
+	chainId := viper.GetString("hedera.chainId")
 	apiKeyStore := limiter.NewAPIKeyStore(viper.Get("apiKeys"))
 	tieredLimiter := limiter.NewTieredLimiter(viper.GetStringMap("limiter"), viper.GetInt("hedera.hbarBudget"))
 
@@ -38,7 +39,7 @@ func main() {
 
 	enforceAPIKey := viper.GetBool("features.enforceApiKey")
 
-	router := transport.SetupRouter(hClient, mClient, log, applicationVersion, apiKeyStore, tieredLimiter, enforceAPIKey)
+	router := transport.SetupRouter(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey)
 	port := viper.GetString("server.port")
 	log.Info("Starting Hederium server", zap.String("port", port))
 	if err := router.Run(":" + port); err != nil {

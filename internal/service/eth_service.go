@@ -1,32 +1,35 @@
 package service
 
 import (
+	"math/big"
 	"strconv"
 
 	infrahedera "github.com/georgi-l95/Hederium/internal/infrastructure/hedera"
 	"github.com/georgi-l95/Hederium/internal/infrastructure/limiter"
-	sdkhedera "github.com/hashgraph/hedera-sdk-go/v2"
 	"go.uber.org/zap"
 )
 
 type EthService struct {
-	hClient       *sdkhedera.Client
-	mClient       infrahedera.MirrorNodeClient // use the interface here
+	hClient       infrahedera.HederaNodeClient
+	mClient       infrahedera.MirrorNodeClient
 	logger        *zap.Logger
 	tieredLimiter *limiter.TieredLimiter
+	chainId       string
 }
 
 func NewEthService(
-	hClient *sdkhedera.Client,
-	mClient infrahedera.MirrorNodeClient, // also change the constructor to accept the interface
+	hClient infrahedera.HederaNodeClient,
+	mClient infrahedera.MirrorNodeClient,
 	log *zap.Logger,
 	l *limiter.TieredLimiter,
+	chainId string,
 ) *EthService {
 	return &EthService{
 		hClient:       hClient,
 		mClient:       mClient,
 		logger:        log,
 		tieredLimiter: l,
+		chainId:       chainId,
 	}
 }
 
@@ -56,6 +59,7 @@ func (s *EthService) GetBlockNumber() (interface{}, map[string]interface{}) {
 		blockNum := uint64(blockNumber)
 		hexBlockNum := "0x" + strconv.FormatUint(blockNum, 16)
 		s.logger.Debug("Successfully converted to hex", zap.String("hexBlockNum", hexBlockNum))
+		s.logger.Info("Successfully returned block number", zap.String("blockNumber", hexBlockNum))
 		return hexBlockNum, nil
 	}
 
@@ -64,6 +68,34 @@ func (s *EthService) GetBlockNumber() (interface{}, map[string]interface{}) {
 		"code":    -32000,
 		"message": "Invalid block data",
 	}
+}
+
+// GetGasPrice retrieves the gas price from the Hedera network and returns it
+// in hexadecimal format, compatible with Ethereum JSON-RPC specifications.
+func (s *EthService) GetGasPrice() (interface{}, map[string]interface{}) {
+	s.logger.Info("Getting gas price")
+	weibars, err := getFeeWeibars(s)
+	if err != nil {
+		errMsg := "Failed to fetch gas price"
+		s.logger.Error(errMsg)
+		return nil, map[string]interface{}{
+			"code":    -32000,
+			"message": errMsg,
+		}
+	}
+	// Add 10% buffer to the gas price
+	buffer := new(big.Int).Div(weibars, big.NewInt(10))
+	weibars.Add(weibars, buffer)
+	gasPrice := "0x" + strconv.FormatUint(weibars.Uint64(), 16)
+
+	s.logger.Info("Successfully returned gas price", zap.String("gasPrice", gasPrice))
+	return gasPrice, nil
+}
+
+func (s *EthService) GetChainId() (interface{}, map[string]interface{}) {
+	s.logger.Info("Getting chain ID")
+	s.logger.Info("Returning chain ID", zap.String("chainId", s.chainId))
+	return s.chainId, nil
 }
 
 // Methods that return false values, because the Hedera network does not support them

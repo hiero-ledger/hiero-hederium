@@ -46,11 +46,14 @@ func rpcHandler(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, resp)
 	}
 }
-
 func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (interface{}, map[string]interface{}) {
 	switch methodName {
 	case "eth_blockNumber":
 		return ethService.GetBlockNumber()
+	case "eth_gasPrice":
+		return ethService.GetGasPrice()
+	case "eth_chainId":
+		return ethService.GetChainId()
 	case "eth_accounts":
 		return ethService.GetAccounts()
 	case "web3_clientVersion":
