@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/georgi-l95/Hederium/internal/domain"
 	"github.com/georgi-l95/Hederium/internal/service"
 	"github.com/georgi-l95/Hederium/test/unit/mocks"
 	"github.com/golang/mock/gomock"
@@ -265,6 +266,219 @@ func TestGetChainId(t *testing.T) {
 			result, errMap := s.GetChainId()
 			assert.Nil(t, errMap)
 			assert.Equal(t, tc.expectedResult, result)
+		})
+	}
+}
+
+func TestGetBlockByHash(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger, _ := zap.NewDevelopment()
+	mockClient := mocks.NewMockMirrorClient(ctrl)
+
+	testHash := "0x123abc"
+	expectedBlock := &domain.BlockResponse{
+		Number:       123,
+		Hash:         testHash,
+		PreviousHash: "0x456def",
+		GasUsed:      1000,
+		Size:         2000,
+		LogsBloom:    "0x0",
+		Timestamp: domain.Timestamp{
+			From: "1640995200",
+		},
+	}
+
+	// Test cases
+	testCases := []struct {
+		name         string
+		hash         string
+		showDetails  bool
+		mockResponse *domain.BlockResponse
+		mockResults  []domain.ContractResults
+		expectNil    bool
+	}{
+		{
+			name:         "Success with transactions",
+			hash:         testHash,
+			showDetails:  false,
+			mockResponse: expectedBlock,
+			mockResults: []domain.ContractResults{
+				{Hash: "0xtx1", Result: "SUCCESS"},
+				{Hash: "0xtx2", Result: "SUCCESS"},
+			},
+			expectNil: false,
+		},
+		{
+			name:         "Block not found",
+			hash:         "0xnonexistent",
+			showDetails:  false,
+			mockResponse: nil,
+			mockResults:  nil,
+			expectNil:    true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockClient.EXPECT().
+				GetBlockByHashOrNumber(tc.hash).
+				Return(tc.mockResponse)
+
+			if tc.mockResponse != nil {
+				mockClient.EXPECT().
+					GetContractResults(tc.mockResponse.Timestamp).
+					Return(tc.mockResults)
+			}
+
+			s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
+			result, errMap := s.GetBlockByHash(tc.hash, tc.showDetails)
+
+			if tc.expectNil {
+				assert.Nil(t, result)
+				assert.Nil(t, errMap)
+			} else {
+				assert.NotNil(t, result)
+				assert.Nil(t, errMap)
+
+				ethBlock, ok := result.(*domain.Block)
+				assert.True(t, ok)
+				assert.Equal(t, "0x7b", *ethBlock.Number) // 123 in hex
+				assert.Equal(t, testHash, *ethBlock.Hash)
+				assert.Equal(t, expectedBlock.PreviousHash, ethBlock.ParentHash)
+				assert.Equal(t, len(tc.mockResults), len(ethBlock.Transactions))
+			}
+		})
+	}
+}
+
+func TestGetBlockByNumber(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger, _ := zap.NewDevelopment()
+	mockClient := mocks.NewMockMirrorClient(ctrl)
+
+	expectedBlock := &domain.BlockResponse{
+		Number:       123,
+		Hash:         "0x123abc",
+		PreviousHash: "0x456def",
+		GasUsed:      1000,
+		Size:         2000,
+		LogsBloom:    "0x0",
+		Timestamp: domain.Timestamp{
+			From: "1640995200",
+		},
+	}
+
+	testCases := []struct {
+		name            string
+		numberOrTag     string
+		showDetails     bool
+		mockLatestBlock map[string]interface{}
+		mockResponse    *domain.BlockResponse
+		mockResults     []domain.ContractResults
+		expectNil       bool
+		setupMocks      func()
+	}{
+		{
+			name:         "Success with specific number",
+			numberOrTag:  "0x7b", // 123 in hex
+			showDetails:  false,
+			mockResponse: expectedBlock,
+			mockResults: []domain.ContractResults{
+				{Hash: "0xtx1", Result: "SUCCESS"},
+			},
+			expectNil: false,
+			setupMocks: func() {
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("123").
+					Return(expectedBlock)
+			},
+		},
+		{
+			name:            "Success with latest tag",
+			numberOrTag:     "latest",
+			showDetails:     false,
+			mockLatestBlock: map[string]interface{}{"number": float64(123)},
+			mockResponse:    expectedBlock,
+			mockResults: []domain.ContractResults{
+				{Hash: "0xtx1", Result: "SUCCESS"},
+			},
+			expectNil: false,
+			setupMocks: func() {
+				mockClient.EXPECT().
+					GetLatestBlock().
+					Return(map[string]interface{}{"number": float64(123)}, nil)
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("123").
+					Return(expectedBlock)
+			},
+		},
+		{
+			name:         "Success with earliest tag",
+			numberOrTag:  "earliest",
+			showDetails:  false,
+			mockResponse: expectedBlock,
+			mockResults: []domain.ContractResults{
+				{Hash: "0xtx1", Result: "SUCCESS"},
+			},
+			expectNil: false,
+			setupMocks: func() {
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("0").
+					Return(expectedBlock)
+			},
+		},
+		{
+			name:         "Block not found",
+			numberOrTag:  "0x999",
+			showDetails:  false,
+			mockResponse: nil,
+			expectNil:    true,
+			setupMocks: func() {
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("2457"). // 0x999 in decimal
+					Return(nil)
+			},
+		},
+		{
+			name:        "Invalid hex number",
+			numberOrTag: "0xinvalid",
+			showDetails: false,
+			expectNil:   true,
+			setupMocks:  func() {},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setupMocks()
+
+			if tc.mockResponse != nil {
+				mockClient.EXPECT().
+					GetContractResults(tc.mockResponse.Timestamp).
+					Return(tc.mockResults)
+			}
+
+			s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
+			result, errMap := s.GetBlockByNumber(tc.numberOrTag, tc.showDetails)
+
+			if tc.expectNil {
+				assert.Nil(t, result)
+				assert.Nil(t, errMap)
+			} else {
+				assert.NotNil(t, result)
+				assert.Nil(t, errMap)
+
+				ethBlock, ok := result.(*domain.Block)
+				assert.True(t, ok)
+				assert.Equal(t, "0x7b", *ethBlock.Number) // 123 in hex
+				assert.Equal(t, expectedBlock.Hash, *ethBlock.Hash)
+				assert.Equal(t, expectedBlock.PreviousHash, ethBlock.ParentHash)
+				assert.Equal(t, len(tc.mockResults), len(ethBlock.Transactions))
+			}
 		})
 	}
 }
