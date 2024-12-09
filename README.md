@@ -1,7 +1,7 @@
 # Hederium
 
 <p align="center">
-  <img src="assets/logo.png" alt="Hederium Logo" width="400"/>
+  <img src="assets/logo.png" alt="Hederium Logo" width="100%"/>
 </p>
 
 [![CI - Unit Tests](https://github.com/georgi-l95/Hederium/actions/workflows/unit-test.yml/badge.svg)](https://github.com/georgi-l95/Hederium/actions/workflows/unit-test.yml)
