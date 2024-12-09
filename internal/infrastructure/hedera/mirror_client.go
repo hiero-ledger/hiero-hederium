@@ -13,6 +13,7 @@ import (
 
 type MirrorNodeClient interface {
 	GetLatestBlock() (map[string]interface{}, error)
+	GetBlockByHashOrNumber(hashOrNumber string) *domain.BlockResponse
 	GetNetworkFees() (int64, error)
 }
 
@@ -60,6 +61,37 @@ func (m *MirrorClient) GetLatestBlock() (map[string]interface{}, error) {
 	}
 
 	return result.Blocks[0], nil
+}
+
+func (m *MirrorClient) GetBlockByHashOrNumber(hashOrNumber string) *domain.BlockResponse {
+	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BaseURL+"/api/v1/blocks/"+hashOrNumber, nil)
+	if err != nil {
+		m.logger.Error("Error creating request to get block by hash or number", zap.Error(err))
+		return nil
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		m.logger.Error("Error getting block by hash or number", zap.Error(err))
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
+		return nil
+	}
+
+	var result domain.BlockResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		m.logger.Error("Error decoding response body", zap.Error(err))
+		return nil
+	}
+
+	m.logger.Info("Block", zap.Any("block", result))
+	return &result
 }
 
 func (m *MirrorClient) GetNetworkFees() (int64, error) {

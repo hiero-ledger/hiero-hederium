@@ -3,7 +3,9 @@ package service
 import (
 	"math/big"
 	"strconv"
+	"strings"
 
+	"github.com/georgi-l95/Hederium/internal/domain"
 	infrahedera "github.com/georgi-l95/Hederium/internal/infrastructure/hedera"
 	"github.com/georgi-l95/Hederium/internal/infrastructure/limiter"
 	"go.uber.org/zap"
@@ -96,6 +98,72 @@ func (s *EthService) GetChainId() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting chain ID")
 	s.logger.Info("Returning chain ID", zap.String("chainId", s.chainId))
 	return s.chainId, nil
+}
+
+func (s *EthService) GetBlockByHash(hash string, showDetails bool) (interface{}, map[string]interface{}) {
+	s.logger.Info("Getting block by hash", zap.String("hash", hash), zap.Bool("showDetails", showDetails))
+	block := s.mClient.GetBlockByHashOrNumber(hash)
+	if block == nil {
+		return nil, nil
+	}
+
+	// Create a new Block instance with default values
+	ethBlock := domain.NewBlock()
+
+	hexNumber := "0x" + strconv.FormatUint(uint64(block.Number), 16)
+	hexGasUsed := "0x" + strconv.FormatUint(uint64(block.GasUsed), 16)
+	hexSize := "0x" + strconv.FormatUint(uint64(block.Size), 16)
+	timestampStr := strings.Split(block.Timestamp.From, ".")[0]
+	timestampInt, _ := strconv.ParseUint(timestampStr, 10, 64)
+	hexTimestamp := "0x" + strconv.FormatUint(timestampInt, 16)
+	trimmedHash := block.Hash
+	if len(trimmedHash) > 66 {
+		trimmedHash = trimmedHash[:66]
+	}
+	trimmedParentHash := block.PreviousHash
+	if len(trimmedParentHash) > 66 {
+		trimmedParentHash = trimmedParentHash[:66]
+	}
+
+	ethBlock.Number = &hexNumber
+	ethBlock.GasUsed = hexGasUsed
+	ethBlock.GasLimit = "0x" + strconv.FormatUint(15000000, 16) // Hedera's default gas limit
+	ethBlock.Hash = &trimmedHash
+	ethBlock.LogsBloom = block.LogsBloom
+	ethBlock.TransactionsRoot = &trimmedHash
+	ethBlock.ParentHash = trimmedParentHash
+	ethBlock.Timestamp = hexTimestamp
+	ethBlock.Size = hexSize
+
+	// Handle transactions based on showDetails parameter
+	// if txs, ok := block["transactions"].([]interface{}); ok {
+	// 	if showDetails {
+	// 		// Convert each transaction to full Transaction object
+	// 		for _, tx := range txs {
+	// 			if txMap, ok := tx.(map[string]interface{}); ok {
+	// 				transaction := &domain.Transaction{}
+	// 				// Fill transaction details here based on txMap
+	// 				if txHash, ok := txMap["hash"].(string); ok {
+	// 					transaction.Hash = txHash
+	// 				}
+	// 				// Add more transaction field mappings as needed
+	// 				ethBlock.Transactions = append(ethBlock.Transactions, transaction)
+	// 			}
+	// 		}
+	// 	} else {
+	// 		// Only include transaction hashes
+	// 		for _, tx := range txs {
+	// 			if txMap, ok := tx.(map[string]interface{}); ok {
+	// 				if txHash, ok := txMap["hash"].(string); ok {
+	// 					ethBlock.Transactions = append(ethBlock.Transactions, txHash)
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// }
+
+	s.logger.Debug("Returning block data", zap.Any("block", ethBlock))
+	return ethBlock, nil
 }
 
 // Methods that return false values, because the Hedera network does not support them

@@ -36,6 +36,7 @@ func rpcHandler(ctx *gin.Context) {
 	}
 	methodName := req.Method
 	logger.Info("JSON-RPC method called", zap.String("method", methodName))
+
 	result, rpcErr := dispatchMethod(ctx, methodName, req.Params)
 	resp := JSONRPCResponse{JSONRPC: "2.0", ID: req.ID}
 	if rpcErr != nil {
@@ -46,8 +47,37 @@ func rpcHandler(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, resp)
 	}
 }
+
 func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (interface{}, map[string]interface{}) {
 	switch methodName {
+	case "eth_getBlockByHash":
+		paramsArray, ok := params.([]interface{})
+		if !ok || len(paramsArray) != 2 {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid params for eth_getBlockByHash: expected [blockHash, showDetails]",
+			}
+		}
+
+		// Type assert and validate blockHash
+		blockHash, ok := paramsArray[0].(string)
+		if !ok || len(blockHash) != 66 || blockHash[:2] != "0x" {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid blockHash: expected 32 byte hex string with 0x prefix",
+			}
+		}
+
+		// Type assert fullTx parameter
+		fullTx, ok := paramsArray[1].(bool)
+		if !ok {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid fullTx: expected boolean",
+			}
+		}
+
+		return ethService.GetBlockByHash(blockHash, fullTx)
 	case "eth_blockNumber":
 		return ethService.GetBlockNumber()
 	case "eth_gasPrice":
