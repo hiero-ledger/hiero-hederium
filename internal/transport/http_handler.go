@@ -3,6 +3,7 @@ package transport
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -68,16 +69,53 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 			}
 		}
 
-		// Type assert fullTx parameter
-		fullTx, ok := paramsArray[1].(bool)
+		// Type assert showDetails parameter
+		showDetails, ok := paramsArray[1].(bool)
 		if !ok {
 			return nil, map[string]interface{}{
 				"code":    -32602,
-				"message": "Invalid fullTx: expected boolean",
+				"message": "Invalid showDetails: expected boolean",
 			}
 		}
 
-		return ethService.GetBlockByHash(blockHash, fullTx)
+		return ethService.GetBlockByHash(blockHash, showDetails)
+	case "eth_getBlockByNumber":
+		paramsArray, ok := params.([]interface{})
+		if !ok || len(paramsArray) != 2 {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid params for eth_getBlockByNumber: expected [blockNumber, showDetails]",
+			}
+		}
+
+		// Type assert and validate block number/tag
+		blockNumber, ok := paramsArray[0].(string)
+		if !ok {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid blockNumber: expected string",
+			}
+		}
+
+		// Validate if it's a tag or hex number
+		if blockNumber != "earliest" && blockNumber != "latest" && blockNumber != "pending" {
+			if !strings.HasPrefix(blockNumber, "0x") {
+				return nil, map[string]interface{}{
+					"code":    -32602,
+					"message": "Invalid blockNumber: expected hex string with 0x prefix or tag (earliest/latest/pending)",
+				}
+			}
+		}
+
+		// Type assert showDetails parameter
+		showDetails, ok := paramsArray[1].(bool)
+		if !ok {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid showDetails: expected boolean",
+			}
+		}
+		return ethService.GetBlockByNumber(blockNumber, showDetails)
 	case "eth_blockNumber":
 		return ethService.GetBlockNumber()
 	case "eth_gasPrice":

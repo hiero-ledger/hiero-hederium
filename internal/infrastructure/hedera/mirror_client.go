@@ -15,6 +15,7 @@ type MirrorNodeClient interface {
 	GetLatestBlock() (map[string]interface{}, error)
 	GetBlockByHashOrNumber(hashOrNumber string) *domain.BlockResponse
 	GetNetworkFees() (int64, error)
+	GetContractResults(timestamp domain.Timestamp) []domain.ContractResults
 }
 
 type MirrorClient struct {
@@ -90,7 +91,7 @@ func (m *MirrorClient) GetBlockByHashOrNumber(hashOrNumber string) *domain.Block
 		return nil
 	}
 
-	m.logger.Info("Block", zap.Any("block", result))
+	m.logger.Debug("Block", zap.Any("block", result))
 	return &result
 }
 
@@ -130,4 +131,57 @@ func (m *MirrorClient) GetNetworkFees() (int64, error) {
 		}
 	}
 	return gasTinybars, nil
+}
+
+func (m *MirrorClient) GetContractResults(timestamp domain.Timestamp) []domain.ContractResults {
+	var allResults []domain.ContractResults
+	currentURL := fmt.Sprintf("%s/api/v1/contracts/results?timestamp=gte:%s&timestamp=lte:%s&limit=100&order=asc",
+		m.BaseURL, timestamp.From, timestamp.To)
+
+	for currentURL != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, currentURL, nil)
+		if err != nil {
+			m.logger.Error("Error creating request", zap.Error(err))
+			return []domain.ContractResults{} // Return empty array instead of nil
+		}
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			m.logger.Error("Error making request", zap.Error(err))
+			return []domain.ContractResults{} // Return empty array instead of nil
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
+			return []domain.ContractResults{} // Return empty array instead of nil
+		}
+
+		var result struct {
+			Results []domain.ContractResults `json:"results"`
+			Links   struct {
+				Next *string `json:"next"`
+			} `json:"links"`
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			m.logger.Error("Error decoding response body", zap.Error(err))
+			return []domain.ContractResults{} // Return empty array instead of nil
+		}
+
+		// It's okay if there are no results, just continue with the empty array
+		allResults = append(allResults, result.Results...)
+
+		// Update URL for next iteration or break the loop
+		if result.Links.Next != nil {
+			currentURL = m.BaseURL + *result.Links.Next
+		} else {
+			currentURL = ""
+		}
+	}
+
+	return allResults
 }

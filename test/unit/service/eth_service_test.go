@@ -24,7 +24,7 @@ func TestGetBlockNumber(t *testing.T) {
 	logger, _ := cfg.Build()
 
 	// Create mock client from the interface
-	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
+	mockClient := mocks.NewMockMirrorClient(ctrl)
 	mockClient.EXPECT().
 		GetLatestBlock().
 		Return(map[string]interface{}{"number": float64(42)}, nil)
@@ -53,7 +53,7 @@ func TestGetAccounts(t *testing.T) {
 	logger, _ := cfg.Build()
 
 	// Create mock client
-	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
+	mockClient := mocks.NewMockMirrorClient(ctrl)
 
 	s := service.NewEthService(
 		nil,        // hClient not needed for this test
@@ -77,7 +77,7 @@ func TestSyncing(t *testing.T) {
 	defer ctrl.Finish()
 
 	logger, _ := zap.NewDevelopment()
-	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
+	mockClient := mocks.NewMockMirrorClient(ctrl)
 	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
 
 	// Test
@@ -92,7 +92,7 @@ func TestMining(t *testing.T) {
 	defer ctrl.Finish()
 
 	logger, _ := zap.NewDevelopment()
-	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
+	mockClient := mocks.NewMockMirrorClient(ctrl)
 	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
 
 	// Test
@@ -107,7 +107,7 @@ func TestMaxPriorityFeePerGas(t *testing.T) {
 	defer ctrl.Finish()
 
 	logger, _ := zap.NewDevelopment()
-	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
+	mockClient := mocks.NewMockMirrorClient(ctrl)
 	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
 
 	// Test
@@ -122,7 +122,7 @@ func TestHashrate(t *testing.T) {
 	defer ctrl.Finish()
 
 	logger, _ := zap.NewDevelopment()
-	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
+	mockClient := mocks.NewMockMirrorClient(ctrl)
 	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
 
 	// Test
@@ -137,7 +137,7 @@ func TestUncleRelatedMethods(t *testing.T) {
 	defer ctrl.Finish()
 
 	logger, _ := zap.NewDevelopment()
-	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
+	mockClient := mocks.NewMockMirrorClient(ctrl)
 	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
 
 	// Test all uncle-related methods
@@ -176,7 +176,7 @@ func TestGetGasPrice(t *testing.T) {
 	logger, _ := cfg.Build()
 
 	// Create mock client
-	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
+	mockClient := mocks.NewMockMirrorClient(ctrl)
 	mockClient.EXPECT().
 		GetNetworkFees().
 		Return(int64(100), nil) // Return 100 tinybars
@@ -204,7 +204,7 @@ func TestGetGasPrice_Error(t *testing.T) {
 	defer ctrl.Finish()
 
 	logger, _ := zap.NewDevelopment()
-	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
+	mockClient := mocks.NewMockMirrorClient(ctrl)
 	mockClient.EXPECT().
 		GetNetworkFees().
 		Return(int64(0), fmt.Errorf("network error"))
@@ -227,7 +227,7 @@ func TestGetChainId(t *testing.T) {
 	// Create mock client
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockClient := mocks.NewMockMirrorNodeClient(ctrl)
+	mockClient := mocks.NewMockMirrorClient(ctrl)
 
 	// Test cases
 	testCases := []struct {
