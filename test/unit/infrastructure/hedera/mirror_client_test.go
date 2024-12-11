@@ -2,6 +2,7 @@ package hedera_test
 
 import (
 	"encoding/json"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -365,4 +366,113 @@ func TestGetBalance(t *testing.T) {
 			assert.Equal(t, tc.expectedResult, result)
 		})
 	}
+}
+
+func TestGetBalance_Success(t *testing.T) {
+	logger, _ := setupTest(t)
+
+	// Create test server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/v1/balances", r.URL.Path)
+		assert.Equal(t, "account.id=0.0.123&timestamp=lte:1234567890.000000000", r.URL.RawQuery)
+		assert.Equal(t, http.MethodGet, r.Method)
+
+		response := struct {
+			Timestamp string `json:"timestamp"`
+			Balances  []struct {
+				Account string        `json:"account"`
+				Balance *big.Int      `json:"balance"`
+				Tokens  []interface{} `json:"tokens"`
+			} `json:"balances"`
+		}{
+			Balances: []struct {
+				Account string        `json:"account"`
+				Balance *big.Int      `json:"balance"`
+				Tokens  []interface{} `json:"tokens"`
+			}{
+				{
+					Account: "0.0.123",
+					Balance: big.NewInt(1000000), // 1 million tinybars
+					Tokens:  []interface{}{},
+				},
+			},
+		}
+
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := hedera.NewMirrorClient(server.URL, 30, logger)
+	result := client.GetBalance("0.0.123", "1234567890.000000000")
+
+	// 1 million tinybars * 10000000000 (conversion to weibars) = 10000000000000000 weibars
+	expectedHex := "0x" + new(big.Int).Mul(big.NewInt(1000000), big.NewInt(10000000000)).Text(16)
+	assert.Equal(t, expectedHex, result)
+}
+
+func TestGetBalance_Error(t *testing.T) {
+	logger, _ := setupTest(t)
+
+	// Create test server that returns an error
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := hedera.NewMirrorClient(server.URL, 30, logger)
+	result := client.GetBalance("0.0.123", "1234567890.000000000")
+
+	assert.Equal(t, "0x0", result)
+}
+
+func TestGetAccount_Success(t *testing.T) {
+	logger, _ := setupTest(t)
+
+	// Create test server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/v1/accounts/0.0.123", r.URL.Path)
+		assert.Equal(t, "limit=1&order=desc&timestamp=lte:1234567890.000000000&transactiontype=ETHEREUMTRANSACTION&transactions=true", r.URL.RawQuery)
+		assert.Equal(t, http.MethodGet, r.Method)
+
+		response := domain.AccountResponse{
+			Account: "0.0.123",
+			Balance: struct {
+				Balance   int64         `json:"balance"`
+				Timestamp string        `json:"timestamp"`
+				Tokens    []interface{} `json:"tokens"`
+			}{
+				Balance:   1000000,
+				Timestamp: "1234567890.000000000",
+				Tokens:    []interface{}{},
+			},
+			EthereumNonce: 5,
+		}
+
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := hedera.NewMirrorClient(server.URL, 30, logger)
+	result := client.GetAccount("0.0.123", "1234567890.000000000")
+
+	assert.NotNil(t, result)
+	accountResponse := result.(domain.AccountResponse)
+	assert.Equal(t, "0.0.123", accountResponse.Account)
+	assert.Equal(t, int64(5), accountResponse.EthereumNonce)
+	assert.Equal(t, int64(1000000), accountResponse.Balance.Balance)
+}
+
+func TestGetAccount_Error(t *testing.T) {
+	logger, _ := setupTest(t)
+
+	// Create test server that returns an error
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := hedera.NewMirrorClient(server.URL, 30, logger)
+	result := client.GetAccount("0.0.123", "1234567890.000000000")
+
+	assert.Nil(t, result)
 }
