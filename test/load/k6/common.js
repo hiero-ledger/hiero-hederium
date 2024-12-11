@@ -13,6 +13,22 @@ export const config = {
   duration: getEnvVar("DURATION", "10s"),
 };
 
+export function getBaseUrl() {
+  return config.endpoint;
+}
+
+export function getDefaultHeaders() {
+  const headers = {
+    "Content-Type": "application/json",
+  };
+
+  if (config.apiKey) {
+    headers["X-API-Key"] = config.apiKey;
+  }
+
+  return headers;
+}
+
 // A basic check function for JSON-RPC responses
 export function validateJsonRpcResponse(response, methodExpected) {
   return check(response, {
