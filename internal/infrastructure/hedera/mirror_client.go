@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/http"
 	"time"
 
@@ -16,6 +17,7 @@ type MirrorNodeClient interface {
 	GetBlockByHashOrNumber(hashOrNumber string) *domain.BlockResponse
 	GetNetworkFees() (int64, error)
 	GetContractResults(timestamp domain.Timestamp) []domain.ContractResults
+	GetBalance(address string, timestampTo string) string
 }
 
 type MirrorClient struct {
@@ -184,4 +186,55 @@ func (m *MirrorClient) GetContractResults(timestamp domain.Timestamp) []domain.C
 	}
 
 	return allResults
+}
+
+func (m *MirrorClient) GetBalance(address string, timestampTo string) string {
+	m.logger.Debug("Getting balance", zap.String("address", address), zap.String("timestampTo", timestampTo))
+	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BaseURL+"/api/v1/balances?account.id="+address+"&timestamp=lte:"+timestampTo, nil)
+	if err != nil {
+		m.logger.Error("Error creating request to get balance", zap.Error(err))
+		return "0"
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		m.logger.Error("Error getting balance", zap.Error(err))
+		return "0"
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
+		return "0"
+	}
+
+	var result struct {
+		Timestamp string `json:"timestamp"`
+		Balances  []struct {
+			Account string        `json:"account"`
+			Balance *big.Int      `json:"balance"`
+			Tokens  []interface{} `json:"tokens"`
+		} `json:"balances"`
+		Links struct {
+			Next *string `json:"next"`
+		} `json:"links"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		m.logger.Error("Error decoding response body", zap.Error(err))
+		return "0"
+	}
+
+	m.logger.Debug("Balance", zap.Any("balance", result))
+	if len(result.Balances) == 0 {
+		m.logger.Debug("No balances found")
+		return "0"
+	}
+
+	// Convert tinybars to weibars
+	balance := result.Balances[0].Balance.Mul(result.Balances[0].Balance, big.NewInt(10000000000))
+	return fmt.Sprintf("%x", balance)
 }

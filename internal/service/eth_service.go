@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/georgi-l95/Hederium/internal/domain"
 	infrahedera "github.com/georgi-l95/Hederium/internal/infrastructure/hedera"
 	"github.com/georgi-l95/Hederium/internal/infrastructure/limiter"
 	"go.uber.org/zap"
@@ -176,7 +177,73 @@ func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (int
 	return ProcessBlock(s, block, showDetails)
 }
 
-// Methods that return false values, because the Hedera network does not support them
+func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) string {
+	s.logger.Info("Getting balance", zap.String("address", address), zap.String("blockNumberTagOrHash", blockNumberTagOrHash))
+	var block *domain.BlockResponse
+
+	switch blockNumberTagOrHash {
+	case "latest", "pending":
+		latestBlock, errMap := s.GetBlockNumber()
+		if errMap != nil {
+			s.logger.Debug("Failed to get latest block number")
+			return "0x0"
+		}
+
+		latestBlockStr, ok := latestBlock.(string)
+		if !ok {
+			s.logger.Debug("Invalid block number format")
+			return "0x0"
+		}
+
+		// Convert hex string to int, remove "0x" prefix
+		latestBlockNum, err := strconv.ParseInt(latestBlockStr[2:], 16, 64)
+		if err != nil {
+			s.logger.Debug("Failed to parse latest block number", zap.Error(err))
+			return "0x0"
+		}
+		block = s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(latestBlockNum, 10))
+		if block == nil {
+			s.logger.Debug("Latest block not found")
+			return "0x0"
+		}
+	case "earliest":
+		block = s.mClient.GetBlockByHashOrNumber("0")
+		if block == nil {
+			s.logger.Debug("Earliest block not found")
+			return "0x0"
+		}
+	default:
+		// Check if it's a 32 byte hash (0x + 64 hex chars)
+		if len(blockNumberTagOrHash) == 66 && strings.HasPrefix(blockNumberTagOrHash, "0x") {
+			block = s.mClient.GetBlockByHashOrNumber(blockNumberTagOrHash)
+			if block == nil {
+				s.logger.Debug("Block not found for hash", zap.String("hash", blockNumberTagOrHash))
+				return "0x0"
+			}
+		} else if strings.HasPrefix(blockNumberTagOrHash, "0x") {
+			// If it's a hex number, convert it to decimal
+			num, err := strconv.ParseInt(blockNumberTagOrHash[2:], 16, 64)
+			if err != nil {
+				s.logger.Debug("Failed to parse block number", zap.Error(err))
+				return "0x0"
+			}
+			block = s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(num, 10))
+			if block == nil {
+				s.logger.Debug("Block not found for number", zap.String("number", blockNumberTagOrHash))
+				return "0x0"
+			}
+		} else {
+			block = s.mClient.GetBlockByHashOrNumber(blockNumberTagOrHash)
+			if block == nil {
+				s.logger.Debug("Block not found for number", zap.String("number", blockNumberTagOrHash))
+				return "0x0"
+			}
+		}
+	}
+	balance := "0x" + s.mClient.GetBalance(address, block.Timestamp.To)
+
+	return balance
+}
 
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation
 func (s *EthService) GetAccounts() (interface{}, map[string]interface{}) {

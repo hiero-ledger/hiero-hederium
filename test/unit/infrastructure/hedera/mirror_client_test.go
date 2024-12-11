@@ -292,3 +292,77 @@ func TestGetLatestBlock_ErrorResponse(t *testing.T) {
 	assert.Nil(t, block)
 	assert.Contains(t, err.Error(), "mirror node returned status 500")
 }
+
+func TestGetBalance(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+
+	testCases := []struct {
+		name           string
+		address        string
+		timestampTo    string
+		mockResponse   interface{}
+		expectedResult string
+		statusCode     int
+	}{
+		{
+			name:        "Successful balance fetch",
+			address:     "0x1234567890123456789012345678901234567890",
+			timestampTo: "2023-12-09T12:00:00.000Z",
+			mockResponse: map[string]interface{}{
+				"timestamp": "2023-12-09T12:00:00.000Z",
+				"balances": []map[string]interface{}{
+					{
+						"account": "0x1234567890123456789012345678901234567890",
+						"balance": 1000000,
+					},
+				},
+			},
+			expectedResult: "2540be400", // 1000000 * 10000000000 in hex
+			statusCode:     http.StatusOK,
+		},
+		{
+			name:           "Empty balances array",
+			address:        "0x1234567890123456789012345678901234567890",
+			timestampTo:    "2023-12-09T12:00:00.000Z",
+			mockResponse:   map[string]interface{}{"balances": []map[string]interface{}{}},
+			expectedResult: "0",
+			statusCode:     http.StatusOK,
+		},
+		{
+			name:           "Invalid response structure",
+			address:        "0x1234567890123456789012345678901234567890",
+			timestampTo:    "2023-12-09T12:00:00.000Z",
+			mockResponse:   "invalid json",
+			expectedResult: "0",
+			statusCode:     http.StatusOK,
+		},
+		{
+			name:           "Server error",
+			address:        "0x1234567890123456789012345678901234567890",
+			timestampTo:    "2023-12-09T12:00:00.000Z",
+			mockResponse:   nil,
+			expectedResult: "0",
+			statusCode:     http.StatusInternalServerError,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/api/v1/balances", r.URL.Path)
+				assert.Equal(t, tc.address, r.URL.Query().Get("account.id"))
+				assert.Equal(t, "lte:"+tc.timestampTo, r.URL.Query().Get("timestamp"))
+
+				w.WriteHeader(tc.statusCode)
+				if tc.mockResponse != nil {
+					json.NewEncoder(w).Encode(tc.mockResponse)
+				}
+			}))
+			defer server.Close()
+
+			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			result := client.GetBalance(tc.address, tc.timestampTo)
+			assert.Equal(t, tc.expectedResult, result)
+		})
+	}
+}

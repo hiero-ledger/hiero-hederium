@@ -482,3 +482,98 @@ func TestGetBlockByNumber(t *testing.T) {
 		})
 	}
 }
+
+func TestGetBalance(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger, _ := zap.NewDevelopment()
+	mockClient := mocks.NewMockMirrorClient(ctrl)
+
+	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
+
+	testCases := []struct {
+		name           string
+		address        string
+		blockParam     string
+		setupMock      func()
+		expectedResult string
+	}{
+		{
+			name:       "Latest block balance",
+			address:    "0x1234567890123456789012345678901234567890",
+			blockParam: "latest",
+			setupMock: func() {
+				mockClient.EXPECT().
+					GetLatestBlock().
+					Return(map[string]interface{}{"number": float64(100)}, nil)
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("100").
+					Return(&domain.BlockResponse{
+						Timestamp: domain.Timestamp{
+							To: "2023-12-09T12:00:00.000Z",
+						},
+					})
+				mockClient.EXPECT().
+					GetBalance("0x1234567890123456789012345678901234567890", "2023-12-09T12:00:00.000Z").
+					Return("0x64")
+			},
+			expectedResult: "0x64",
+		},
+		{
+			name:       "Earliest block balance",
+			address:    "0x1234567890123456789012345678901234567890",
+			blockParam: "earliest",
+			setupMock: func() {
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("0").
+					Return(&domain.BlockResponse{
+						Timestamp: domain.Timestamp{
+							To: "2023-01-01T00:00:00.000Z",
+						},
+					})
+				mockClient.EXPECT().
+					GetBalance("0x1234567890123456789012345678901234567890", "2023-01-01T00:00:00.000Z").
+					Return("0x32")
+			},
+			expectedResult: "0x32",
+		},
+		{
+			name:       "Specific block number balance",
+			address:    "0x1234567890123456789012345678901234567890",
+			blockParam: "0x50",
+			setupMock: func() {
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("80").
+					Return(&domain.BlockResponse{
+						Timestamp: domain.Timestamp{
+							To: "2023-06-01T00:00:00.000Z",
+						},
+					})
+				mockClient.EXPECT().
+					GetBalance("0x1234567890123456789012345678901234567890", "2023-06-01T00:00:00.000Z").
+					Return("0x96")
+			},
+			expectedResult: "0x96",
+		},
+		{
+			name:       "Block not found",
+			address:    "0x1234567890123456789012345678901234567890",
+			blockParam: "0x999",
+			setupMock: func() {
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("2457").
+					Return(nil)
+			},
+			expectedResult: "0x0",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setupMock()
+			result := s.GetBalance(tc.address, tc.blockParam)
+			assert.Equal(t, tc.expectedResult, result)
+		})
+	}
+}
