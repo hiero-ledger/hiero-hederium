@@ -18,6 +18,8 @@ type MirrorNodeClient interface {
 	GetNetworkFees() (int64, error)
 	GetContractResults(timestamp domain.Timestamp) []domain.ContractResults
 	GetBalance(address string, timestampTo string) string
+	GetAccount(address string, timestampTo string) interface{}
+	GetContractResult(transactionId string) interface{}
 }
 
 type MirrorClient struct {
@@ -237,4 +239,66 @@ func (m *MirrorClient) GetBalance(address string, timestampTo string) string {
 	// Convert tinybars to weibars
 	balance := result.Balances[0].Balance.Mul(result.Balances[0].Balance, big.NewInt(10000000000))
 	return "0x" + fmt.Sprintf("%x", balance)
+}
+
+func (m *MirrorClient) GetAccount(address string, timestampTo string) interface{} {
+	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BaseURL+"/api/v1/accounts/"+address+"?limit=1&order=desc&timestamp=lte:"+timestampTo+"&transactiontype=ETHEREUMTRANSACTION&transactions=true", nil)
+	if err != nil {
+		m.logger.Error("Error creating request to get account", zap.Error(err))
+		return nil
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		m.logger.Error("Error getting account", zap.Error(err))
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
+		return nil
+	}
+
+	var result domain.AccountResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		m.logger.Error("Error decoding response body", zap.Error(err))
+		return nil
+	}
+
+	return result
+}
+
+func (m *MirrorClient) GetContractResult(transactionId string) interface{} {
+	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BaseURL+"/api/v1/contracts/results/"+transactionId, nil)
+	if err != nil {
+		m.logger.Error("Error creating request to get contract result", zap.Error(err))
+		return nil
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		m.logger.Error("Error getting contract result", zap.Error(err))
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
+		return nil
+	}
+
+	var result domain.ContractResultResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		m.logger.Error("Error decoding response body", zap.Error(err))
+		return nil
+	}
+
+	return result
 }
