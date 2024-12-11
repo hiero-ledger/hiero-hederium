@@ -317,7 +317,7 @@ func TestGetBalance(t *testing.T) {
 					},
 				},
 			},
-			expectedResult: "2540be400", // 1000000 * 10000000000 in hex
+			expectedResult: "0x2386f26fc10000", // 1000000 * 10000000000 in hex
 			statusCode:     http.StatusOK,
 		},
 		{
@@ -325,7 +325,7 @@ func TestGetBalance(t *testing.T) {
 			address:        "0x1234567890123456789012345678901234567890",
 			timestampTo:    "2023-12-09T12:00:00.000Z",
 			mockResponse:   map[string]interface{}{"balances": []map[string]interface{}{}},
-			expectedResult: "0",
+			expectedResult: "0x0",
 			statusCode:     http.StatusOK,
 		},
 		{
@@ -333,7 +333,7 @@ func TestGetBalance(t *testing.T) {
 			address:        "0x1234567890123456789012345678901234567890",
 			timestampTo:    "2023-12-09T12:00:00.000Z",
 			mockResponse:   "invalid json",
-			expectedResult: "0",
+			expectedResult: "0x0",
 			statusCode:     http.StatusOK,
 		},
 		{
@@ -341,7 +341,7 @@ func TestGetBalance(t *testing.T) {
 			address:        "0x1234567890123456789012345678901234567890",
 			timestampTo:    "2023-12-09T12:00:00.000Z",
 			mockResponse:   nil,
-			expectedResult: "0",
+			expectedResult: "0x0",
 			statusCode:     http.StatusInternalServerError,
 		},
 	}

@@ -240,7 +240,7 @@ func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) str
 			}
 		}
 	}
-	balance := "0x" + s.mClient.GetBalance(address, block.Timestamp.To)
+	balance := s.mClient.GetBalance(address, block.Timestamp.To)
 
 	return balance
 }

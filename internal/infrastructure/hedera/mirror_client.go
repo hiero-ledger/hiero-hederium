@@ -196,19 +196,19 @@ func (m *MirrorClient) GetBalance(address string, timestampTo string) string {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BaseURL+"/api/v1/balances?account.id="+address+"&timestamp=lte:"+timestampTo, nil)
 	if err != nil {
 		m.logger.Error("Error creating request to get balance", zap.Error(err))
-		return "0"
+		return "0x0"
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		m.logger.Error("Error getting balance", zap.Error(err))
-		return "0"
+		return "0x0"
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
-		return "0"
+		return "0x0"
 	}
 
 	var result struct {
@@ -225,16 +225,16 @@ func (m *MirrorClient) GetBalance(address string, timestampTo string) string {
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		m.logger.Error("Error decoding response body", zap.Error(err))
-		return "0"
+		return "0x0"
 	}
 
 	m.logger.Debug("Balance", zap.Any("balance", result))
 	if len(result.Balances) == 0 {
 		m.logger.Debug("No balances found")
-		return "0"
+		return "0x0"
 	}
 
 	// Convert tinybars to weibars
 	balance := result.Balances[0].Balance.Mul(result.Balances[0].Balance, big.NewInt(10000000000))
-	return fmt.Sprintf("%x", balance)
+	return "0x" + fmt.Sprintf("%x", balance)
 }
