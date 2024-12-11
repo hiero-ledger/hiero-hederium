@@ -3,6 +3,7 @@ package service
 import (
 	"math/big"
 	"strconv"
+	"strings"
 
 	infrahedera "github.com/georgi-l95/Hederium/internal/infrastructure/hedera"
 	"github.com/georgi-l95/Hederium/internal/infrastructure/limiter"
@@ -70,11 +71,12 @@ func (s *EthService) GetBlockNumber() (interface{}, map[string]interface{}) {
 	}
 }
 
-// GetGasPrice retrieves the gas price from the Hedera network and returns it
-// in hexadecimal format, compatible with Ethereum JSON-RPC specifications.
+// GetGasPrice returns the current gas price in wei with a 10% buffer added.
+// The gas price is fetched from the network in tinybars, converted to weibars,
+// and returned as a hex string with "0x" prefix.
 func (s *EthService) GetGasPrice() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting gas price")
-	weibars, err := getFeeWeibars(s)
+	weibars, err := GetFeeWeibars(s)
 	if err != nil {
 		errMsg := "Failed to fetch gas price"
 		s.logger.Error(errMsg)
@@ -92,10 +94,86 @@ func (s *EthService) GetGasPrice() (interface{}, map[string]interface{}) {
 	return gasPrice, nil
 }
 
+// GetChainId returns the network's chain ID as configured in the service.
+// The chain ID is returned as a hex string with "0x" prefix.
 func (s *EthService) GetChainId() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting chain ID")
 	s.logger.Info("Returning chain ID", zap.String("chainId", s.chainId))
 	return s.chainId, nil
+}
+
+// GetBlockByHash retrieves a block by its hash and optionally includes detailed transaction information.
+// Parameters:
+//   - hash: The hash of the block to retrieve
+//   - showDetails: If true, returns full transaction objects; if false, only transaction hashes
+//
+// Returns nil for both return values if the block is not found.
+func (s *EthService) GetBlockByHash(hash string, showDetails bool) (interface{}, map[string]interface{}) {
+	s.logger.Info("Getting block by hash", zap.String("hash", hash), zap.Bool("showDetails", showDetails))
+	block := s.mClient.GetBlockByHashOrNumber(hash)
+	if block == nil {
+		return nil, nil
+	}
+	return ProcessBlock(s, block, showDetails)
+}
+
+// GetBlockByHash retrieves a block by its hash from the Hedera network and returns it
+// in an Ethereum-compatible format.
+//
+// Parameters:
+//   - hash: The hash of the block to retrieve
+//   - showDetails: If true, includes full transaction details in the response.
+//     If false, only includes transaction hashes.
+//
+// Returns:
+//   - interface{}: The block data in Ethereum format (*domain.Block), or nil if not found
+//   - map[string]interface{}: Error information if any occurred, nil otherwise
+func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (interface{}, map[string]interface{}) {
+	s.logger.Info("Getting block by number", zap.String("numberOrTag", numberOrTag), zap.Bool("showDetails", showDetails))
+	var blockNumber string
+	switch numberOrTag {
+	case "latest", "pending":
+		latestBlock, errMap := s.GetBlockNumber()
+		if errMap != nil {
+			s.logger.Debug("Failed to get latest block number")
+			return nil, nil
+		}
+
+		latestBlockStr, ok := latestBlock.(string)
+		if !ok {
+			s.logger.Debug("Invalid block number format")
+			return nil, nil
+		}
+
+		// Convert hex string to int, remove "0x" prefix
+		latestBlockNum, err := strconv.ParseInt(latestBlockStr[2:], 16, 64)
+		if err != nil {
+			s.logger.Debug("Failed to parse latest block number", zap.Error(err))
+			return nil, nil
+		}
+		blockNumber = strconv.FormatInt(latestBlockNum, 10)
+	case "earliest":
+		blockNumber = "0"
+	default:
+		// If it's a hex number, convert it to decimal
+		if strings.HasPrefix(numberOrTag, "0x") {
+			num, err := strconv.ParseInt(numberOrTag[2:], 16, 64)
+			if err != nil {
+				s.logger.Debug("Failed to parse block number", zap.Error(err))
+				return nil, nil
+			}
+			blockNumber = strconv.FormatInt(num, 10)
+		} else {
+			blockNumber = numberOrTag
+		}
+	}
+
+	block := s.mClient.GetBlockByHashOrNumber(blockNumber)
+	if block == nil {
+		return nil, nil
+	}
+
+	return ProcessBlock(s, block, showDetails)
 }
 
 // Methods that return false values, because the Hedera network does not support them

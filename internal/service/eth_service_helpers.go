@@ -2,9 +2,26 @@ package service
 
 import (
 	"math/big"
+	"strconv"
+	"strings"
+
+	"github.com/georgi-l95/Hederium/internal/domain"
+	"go.uber.org/zap"
 )
 
-func getFeeWeibars(s *EthService) (*big.Int, map[string]interface{}) {
+// GetFeeWeibars retrieves the current network fees in tinybars from the mirror client
+// and converts them to weibars (1 tinybar = 10^8 weibars).
+//
+// Parameters:
+//   - s: Pointer to EthService instance containing the mirror client
+//
+// Returns:
+//   - *big.Int: The fee amount in weibars, or nil if there was an error
+//   - map[string]interface{}: Error details if any occurred, nil otherwise
+//     The error map contains:
+//   - "code": -32000 for failed requests
+//   - "message": Description of the error
+func GetFeeWeibars(s *EthService) (*big.Int, map[string]interface{}) {
 	gasTinybars, err := s.mClient.GetNetworkFees()
 	if err != nil {
 		return nil, map[string]interface{}{
@@ -18,4 +35,140 @@ func getFeeWeibars(s *EthService) (*big.Int, map[string]interface{}) {
 		Mul(big.NewInt(gasTinybars), big.NewInt(100000000)) // 10^8 conversion factor
 
 	return weibars, nil
+}
+
+// GetFeeWeibars retrieves the current network fees in tinybars from the mirror client
+// and converts them to weibars (1 tinybar = 10^8 weibars).
+//
+// Parameters:
+//   - s: Pointer to EthService instance containing the mirror client
+//
+// Returns:
+//   - *big.Int: The fee amount in weibars, or nil if there was an error
+//   - map[string]interface{}: Error details if any occurred, nil otherwise
+//     The error map contains:
+//   - "code": -32000 for failed requests
+//   - "message": Description of the error
+func ProcessBlock(s *EthService, block *domain.BlockResponse, showDetails bool) (*domain.Block, map[string]interface{}) {
+	// Create a new Block instance with default values
+	ethBlock := domain.NewBlock()
+
+	hexNumber := "0x" + strconv.FormatUint(uint64(block.Number), 16)
+	hexGasUsed := "0x" + strconv.FormatUint(uint64(block.GasUsed), 16)
+	hexSize := "0x" + strconv.FormatUint(uint64(block.Size), 16)
+	timestampStr := strings.Split(block.Timestamp.From, ".")[0]
+	timestampInt, _ := strconv.ParseUint(timestampStr, 10, 64)
+	hexTimestamp := "0x" + strconv.FormatUint(timestampInt, 16)
+	trimmedHash := block.Hash
+	if len(trimmedHash) > 66 {
+		trimmedHash = trimmedHash[:66]
+	}
+	trimmedParentHash := block.PreviousHash
+	if len(trimmedParentHash) > 66 {
+		trimmedParentHash = trimmedParentHash[:66]
+	}
+
+	ethBlock.Number = &hexNumber
+	ethBlock.GasUsed = hexGasUsed
+	ethBlock.GasLimit = "0x" + strconv.FormatUint(15000000, 16) // Hedera's default gas limit
+	ethBlock.Hash = &trimmedHash
+	ethBlock.LogsBloom = block.LogsBloom
+	ethBlock.TransactionsRoot = &trimmedHash
+	ethBlock.ParentHash = trimmedParentHash
+	ethBlock.Timestamp = hexTimestamp
+	ethBlock.Size = hexSize
+
+	contractResults := s.mClient.GetContractResults(block.Timestamp)
+	for _, contractResult := range contractResults {
+		if contractResult.Result == "WRONG_NONCE" || contractResult.Result == "INVALID_ACCOUNT_ID" {
+			continue
+		}
+
+		// TODO: Resolve evm addresses
+		if showDetails {
+			tx := ProcessTransaction(contractResult)
+			ethBlock.Transactions = append(ethBlock.Transactions, tx)
+		} else {
+			ethBlock.Transactions = append(ethBlock.Transactions, contractResult.Hash)
+		}
+	}
+
+	s.logger.Debug("Returning block data", zap.Any("block", ethBlock))
+	s.logger.Info("Successfully returned block data block: "+*ethBlock.Hash,
+		zap.Int("txCount", len(ethBlock.Transactions)))
+	return ethBlock, nil
+}
+
+// ProcessBlock converts a Hedera block response into an Ethereum-compatible block format.
+// It takes a pointer to an EthService, a BlockResponse, and a boolean flag indicating whether
+// to include full transaction details.
+//
+// The function performs the following:
+// - Creates a new Ethereum block with default values
+// - Converts block numbers, gas values, and timestamps to hex format
+// - Trims hash values to standard Ethereum length (66 chars)
+// - Retrieves and filters contract results, excluding failed transactions
+// - Optionally processes full transaction details based on showDetails flag
+//
+// Returns:
+// - *domain.Block: The converted Ethereum-compatible block
+// - map[string]interface{}: Error information if any, nil on success
+func ProcessTransaction(contractResult domain.ContractResults) interface{} {
+	hexBlockNumber := hexify(contractResult.BlockNumber)
+	hexGasUsed := hexify(contractResult.GasUsed)
+	hexTransactionIndex := hexify(int64(contractResult.TransactionIndex))
+	hexValue := hexify(int64(contractResult.Amount))
+	hexV := hexify(int64(contractResult.V))
+	hexR := contractResult.R[:66]
+	hexS := contractResult.S[:66]
+	hexNonce := hexify(contractResult.Nonce)
+	hexTo := contractResult.To[:42]
+
+	commonFields := domain.Transaction{
+		BlockHash:        &contractResult.BlockHash,
+		BlockNumber:      &hexBlockNumber,
+		From:             contractResult.From[:42],
+		Gas:              hexGasUsed,
+		GasPrice:         contractResult.GasPrice,
+		Hash:             contractResult.Hash[:66],
+		Input:            contractResult.FunctionParameters,
+		Nonce:            hexNonce,
+		To:               &hexTo,
+		TransactionIndex: &hexTransactionIndex,
+		Value:            hexValue,
+		V:                hexV,
+		R:                hexR,
+		S:                hexS,
+		Type:             hexify(int64(contractResult.Type)),
+	}
+
+	// Handle chain ID
+	if contractResult.ChainID != "0x" {
+		commonFields.ChainId = &contractResult.ChainID
+	}
+
+	switch contractResult.Type {
+	case 0:
+		return commonFields // Legacy transaction (EIP-155)
+	case 1:
+		return domain.Transaction2930{
+			Transaction: commonFields,
+			AccessList:  []domain.AccessListEntry{}, // Empty access list for now
+		}
+	case 2:
+		return domain.Transaction1559{
+			Transaction:          commonFields,
+			AccessList:           []domain.AccessListEntry{}, // Empty access list for now
+			MaxPriorityFeePerGas: contractResult.MaxPriorityFeePerGas,
+			MaxFeePerGas:         contractResult.MaxFeePerGas,
+		}
+	default:
+		return commonFields // Default to legacy transaction
+	}
+}
+
+// Utility functions
+
+func hexify(n int64) string {
+	return "0x" + strconv.FormatInt(n, 16)
 }

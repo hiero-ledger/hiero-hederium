@@ -7,34 +7,63 @@ package mocks
 import (
 	reflect "reflect"
 
+	domain "github.com/georgi-l95/Hederium/internal/domain"
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockMirrorNodeClient is a mock of MirrorNodeClient interface.
-type MockMirrorNodeClient struct {
+// MockMirrorClient is a mock of MirrorNodeClient interface.
+type MockMirrorClient struct {
 	ctrl     *gomock.Controller
-	recorder *MockMirrorNodeClientMockRecorder
+	recorder *MockMirrorClientMockRecorder
 }
 
-// MockMirrorNodeClientMockRecorder is the mock recorder for MockMirrorNodeClient.
-type MockMirrorNodeClientMockRecorder struct {
-	mock *MockMirrorNodeClient
+// MockMirrorClientMockRecorder is the mock recorder for MockMirrorClient.
+type MockMirrorClientMockRecorder struct {
+	mock *MockMirrorClient
 }
 
-// NewMockMirrorNodeClient creates a new mock instance.
-func NewMockMirrorNodeClient(ctrl *gomock.Controller) *MockMirrorNodeClient {
-	mock := &MockMirrorNodeClient{ctrl: ctrl}
-	mock.recorder = &MockMirrorNodeClientMockRecorder{mock}
+// NewMockMirrorClient creates a new mock instance.
+func NewMockMirrorClient(ctrl *gomock.Controller) *MockMirrorClient {
+	mock := &MockMirrorClient{ctrl: ctrl}
+	mock.recorder = &MockMirrorClientMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockMirrorNodeClient) EXPECT() *MockMirrorNodeClientMockRecorder {
+func (m *MockMirrorClient) EXPECT() *MockMirrorClientMockRecorder {
 	return m.recorder
 }
 
+// GetBlockByHashOrNumber mocks base method.
+func (m *MockMirrorClient) GetBlockByHashOrNumber(hashOrNumber string) *domain.BlockResponse {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBlockByHashOrNumber", hashOrNumber)
+	ret0, _ := ret[0].(*domain.BlockResponse)
+	return ret0
+}
+
+// GetBlockByHashOrNumber indicates an expected call of GetBlockByHashOrNumber.
+func (mr *MockMirrorClientMockRecorder) GetBlockByHashOrNumber(hashOrNumber interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlockByHashOrNumber", reflect.TypeOf((*MockMirrorClient)(nil).GetBlockByHashOrNumber), hashOrNumber)
+}
+
+// GetContractResults mocks base method.
+func (m *MockMirrorClient) GetContractResults(timestamp domain.Timestamp) []domain.ContractResults {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetContractResults", timestamp)
+	ret0, _ := ret[0].([]domain.ContractResults)
+	return ret0
+}
+
+// GetContractResults indicates an expected call of GetContractResults.
+func (mr *MockMirrorClientMockRecorder) GetContractResults(timestamp interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetContractResults", reflect.TypeOf((*MockMirrorClient)(nil).GetContractResults), timestamp)
+}
+
 // GetLatestBlock mocks base method.
-func (m *MockMirrorNodeClient) GetLatestBlock() (map[string]interface{}, error) {
+func (m *MockMirrorClient) GetLatestBlock() (map[string]interface{}, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetLatestBlock")
 	ret0, _ := ret[0].(map[string]interface{})
@@ -43,13 +72,13 @@ func (m *MockMirrorNodeClient) GetLatestBlock() (map[string]interface{}, error) 
 }
 
 // GetLatestBlock indicates an expected call of GetLatestBlock.
-func (mr *MockMirrorNodeClientMockRecorder) GetLatestBlock() *gomock.Call {
+func (mr *MockMirrorClientMockRecorder) GetLatestBlock() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestBlock", reflect.TypeOf((*MockMirrorNodeClient)(nil).GetLatestBlock))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestBlock", reflect.TypeOf((*MockMirrorClient)(nil).GetLatestBlock))
 }
 
 // GetNetworkFees mocks base method.
-func (m *MockMirrorNodeClient) GetNetworkFees() (int64, error) {
+func (m *MockMirrorClient) GetNetworkFees() (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNetworkFees")
 	ret0, _ := ret[0].(int64)
@@ -58,7 +87,7 @@ func (m *MockMirrorNodeClient) GetNetworkFees() (int64, error) {
 }
 
 // GetNetworkFees indicates an expected call of GetNetworkFees.
-func (mr *MockMirrorNodeClientMockRecorder) GetNetworkFees() *gomock.Call {
+func (mr *MockMirrorClientMockRecorder) GetNetworkFees() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNetworkFees", reflect.TypeOf((*MockMirrorNodeClient)(nil).GetNetworkFees))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNetworkFees", reflect.TypeOf((*MockMirrorClient)(nil).GetNetworkFees))
 }
