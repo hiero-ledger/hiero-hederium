@@ -34,6 +34,20 @@ func (m *MockMirrorClient) EXPECT() *MockMirrorClientMockRecorder {
 	return m.recorder
 }
 
+// GetBalance mocks base method.
+func (m *MockMirrorClient) GetBalance(address, timestampTo string) string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBalance", address, timestampTo)
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetBalance indicates an expected call of GetBalance.
+func (mr *MockMirrorClientMockRecorder) GetBalance(address, timestampTo interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBalance", reflect.TypeOf((*MockMirrorClient)(nil).GetBalance), address, timestampTo)
+}
+
 // GetBlockByHashOrNumber mocks base method.
 func (m *MockMirrorClient) GetBlockByHashOrNumber(hashOrNumber string) *domain.BlockResponse {
 	m.ctrl.T.Helper()

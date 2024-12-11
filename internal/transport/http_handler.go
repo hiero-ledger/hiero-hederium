@@ -3,6 +3,7 @@ package transport
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -116,6 +117,55 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 			}
 		}
 		return ethService.GetBlockByNumber(blockNumber, showDetails)
+	case "eth_getBalance":
+		paramsArray, ok := params.([]interface{})
+		if !ok || len(paramsArray) < 1 || len(paramsArray) > 2 {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid params for eth_getBalance: expected [address, blockNumber]",
+			}
+		}
+
+		// Type assert and validate address parameter
+		address, ok := paramsArray[0].(string)
+		if !ok {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid address: expected string",
+			}
+		}
+
+		// Validate address format (0x followed by 40 hex chars)
+		if !strings.HasPrefix(address, "0x") || len(address) != 42 || !regexp.MustCompile("^0x[a-fA-F0-9]{40}$").MatchString(address) {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid address format: expected 0x followed by 40 hexadecimal characters",
+			}
+		}
+
+		// Handle optional blockNumber parameter
+		var blockNumber string = "latest" // default value
+		if len(paramsArray) > 1 {
+			blockNumber, ok = paramsArray[1].(string)
+			if !ok {
+				return nil, map[string]interface{}{
+					"code":    -32602,
+					"message": "Invalid blockNumber: expected string",
+				}
+			}
+
+			// Validate if it's a tag or hex number
+			if blockNumber != "earliest" && blockNumber != "latest" && blockNumber != "pending" {
+				if !strings.HasPrefix(blockNumber, "0x") {
+					return nil, map[string]interface{}{
+						"code":    -32602,
+						"message": "Invalid blockNumber: expected hex string with 0x prefix or tag (earliest/latest/pending)",
+					}
+				}
+			}
+		}
+
+		return ethService.GetBalance(address, blockNumber), nil
 	case "eth_blockNumber":
 		return ethService.GetBlockNumber()
 	case "eth_gasPrice":
