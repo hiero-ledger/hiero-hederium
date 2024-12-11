@@ -39,6 +39,28 @@ type Transaction struct {
 	V                string  `json:"v"`
 	R                string  `json:"r"`
 	S                string  `json:"s"`
+	ChainId          *string `json:"chainId,omitempty"`
+	Type             string  `json:"type"`
+}
+
+// Transaction2930 represents an EIP-2930 transaction
+type Transaction2930 struct {
+	Transaction
+	AccessList []AccessListEntry `json:"accessList"`
+}
+
+// Transaction1559 represents an EIP-1559 transaction
+type Transaction1559 struct {
+	Transaction
+	AccessList           []AccessListEntry `json:"accessList"`
+	MaxPriorityFeePerGas string            `json:"maxPriorityFeePerGas"`
+	MaxFeePerGas         string            `json:"maxFeePerGas"`
+}
+
+// AccessListEntry represents an entry in the access list
+type AccessListEntry struct {
+	Address     string   `json:"address"`
+	StorageKeys []string `json:"storageKeys"`
 }
 
 // NewBlock creates a new Block instance with default values for non-nullable fields

@@ -71,8 +71,9 @@ func (s *EthService) GetBlockNumber() (interface{}, map[string]interface{}) {
 	}
 }
 
-// GetGasPrice retrieves the gas price from the Hedera network and returns it
-// in hexadecimal format, compatible with Ethereum JSON-RPC specifications.
+// GetGasPrice returns the current gas price in wei with a 10% buffer added.
+// The gas price is fetched from the network in tinybars, converted to weibars,
+// and returned as a hex string with "0x" prefix.
 func (s *EthService) GetGasPrice() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting gas price")
 	weibars, err := GetFeeWeibars(s)
@@ -93,12 +94,20 @@ func (s *EthService) GetGasPrice() (interface{}, map[string]interface{}) {
 	return gasPrice, nil
 }
 
+// GetChainId returns the network's chain ID as configured in the service.
+// The chain ID is returned as a hex string with "0x" prefix.
 func (s *EthService) GetChainId() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting chain ID")
 	s.logger.Info("Returning chain ID", zap.String("chainId", s.chainId))
 	return s.chainId, nil
 }
 
+// GetBlockByHash retrieves a block by its hash and optionally includes detailed transaction information.
+// Parameters:
+//   - hash: The hash of the block to retrieve
+//   - showDetails: If true, returns full transaction objects; if false, only transaction hashes
+//
+// Returns nil for both return values if the block is not found.
 func (s *EthService) GetBlockByHash(hash string, showDetails bool) (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting block by hash", zap.String("hash", hash), zap.Bool("showDetails", showDetails))
 	block := s.mClient.GetBlockByHashOrNumber(hash)
@@ -108,6 +117,17 @@ func (s *EthService) GetBlockByHash(hash string, showDetails bool) (interface{},
 	return ProcessBlock(s, block, showDetails)
 }
 
+// GetBlockByHash retrieves a block by its hash from the Hedera network and returns it
+// in an Ethereum-compatible format.
+//
+// Parameters:
+//   - hash: The hash of the block to retrieve
+//   - showDetails: If true, includes full transaction details in the response.
+//     If false, only includes transaction hashes.
+//
+// Returns:
+//   - interface{}: The block data in Ethereum format (*domain.Block), or nil if not found
+//   - map[string]interface{}: Error information if any occurred, nil otherwise
 func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting block by number", zap.String("numberOrTag", numberOrTag), zap.Bool("showDetails", showDetails))
 	var blockNumber string

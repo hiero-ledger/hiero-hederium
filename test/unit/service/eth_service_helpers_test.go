@@ -119,8 +119,7 @@ func TestProcessBlock_Success(t *testing.T) {
 	result, errMap := service.ProcessBlock(s, block, false)
 	assert.Nil(t, errMap)
 
-	ethBlock, ok := result.(*domain.Block)
-	assert.True(t, ok)
+	ethBlock := result
 	assert.Equal(t, "0x7b", *ethBlock.Number) // 123 in hex
 	assert.Equal(t, "0x123abc", *ethBlock.Hash)
 	assert.Equal(t, "0x456def", ethBlock.ParentHash)
@@ -161,8 +160,121 @@ func TestProcessBlock_WithLongHashes(t *testing.T) {
 	result, errMap := service.ProcessBlock(s, block, false)
 	assert.Nil(t, errMap)
 
-	ethBlock, ok := result.(*domain.Block)
-	assert.True(t, ok)
+	ethBlock := result
 	assert.Equal(t, 66, len(*ethBlock.Hash))
 	assert.Equal(t, 66, len(ethBlock.ParentHash))
+}
+
+func TestProcessTransaction_LegacyTransaction(t *testing.T) {
+	// Create a properly formatted Ethereum address by padding with zeros
+	toAddress := "0xto123" + strings.Repeat("0", 35) // 0x + 40 hex chars = 42 total length
+
+	contractResult := domain.ContractResults{
+		BlockNumber:        123,
+		BlockHash:          "0xblockHash123",
+		Hash:               "0xtxHash123" + strings.Repeat("0", 100),
+		From:               "0xfrom123" + strings.Repeat("0", 100),
+		To:                 toAddress,
+		GasUsed:            1000,
+		TransactionIndex:   5,
+		Amount:             100,
+		V:                  27,
+		R:                  "0xr123" + strings.Repeat("0", 100),
+		S:                  "0xs123" + strings.Repeat("0", 100),
+		Nonce:              10,
+		Type:               0, // Legacy transaction
+		GasPrice:           "0x100",
+		FunctionParameters: "0xabcd",
+		ChainID:            "0x1",
+	}
+
+	result := service.ProcessTransaction(contractResult)
+	tx, ok := result.(domain.Transaction)
+	assert.True(t, ok)
+
+	// Verify field conversions
+	assert.Equal(t, "0x7b", *tx.BlockNumber) // 123 in hex
+	assert.Equal(t, "0xblockHash123", *tx.BlockHash)
+	assert.Equal(t, "0xtxHash123", tx.Hash[:11]) // Verify hash is trimmed
+	assert.Equal(t, "0xfrom123", tx.From[:9])    // Verify from address is trimmed
+	assert.Equal(t, 42, len(*tx.To))             // Verify to address is exactly 42 chars (standard ETH address length)
+	assert.Equal(t, toAddress, *tx.To)           // Verify complete to address
+	assert.Equal(t, "0x3e8", tx.Gas)             // 1000 in hex
+	assert.Equal(t, "0x5", *tx.TransactionIndex)
+	assert.Equal(t, "0x64", tx.Value) // 100 in hex
+	assert.Equal(t, "0x1b", tx.V)     // 27 in hex
+	assert.Equal(t, 66, len(tx.R))    // Verify R length
+	assert.Equal(t, 66, len(tx.S))    // Verify S length
+	assert.Equal(t, "0xa", tx.Nonce)  // 10 in hex
+	assert.Equal(t, "0x0", tx.Type)   // Type 0
+	assert.Equal(t, "0x100", tx.GasPrice)
+	assert.Equal(t, "0xabcd", tx.Input)
+	assert.Equal(t, "0x1", *tx.ChainId)
+}
+
+func TestProcessTransaction_EIP2930(t *testing.T) {
+	toAddress := "0xto123" + strings.Repeat("0", 35) // Properly formatted Ethereum address
+
+	contractResult := domain.ContractResults{
+		BlockNumber: 123,
+		Hash:        "0xtxHash123" + strings.Repeat("0", 100),
+		From:        "0xfrom123" + strings.Repeat("0", 100),
+		To:          toAddress,
+		Type:        1, // EIP-2930
+		GasPrice:    "0x100",
+		R:           "0xr123" + strings.Repeat("0", 100),
+		S:           "0xs123" + strings.Repeat("0", 100),
+	}
+
+	result := service.ProcessTransaction(contractResult)
+	tx, ok := result.(domain.Transaction2930)
+	assert.True(t, ok)
+	assert.Empty(t, tx.AccessList)
+	assert.Equal(t, "0x1", tx.Type)
+	assert.Equal(t, toAddress, *tx.Transaction.To)
+}
+
+func TestProcessTransaction_EIP1559(t *testing.T) {
+	toAddress := "0xto123" + strings.Repeat("0", 35) // Properly formatted Ethereum address
+
+	contractResult := domain.ContractResults{
+		BlockNumber:          123,
+		Hash:                 "0xtxHash123" + strings.Repeat("0", 100),
+		From:                 "0xfrom123" + strings.Repeat("0", 100),
+		To:                   toAddress,
+		Type:                 2, // EIP-1559
+		MaxPriorityFeePerGas: "0x100",
+		MaxFeePerGas:         "0x200",
+		R:                    "0xr123" + strings.Repeat("0", 100),
+		S:                    "0xs123" + strings.Repeat("0", 100),
+	}
+
+	result := service.ProcessTransaction(contractResult)
+	tx, ok := result.(domain.Transaction1559)
+	assert.True(t, ok)
+	assert.Empty(t, tx.AccessList)
+	assert.Equal(t, "0x2", tx.Type)
+	assert.Equal(t, "0x100", tx.MaxPriorityFeePerGas)
+	assert.Equal(t, "0x200", tx.MaxFeePerGas)
+	assert.Equal(t, toAddress, *tx.Transaction.To)
+}
+
+func TestProcessTransaction_UnknownType(t *testing.T) {
+	toAddress := "0xto123" + strings.Repeat("0", 35) // Properly formatted Ethereum address
+
+	contractResult := domain.ContractResults{
+		BlockNumber: 123,
+		Hash:        "0xtxHash123" + strings.Repeat("0", 100),
+		From:        "0xfrom123" + strings.Repeat("0", 100),
+		To:          toAddress,
+		Type:        99, // Unknown type
+		R:           "0xr123" + strings.Repeat("0", 100),
+		S:           "0xs123" + strings.Repeat("0", 100),
+	}
+
+	result := service.ProcessTransaction(contractResult)
+	tx, ok := result.(domain.Transaction)
+	assert.True(t, ok)
+	assert.Equal(t, "0x63", tx.Type) // 99 in hex
+	assert.Equal(t, toAddress, *tx.To)
 }
