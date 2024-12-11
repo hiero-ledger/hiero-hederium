@@ -577,3 +577,145 @@ func TestGetBalance(t *testing.T) {
 		})
 	}
 }
+
+func TestGetBalance_Latest(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Create a logger for testing
+	cfg := zap.NewDevelopmentConfig()
+	cfg.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+	logger, _ := cfg.Build()
+
+	// Create mock client
+	mockClient := mocks.NewMockMirrorClient(ctrl)
+
+	// Setup expectations for getting latest block
+	mockClient.EXPECT().
+		GetLatestBlock().
+		Return(map[string]interface{}{"number": float64(42)}, nil)
+
+	// Setup expectations for getting block by number
+	mockClient.EXPECT().
+		GetBlockByHashOrNumber("42").
+		Return(&domain.BlockResponse{
+			Timestamp: domain.Timestamp{
+				To: "1234567890.000000000",
+			},
+		})
+
+	// Setup expectations for getting balance
+	mockClient.EXPECT().
+		GetBalance("0x123", "1234567890.000000000").
+		Return("0x2a")
+
+	s := service.NewEthService(
+		nil, // hClient not needed for this test
+		mockClient,
+		logger,
+		nil, // tieredLimiter not needed for this test
+		defaultChainId,
+	)
+
+	result := s.GetBalance("0x123", "latest")
+	assert.Equal(t, "0x2a", result)
+}
+
+func TestGetBalance_Earliest(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	cfg := zap.NewDevelopmentConfig()
+	cfg.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+	logger, _ := cfg.Build()
+
+	mockClient := mocks.NewMockMirrorClient(ctrl)
+
+	// Setup expectations for getting block zero
+	mockClient.EXPECT().
+		GetBlockByHashOrNumber("0").
+		Return(&domain.BlockResponse{
+			Timestamp: domain.Timestamp{
+				To: "0.000000000",
+			},
+		})
+
+	// Setup expectations for getting balance
+	mockClient.EXPECT().
+		GetBalance("0x123", "0.000000000").
+		Return("0x0")
+
+	s := service.NewEthService(
+		nil,
+		mockClient,
+		logger,
+		nil,
+		defaultChainId,
+	)
+
+	result := s.GetBalance("0x123", "earliest")
+	assert.Equal(t, "0x0", result)
+}
+
+func TestGetBalance_SpecificBlock(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	cfg := zap.NewDevelopmentConfig()
+	cfg.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+	logger, _ := cfg.Build()
+
+	mockClient := mocks.NewMockMirrorClient(ctrl)
+
+	// Setup expectations for getting specific block
+	mockClient.EXPECT().
+		GetBlockByHashOrNumber("100").
+		Return(&domain.BlockResponse{
+			Timestamp: domain.Timestamp{
+				To: "1234567890.000000000",
+			},
+		})
+
+	// Setup expectations for getting balance
+	mockClient.EXPECT().
+		GetBalance("0x123", "1234567890.000000000").
+		Return("0x64")
+
+	s := service.NewEthService(
+		nil,
+		mockClient,
+		logger,
+		nil,
+		defaultChainId,
+	)
+
+	result := s.GetBalance("0x123", "0x64") // hex for 100
+	assert.Equal(t, "0x64", result)
+}
+
+func TestGetBalance_BlockNotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	cfg := zap.NewDevelopmentConfig()
+	cfg.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+	logger, _ := cfg.Build()
+
+	mockClient := mocks.NewMockMirrorClient(ctrl)
+
+	// Setup expectations for getting block that doesn't exist
+	mockClient.EXPECT().
+		GetBlockByHashOrNumber("999999").
+		Return(nil)
+
+	s := service.NewEthService(
+		nil,
+		mockClient,
+		logger,
+		nil,
+		defaultChainId,
+	)
+
+	result := s.GetBalance("0x123", "999999")
+	assert.Equal(t, "0x0", result)
+}
