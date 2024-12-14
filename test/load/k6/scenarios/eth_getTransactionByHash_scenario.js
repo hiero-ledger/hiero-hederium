@@ -1,11 +1,12 @@
-import { getBalance } from "../scripts/eth_getBalance_test.js";
+import { getTransactionByHash } from "../scripts/eth_getTransactionByHash_test.js";
+import { config } from "../common.js";
 
 export const options = {
   scenarios: {
     constant_load: {
       executor: "constant-vus",
-      vus: 10,
-      duration: "30s",
+      vus: config.vus,
+      duration: config.duration,
       gracefulStop: "5s",
     },
     stress_test: {
@@ -43,5 +44,5 @@ export const options = {
 };
 
 export default function () {
-  getBalance();
+  getTransactionByHash();
 }
