@@ -406,6 +406,12 @@ func (s *EthService) GetTransactionByHash(hash string) interface{} {
 	return transaction
 }
 
+func (s *EthService) GetTransactionReceipt(hash string) interface{} {
+	s.logger.Info("Getting transaction receipt", zap.String("hash", hash))
+
+	return nil
+}
+
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation
 func (s *EthService) GetAccounts() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting accounts")
