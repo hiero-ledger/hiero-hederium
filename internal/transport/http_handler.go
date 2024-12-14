@@ -19,7 +19,7 @@ type JSONRPCRequest struct {
 
 type JSONRPCResponse struct {
 	JSONRPC string      `json:"jsonrpc"`
-	Result  interface{} `json:"result,omitempty"`
+	Result  interface{} `json:"result"`
 	Error   interface{} `json:"error,omitempty"`
 	ID      interface{} `json:"id,omitempty"`
 }
@@ -286,6 +286,24 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		}
 
 		return ethService.Call(paramsArray[0], blockParam)
+	case "eth_getTransactionByHash":
+		paramsArray, ok := params.([]interface{})
+		if !ok || len(paramsArray) != 1 {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid params for eth_getTransactionByHash: expected [transactionHash]",
+			}
+		}
+
+		txHash, ok := paramsArray[0].(string)
+		if !ok || len(txHash) != 66 || !strings.HasPrefix(txHash, "0x") || !regexp.MustCompile("^0x[0-9a-fA-F]{64}$").MatchString(txHash) {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid transaction hash: expected 32 byte hex string with 0x prefix",
+			}
+		}
+
+		return ethService.GetTransactionByHash(txHash), nil
 	case "eth_blockNumber":
 		return ethService.GetBlockNumber()
 	case "eth_gasPrice":

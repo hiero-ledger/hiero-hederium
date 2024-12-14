@@ -121,13 +121,97 @@ func ProcessTransaction(contractResult domain.ContractResults) interface{} {
 	hexTransactionIndex := hexify(int64(contractResult.TransactionIndex))
 	hexValue := hexify(int64(contractResult.Amount))
 	hexV := hexify(int64(contractResult.V))
+
+	// Safe string slicing with length checks
+	hexR := contractResult.R
+	if len(contractResult.R) > 66 {
+		hexR = contractResult.R[:66]
+	}
+
+	hexS := contractResult.S
+	if len(contractResult.S) > 66 {
+		hexS = contractResult.S[:66]
+	}
+
+	hexNonce := hexify(contractResult.Nonce)
+
+	hexTo := contractResult.To
+	if len(contractResult.To) > 42 {
+		hexTo = contractResult.To[:42]
+	}
+
+	trimmedBlockHash := contractResult.BlockHash
+	if len(contractResult.BlockHash) > 66 {
+		trimmedBlockHash = contractResult.BlockHash[:66]
+	}
+
+	trimmedFrom := contractResult.From
+	if len(contractResult.From) > 42 {
+		trimmedFrom = contractResult.From[:42]
+	}
+
+	trimmedHash := contractResult.Hash
+	if len(contractResult.Hash) > 66 {
+		trimmedHash = contractResult.Hash[:66]
+	}
+
+	commonFields := domain.Transaction{
+		BlockHash:        &trimmedBlockHash,
+		BlockNumber:      &hexBlockNumber,
+		From:             trimmedFrom,
+		Gas:              hexGasUsed,
+		GasPrice:         contractResult.GasPrice,
+		Hash:             trimmedHash,
+		Input:            contractResult.FunctionParameters,
+		Nonce:            hexNonce,
+		To:               &hexTo,
+		TransactionIndex: &hexTransactionIndex,
+		Value:            hexValue,
+		V:                hexV,
+		R:                hexR,
+		S:                hexS,
+		Type:             hexify(int64(contractResult.Type)),
+	}
+
+	// Handle chain ID
+	if contractResult.ChainID != "0x" {
+		commonFields.ChainId = &contractResult.ChainID
+	}
+
+	switch contractResult.Type {
+	case 0:
+		return commonFields // Legacy transaction (EIP-155)
+	case 1:
+		return domain.Transaction2930{
+			Transaction: commonFields,
+			AccessList:  []domain.AccessListEntry{}, // Empty access list for now
+		}
+	case 2:
+		return domain.Transaction1559{
+			Transaction:          commonFields,
+			AccessList:           []domain.AccessListEntry{}, // Empty access list for now
+			MaxPriorityFeePerGas: contractResult.MaxPriorityFeePerGas,
+			MaxFeePerGas:         contractResult.MaxFeePerGas,
+		}
+	default:
+		return commonFields // Default to legacy transaction
+	}
+}
+
+func ProcessTransactionResponse(contractResult domain.ContractResultResponse) interface{} {
+	hexBlockNumber := hexify(contractResult.BlockNumber)
+	hexGasUsed := hexify(contractResult.GasUsed)
+	hexTransactionIndex := hexify(int64(contractResult.TransactionIndex))
+	hexValue := hexify(int64(contractResult.Amount))
+	hexV := hexify(int64(contractResult.V))
 	hexR := contractResult.R[:66]
 	hexS := contractResult.S[:66]
 	hexNonce := hexify(contractResult.Nonce)
 	hexTo := contractResult.To[:42]
+	trimmedBlockHash := contractResult.BlockHash[:66]
 
 	commonFields := domain.Transaction{
-		BlockHash:        &contractResult.BlockHash,
+		BlockHash:        &trimmedBlockHash,
 		BlockNumber:      &hexBlockNumber,
 		From:             contractResult.From[:42],
 		Gas:              hexGasUsed,

@@ -274,11 +274,11 @@ func (m *MirrorClient) GetAccount(address string, timestampTo string) interface{
 	return result
 }
 
-func (m *MirrorClient) GetContractResult(transactionId string) interface{} {
+func (m *MirrorClient) GetContractResult(transactionIdOrHash string) interface{} {
 	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BaseURL+"/api/v1/contracts/results/"+transactionId, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BaseURL+"/api/v1/contracts/results/"+transactionIdOrHash, nil)
 	if err != nil {
 		m.logger.Error("Error creating request to get contract result", zap.Error(err))
 		return nil

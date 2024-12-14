@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/georgi-l95/Hederium/internal/domain"
@@ -882,6 +883,124 @@ func TestEstimateGas(t *testing.T) {
 			} else {
 				assert.Nil(t, errMap)
 				assert.Equal(t, tc.expectedResult, result)
+			}
+		})
+	}
+}
+
+func TestGetTransactionByHash(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger, _ := zap.NewDevelopment()
+	mockClient := mocks.NewMockMirrorClient(ctrl)
+	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
+
+	// Common test data
+	testHash := "0x5d019848d6dad96bc3a9e947350975cd16cf1c51efd4d5b9a273803446fbbb43"
+	baseContractResult := domain.ContractResultResponse{
+		BlockNumber:        123,
+		BlockHash:          "0x" + strings.Repeat("1", 64),
+		Hash:               testHash,
+		From:               "0x" + strings.Repeat("2", 40),
+		To:                 "0x" + strings.Repeat("3", 40),
+		GasUsed:            21000,
+		GasPrice:           "0x5678",
+		TransactionIndex:   1,
+		Amount:             1000000,
+		V:                  27,
+		R:                  "0x" + strings.Repeat("4", 64),
+		S:                  "0x" + strings.Repeat("5", 64),
+		Nonce:              5,
+		FunctionParameters: "0x",
+		ChainID:            defaultChainId,
+	}
+
+	testCases := []struct {
+		name           string
+		hash           string
+		mockResult     interface{}
+		expectedResult bool
+		checkFields    func(t *testing.T, result interface{})
+	}{
+		{
+			name: "Legacy transaction (type 0)",
+			hash: testHash,
+			mockResult: func() domain.ContractResultResponse {
+				result := baseContractResult
+				result.Type = 0
+				return result
+			}(),
+			expectedResult: true,
+			checkFields: func(t *testing.T, result interface{}) {
+				tx, ok := result.(domain.Transaction)
+				assert.True(t, ok)
+				assert.Equal(t, "0x0", tx.Type)
+				assert.Equal(t, testHash, tx.Hash)
+				assert.Equal(t, "0x7b", *tx.BlockNumber) // 123 in hex
+				assert.Equal(t, defaultChainId, *tx.ChainId)
+			},
+		},
+		{
+			name: "EIP-2930 transaction (type 1)",
+			hash: testHash,
+			mockResult: func() domain.ContractResultResponse {
+				result := baseContractResult
+				result.Type = 1
+				return result
+			}(),
+			expectedResult: true,
+			checkFields: func(t *testing.T, result interface{}) {
+				tx, ok := result.(domain.Transaction2930)
+				assert.True(t, ok)
+				assert.Equal(t, "0x1", tx.Type)
+				assert.Empty(t, tx.AccessList)
+				assert.Equal(t, testHash, tx.Hash)
+			},
+		},
+		{
+			name: "EIP-1559 transaction (type 2)",
+			hash: testHash,
+			mockResult: func() domain.ContractResultResponse {
+				result := baseContractResult
+				result.Type = 2
+				result.MaxPriorityFeePerGas = "0x1234"
+				result.MaxFeePerGas = "0x5678"
+				return result
+			}(),
+			expectedResult: true,
+			checkFields: func(t *testing.T, result interface{}) {
+				tx, ok := result.(domain.Transaction1559)
+				assert.True(t, ok)
+				assert.Equal(t, "0x2", tx.Type)
+				assert.Empty(t, tx.AccessList)
+				assert.Equal(t, "0x1234", tx.MaxPriorityFeePerGas)
+				assert.Equal(t, "0x5678", tx.MaxFeePerGas)
+				assert.Equal(t, testHash, tx.Hash)
+			},
+		},
+		{
+			name:           "Transaction not found",
+			hash:           testHash,
+			mockResult:     nil,
+			expectedResult: false,
+			checkFields:    nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockClient.EXPECT().
+				GetContractResult(tc.hash).
+				Return(tc.mockResult)
+
+			result := s.GetTransactionByHash(tc.hash)
+
+			if !tc.expectedResult {
+				assert.Nil(t, result)
+			} else {
+				assert.NotNil(t, result)
+				tc.checkFields(t, result)
 			}
 		})
 	}
