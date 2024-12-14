@@ -278,3 +278,216 @@ func TestProcessTransaction_UnknownType(t *testing.T) {
 	assert.Equal(t, "0x63", tx.Type) // 99 in hex
 	assert.Equal(t, toAddress, *tx.To)
 }
+
+func TestFormatTransactionCallObject(t *testing.T) {
+	ctrl, _, logger := setupTest(t)
+	defer ctrl.Finish()
+
+	s := service.NewEthService(
+		nil,
+		nil,
+		logger,
+		nil,
+		defaultChainId,
+	)
+
+	testCases := []struct {
+		name        string
+		input       *domain.TransactionCallObject
+		blockParam  interface{}
+		estimate    bool
+		expected    map[string]interface{}
+		expectError bool
+	}{
+		{
+			name: "Basic transaction with value",
+			input: &domain.TransactionCallObject{
+				From:  "0x123",
+				To:    "0x456",
+				Value: "0x64", // 100 in hex
+			},
+			blockParam: nil,
+			estimate:   false,
+			expected: map[string]interface{}{
+				"from":     "0x123",
+				"to":       "0x456",
+				"value":    "0", // 100 weibars is less than 1 tinybar, so it rounds to 0
+				"estimate": false,
+			},
+			expectError: false,
+		},
+		{
+			name: "Transaction with gas price",
+			input: &domain.TransactionCallObject{
+				GasPrice: "0x64", // 100 in hex
+			},
+			blockParam: nil,
+			estimate:   true,
+			expected: map[string]interface{}{
+				"gasPrice": "100",
+				"estimate": true,
+			},
+			expectError: false,
+		},
+		{
+			name: "Transaction with gas",
+			input: &domain.TransactionCallObject{
+				Gas: "0x64", // 100 in hex
+			},
+			blockParam: "latest",
+			estimate:   false,
+			expected: map[string]interface{}{
+				"gas":      "100",
+				"block":    "latest",
+				"estimate": false,
+			},
+			expectError: false,
+		},
+		{
+			name: "Transaction with input and data",
+			input: &domain.TransactionCallObject{
+				Input: "0x123",
+				Data:  "0x123",
+			},
+			blockParam: nil,
+			estimate:   false,
+			expected: map[string]interface{}{
+				"data":     "0x123",
+				"estimate": false,
+			},
+			expectError: false,
+		},
+		{
+			name: "Error: Conflicting input and data",
+			input: &domain.TransactionCallObject{
+				Input: "0x123",
+				Data:  "0x456",
+			},
+			blockParam:  nil,
+			estimate:    false,
+			expected:    nil,
+			expectError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := service.FormatTransactionCallObject(s, tc.input, tc.blockParam, tc.estimate)
+			if tc.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expected, result)
+			}
+		})
+	}
+}
+
+func TestWeibarHexToTinyBarInt(t *testing.T) {
+	testCases := []struct {
+		name          string
+		input         string
+		expected      int64
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:     "Zero value",
+			input:    "0x0",
+			expected: 0,
+		},
+		{
+			name:     "Simple hex value",
+			input:    "0x64", // 100 in hex
+			expected: 0,      // 100 weibars < 1 tinybar
+		},
+		{
+			name:     "Large hex value",
+			input:    "0x2386f26fc10000", // 10000000000000000 in hex
+			expected: 1000000,            // 1 million tinybars
+		},
+		{
+			name:     "Decimal string",
+			input:    "1000000000000000",
+			expected: 100000,
+		},
+		{
+			name:     "Small value rounds up to 1",
+			input:    "0x2386f26fc", // Just under 1 tinybar
+			expected: 1,
+		},
+		{
+			name:          "Invalid hex string",
+			input:         "0xNOTHEX",
+			expectError:   true,
+			errorContains: "failed to parse hex value",
+		},
+		{
+			name:     "Empty hex string",
+			input:    "0x",
+			expected: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := service.WeibarHexToTinyBarInt(tc.input)
+			if tc.expectError {
+				assert.Error(t, err)
+				if tc.errorContains != "" {
+					assert.Contains(t, err.Error(), tc.errorContains)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expected, result)
+			}
+		})
+	}
+}
+
+func TestNormalizeHexString(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Already normalized hex",
+			input:    "0x123",
+			expected: "0x123",
+		},
+		{
+			name:     "Leading zeros after 0x",
+			input:    "0x0000123",
+			expected: "0x123",
+		},
+		{
+			name:     "Only zeros",
+			input:    "0x0000",
+			expected: "0x0",
+		},
+		{
+			name:     "No 0x prefix",
+			input:    "123",
+			expected: "123",
+		},
+		{
+			name:     "Empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "Just 0x",
+			input:    "0x",
+			expected: "0x0",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := service.NormalizeHexString(tc.input)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}

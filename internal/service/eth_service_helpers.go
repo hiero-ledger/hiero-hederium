@@ -190,7 +190,7 @@ func FormatTransactionCallObject(s *EthService, transactionCallObject *domain.Tr
 
 	// Handle value conversion if present
 	if transactionCallObject.Value != "" && transactionCallObject.Value != "0" && transactionCallObject.Value != "0x" {
-		value, err := weibarHexToTinyBarInt(transactionCallObject.Value)
+		value, err := WeibarHexToTinyBarInt(transactionCallObject.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -277,7 +277,7 @@ func FormatTransactionCallObject(s *EthService, transactionCallObject *domain.Tr
 // Helper function to convert weibar hex to tinybar int
 const TINYBAR_TO_WEIBAR_COEF = 10000000000 // 10^10
 
-func weibarHexToTinyBarInt(value string) (int64, error) {
+func WeibarHexToTinyBarInt(value string) (int64, error) {
 	// Handle "0x" case
 	if value == "0x" {
 		return 0, nil
@@ -303,9 +303,10 @@ func weibarHexToTinyBarInt(value string) (int64, error) {
 	// Calculate tinybar value
 	tinybarValue := new(big.Int).Div(weiBigInt, coefBigInt)
 
-	// Check if there was a fractional part that got discarded
-	if tinybarValue.Cmp(big.NewInt(0)) == 0 && weiBigInt.Cmp(big.NewInt(0)) > 0 {
-		return 1, nil // Round up to the smallest unit of tinybar
+	// Only round up if the value is significant enough
+	remainder := new(big.Int).Mod(weiBigInt, coefBigInt)
+	if tinybarValue.Cmp(big.NewInt(0)) == 0 && remainder.Cmp(big.NewInt(TINYBAR_TO_WEIBAR_COEF/2)) > 0 {
+		return 1, nil // Round up to the smallest unit of tinybar only if remainder is significant
 	}
 
 	// Convert to int64 and check if it fits
@@ -325,6 +326,9 @@ func NormalizeHexString(hexStr string) string {
 			return "0x0"
 		}
 		return "0x" + trimmed
+	}
+	if hexStr == "0x" {
+		return "0x0"
 	}
 	return hexStr
 }
