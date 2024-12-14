@@ -334,6 +334,63 @@ func (s *EthService) GetTransactionCount(address string, blockNumberOrTag string
 	return nonce
 }
 
+func (s *EthService) EstimateGas(transaction interface{}, blockParam interface{}) (string, map[string]interface{}) {
+	s.logger.Info("Estimating gas", zap.Any("transaction", transaction))
+	errorObject := map[string]interface{}{
+		"code":    -32000,
+		"message": "Error encountered while estimating gas",
+	}
+
+	txObj, err := ParseTransactionCallObject(s, transaction)
+	if err != nil {
+		return "0x0", errorObject
+	}
+
+	formatResult, err := FormatTransactionCallObject(s, txObj, blockParam, true)
+	if err != nil {
+		return "0x0", errorObject
+	}
+
+	callResult := s.mClient.PostCall(formatResult)
+	if callResult == nil {
+		return "0x0", errorObject
+	}
+
+	// Remove leading zeros from the result string
+	result := NormalizeHexString(callResult.(string))
+
+	s.logger.Info("Returning gas", zap.Any("gas", result))
+	return result, nil
+}
+
+func (s *EthService) Call(transaction interface{}, blockParam interface{}) (interface{}, map[string]interface{}) {
+	s.logger.Info("Performing eth_call", zap.Any("transaction", transaction))
+	errorObject := map[string]interface{}{
+		"code":    -32000,
+		"message": "Error encountered while performing eth_call",
+	}
+
+	txObj, err := ParseTransactionCallObject(s, transaction)
+	if err != nil {
+		return "0x0", errorObject
+	}
+
+	result, err := FormatTransactionCallObject(s, txObj, blockParam, false)
+	if err != nil {
+		return "0x0", errorObject
+	}
+
+	callResult := s.mClient.PostCall(result)
+	if callResult == nil {
+		return "0x0", errorObject
+	}
+
+	normalizedResult := NormalizeHexString(callResult.(string))
+
+	s.logger.Info("Returning formatted transaction call result", zap.Any("result", normalizedResult))
+	return normalizedResult, nil
+}
+
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation
 func (s *EthService) GetAccounts() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting accounts")

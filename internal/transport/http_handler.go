@@ -215,6 +215,77 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		}
 
 		return ethService.GetTransactionCount(address, blockNumber), nil
+	case "eth_estimateGas":
+		paramsArray, ok := params.([]interface{})
+		if !ok || len(paramsArray) == 0 || len(paramsArray) > 2 {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid params for eth_estimateGas: expected [callObject] or [callObject, blockParameter]",
+			}
+		}
+
+		// Second parameter is optional, validate if provided
+		var secondParam interface{}
+		if len(paramsArray) == 2 {
+			blockParam, ok := paramsArray[1].(string)
+			if !ok {
+				return nil, map[string]interface{}{
+					"code":    -32602,
+					"message": "Invalid block parameter: expected string",
+				}
+			}
+
+			validTags := map[string]bool{
+				"latest":    true,
+				"pending":   true,
+				"earliest":  true,
+				"safe":      true,
+				"finalized": true,
+			}
+
+			if !validTags[blockParam] && !strings.HasPrefix(blockParam, "0x") {
+				return nil, map[string]interface{}{
+					"code":    -32602,
+					"message": "Invalid block parameter: must be a tag (latest/pending/earliest/safe/finalized) or hex number",
+				}
+			}
+			secondParam = blockParam
+		}
+
+		return ethService.EstimateGas(paramsArray[0], secondParam)
+	case "eth_call":
+		paramsArray, ok := params.([]interface{})
+		if !ok || len(paramsArray) != 2 {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid params for eth_call: two parameters are required",
+			}
+		}
+
+		blockParam, ok := paramsArray[1].(string)
+		if !ok {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid block parameter: expected string",
+			}
+		}
+
+		validTags := map[string]bool{
+			"latest":    true,
+			"pending":   true,
+			"earliest":  true,
+			"safe":      true,
+			"finalized": true,
+		}
+
+		if !validTags[blockParam] && !strings.HasPrefix(blockParam, "0x") {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid block parameter: must be a tag (latest/pending/earliest/safe/finalized) or hex number",
+			}
+		}
+
+		return ethService.Call(paramsArray[0], blockParam)
 	case "eth_blockNumber":
 		return ethService.GetBlockNumber()
 	case "eth_gasPrice":

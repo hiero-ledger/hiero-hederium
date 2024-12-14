@@ -133,3 +133,17 @@ func (mr *MockMirrorClientMockRecorder) GetNetworkFees() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNetworkFees", reflect.TypeOf((*MockMirrorClient)(nil).GetNetworkFees))
 }
+
+// PostCall mocks base method.
+func (m *MockMirrorClient) PostCall(callObject map[string]interface{}) interface{} {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PostCall", callObject)
+	ret0, _ := ret[0].(interface{})
+	return ret0
+}
+
+// PostCall indicates an expected call of PostCall.
+func (mr *MockMirrorClientMockRecorder) PostCall(callObject interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostCall", reflect.TypeOf((*MockMirrorClient)(nil).PostCall), callObject)
+}

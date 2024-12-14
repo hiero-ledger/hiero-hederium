@@ -476,3 +476,78 @@ func TestGetAccount_Error(t *testing.T) {
 
 	assert.Nil(t, result)
 }
+
+func TestPostCall(t *testing.T) {
+	logger, _ := setupTest(t)
+
+	testCases := []struct {
+		name           string
+		callObject     map[string]interface{}
+		mockResponse   interface{}
+		expectedResult string
+		statusCode     int
+	}{
+		{
+			name: "Successful contract call",
+			callObject: map[string]interface{}{
+				"data": "0x123456",
+				"to":   "0x1234567890123456789012345678901234567890",
+			},
+			mockResponse: struct {
+				Result string `json:"result"`
+			}{
+				Result: "0xabcdef",
+			},
+			expectedResult: "0xabcdef",
+			statusCode:     http.StatusOK,
+		},
+		{
+			name: "Server error",
+			callObject: map[string]interface{}{
+				"data": "0x123456",
+			},
+			mockResponse:   nil,
+			expectedResult: "",
+			statusCode:     http.StatusInternalServerError,
+		},
+		{
+			name: "Invalid response structure",
+			callObject: map[string]interface{}{
+				"data": "0x123456",
+			},
+			mockResponse:   "invalid json",
+			expectedResult: "",
+			statusCode:     http.StatusOK,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/api/v1/contracts/call", r.URL.Path)
+				assert.Equal(t, http.MethodPost, r.Method)
+				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+				var receivedCallObject map[string]interface{}
+				err := json.NewDecoder(r.Body).Decode(&receivedCallObject)
+				assert.NoError(t, err)
+				assert.Equal(t, tc.callObject, receivedCallObject)
+
+				w.WriteHeader(tc.statusCode)
+				if tc.mockResponse != nil {
+					json.NewEncoder(w).Encode(tc.mockResponse)
+				}
+			}))
+			defer server.Close()
+
+			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			result := client.PostCall(tc.callObject)
+
+			if tc.expectedResult == "" {
+				assert.Nil(t, result)
+			} else {
+				assert.Equal(t, tc.expectedResult, result)
+			}
+		})
+	}
+}

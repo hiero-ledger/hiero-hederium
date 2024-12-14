@@ -719,3 +719,170 @@ func TestGetBalance_BlockNotFound(t *testing.T) {
 	result := s.GetBalance("0x123", "999999")
 	assert.Equal(t, "0x0", result)
 }
+
+func TestCall(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger, _ := zap.NewDevelopment()
+	mockClient := mocks.NewMockMirrorClient(ctrl)
+
+	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
+
+	testCases := []struct {
+		name           string
+		transaction    interface{}
+		blockParam     interface{}
+		mockResponse   interface{}
+		expectedResult interface{}
+		expectError    bool
+		setupMock      bool
+	}{
+		{
+			name: "Successful call",
+			transaction: map[string]interface{}{
+				"to":   "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+				"data": "0x70a08231000000000000000000000000b1d6b01b94d854f521665696ea17fcf87c160d97",
+			},
+			blockParam:     "latest",
+			mockResponse:   "0x0000000000000000000000000000000000000000000000000000000000000064",
+			expectedResult: "0x64",
+			expectError:    false,
+			setupMock:      true,
+		},
+		{
+			name: "Invalid transaction object",
+			transaction: map[string]interface{}{
+				"input": "0x123",
+				"data":  "0x456", // Conflicting input and data
+			},
+			blockParam:     "latest",
+			mockResponse:   nil,
+			expectedResult: "0x0",
+			expectError:    true,
+			setupMock:      false,
+		},
+		{
+			name: "Empty response from mirror node",
+			transaction: map[string]interface{}{
+				"to":   "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+				"data": "0x70a08231",
+			},
+			blockParam:     "latest",
+			mockResponse:   nil,
+			expectedResult: "0x0",
+			expectError:    true,
+			setupMock:      true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.setupMock {
+				mockClient.EXPECT().
+					PostCall(gomock.Any()).
+					Return(tc.mockResponse).
+					Times(1)
+			}
+
+			result, errMap := s.Call(tc.transaction, tc.blockParam)
+
+			if tc.expectError {
+				assert.NotNil(t, errMap)
+				assert.Equal(t, -32000, errMap["code"])
+			} else {
+				assert.Nil(t, errMap)
+				assert.Equal(t, tc.expectedResult, result)
+			}
+		})
+	}
+}
+
+func TestEstimateGas(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger, _ := zap.NewDevelopment()
+	mockClient := mocks.NewMockMirrorClient(ctrl)
+
+	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
+
+	testCases := []struct {
+		name           string
+		transaction    interface{}
+		blockParam     interface{}
+		mockResponse   interface{}
+		expectedResult string
+		expectError    bool
+		setupMock      bool
+	}{
+		{
+			name: "Successful gas estimation",
+			transaction: map[string]interface{}{
+				"to":   "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+				"data": "0x70a08231000000000000000000000000b1d6b01b94d854f521665696ea17fcf87c160d97",
+			},
+			blockParam:     "latest",
+			mockResponse:   "0x5208", // 21000 gas
+			expectedResult: "0x5208",
+			expectError:    false,
+			setupMock:      true,
+		},
+		{
+			name: "Invalid transaction object",
+			transaction: map[string]interface{}{
+				"input": "0x123",
+				"data":  "0x456", // Conflicting input and data
+			},
+			blockParam:     "latest",
+			mockResponse:   nil,
+			expectedResult: "0x0",
+			expectError:    true,
+			setupMock:      false,
+		},
+		{
+			name: "Empty response from mirror node",
+			transaction: map[string]interface{}{
+				"to":   "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+				"data": "0x70a08231",
+			},
+			blockParam:     "latest",
+			mockResponse:   nil,
+			expectedResult: "0x0",
+			expectError:    true,
+			setupMock:      true,
+		},
+		{
+			name: "Zero gas estimation",
+			transaction: map[string]interface{}{
+				"to": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+			},
+			blockParam:     "latest",
+			mockResponse:   "0x0",
+			expectedResult: "0x0",
+			expectError:    false,
+			setupMock:      true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.setupMock {
+				mockClient.EXPECT().
+					PostCall(gomock.Any()).
+					Return(tc.mockResponse).
+					Times(1)
+			}
+
+			result, errMap := s.EstimateGas(tc.transaction, tc.blockParam)
+
+			if tc.expectError {
+				assert.NotNil(t, errMap)
+				assert.Equal(t, -32000, errMap["code"])
+			} else {
+				assert.Nil(t, errMap)
+				assert.Equal(t, tc.expectedResult, result)
+			}
+		})
+	}
+}
