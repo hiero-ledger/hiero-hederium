@@ -121,19 +121,47 @@ func ProcessTransaction(contractResult domain.ContractResults) interface{} {
 	hexTransactionIndex := hexify(int64(contractResult.TransactionIndex))
 	hexValue := hexify(int64(contractResult.Amount))
 	hexV := hexify(int64(contractResult.V))
-	hexR := contractResult.R[:66]
-	hexS := contractResult.S[:66]
+
+	// Safe string slicing with length checks
+	hexR := contractResult.R
+	if len(contractResult.R) > 66 {
+		hexR = contractResult.R[:66]
+	}
+
+	hexS := contractResult.S
+	if len(contractResult.S) > 66 {
+		hexS = contractResult.S[:66]
+	}
+
 	hexNonce := hexify(contractResult.Nonce)
-	hexTo := contractResult.To[:42]
-	trimmedBlockHash := contractResult.BlockHash[:66]
+
+	hexTo := contractResult.To
+	if len(contractResult.To) > 42 {
+		hexTo = contractResult.To[:42]
+	}
+
+	trimmedBlockHash := contractResult.BlockHash
+	if len(contractResult.BlockHash) > 66 {
+		trimmedBlockHash = contractResult.BlockHash[:66]
+	}
+
+	trimmedFrom := contractResult.From
+	if len(contractResult.From) > 42 {
+		trimmedFrom = contractResult.From[:42]
+	}
+
+	trimmedHash := contractResult.Hash
+	if len(contractResult.Hash) > 66 {
+		trimmedHash = contractResult.Hash[:66]
+	}
 
 	commonFields := domain.Transaction{
 		BlockHash:        &trimmedBlockHash,
 		BlockNumber:      &hexBlockNumber,
-		From:             contractResult.From[:42],
+		From:             trimmedFrom,
 		Gas:              hexGasUsed,
 		GasPrice:         contractResult.GasPrice,
-		Hash:             contractResult.Hash[:66],
+		Hash:             trimmedHash,
 		Input:            contractResult.FunctionParameters,
 		Nonce:            hexNonce,
 		To:               &hexTo,
