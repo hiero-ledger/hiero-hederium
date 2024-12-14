@@ -391,6 +391,21 @@ func (s *EthService) Call(transaction interface{}, blockParam interface{}) (inte
 	return normalizedResult, nil
 }
 
+func (s *EthService) GetTransactionByHash(hash string) interface{} {
+	s.logger.Info("Getting transaction by hash", zap.String("hash", hash))
+	contractResult := s.mClient.GetContractResult(hash)
+	if contractResult == nil {
+		// TODO: Here we should handle synthetic transactions
+		return nil
+	}
+	contractResultResponse := contractResult.(domain.ContractResultResponse)
+
+	// TODO: Resolve evm addresses
+	transaction := ProcessTransactionResponse(contractResultResponse)
+
+	return transaction
+}
+
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation
 func (s *EthService) GetAccounts() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting accounts")

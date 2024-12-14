@@ -491,3 +491,167 @@ func TestNormalizeHexString(t *testing.T) {
 		})
 	}
 }
+
+func TestProcessTransactionResponse(t *testing.T) {
+	// Helper function to create a 64-character hex string (without 0x prefix)
+	makeHexString := func(char string) string {
+		return "0x" + strings.Repeat(char, 64)
+	}
+
+	testCases := []struct {
+		name     string
+		input    domain.ContractResultResponse
+		expected interface{}
+	}{
+		{
+			name: "Legacy transaction",
+			input: domain.ContractResultResponse{
+				BlockNumber:      123,
+				BlockHash:        makeHexString("1"),
+				Hash:             makeHexString("2"),
+				From:             "0x" + strings.Repeat("3", 40),
+				To:               "0x" + strings.Repeat("4", 40),
+				GasUsed:          21000,
+				GasPrice:         "0x5678",
+				TransactionIndex: 1,
+				Amount:           1000000,
+				V:                27,
+				R:                makeHexString("a"),
+				S:                makeHexString("b"),
+				Nonce:            5,
+				Type:             0,
+				ChainID:          "0x1",
+			},
+			expected: domain.Transaction{
+				BlockHash:        stringPtr(makeHexString("1")),
+				BlockNumber:      stringPtr("0x7b"), // 123 in hex
+				From:             "0x" + strings.Repeat("3", 40),
+				To:               stringPtr("0x" + strings.Repeat("4", 40)),
+				Gas:              "0x5208", // 21000 in hex
+				GasPrice:         "0x5678",
+				Hash:             makeHexString("2"),
+				Nonce:            "0x5",
+				TransactionIndex: stringPtr("0x1"),
+				Value:            "0xf4240", // 1000000 in hex
+				V:                "0x1b",    // 27 in hex
+				R:                makeHexString("a"),
+				S:                makeHexString("b"),
+				Type:             "0x0",
+				ChainId:          stringPtr("0x1"),
+			},
+		},
+		{
+			name: "EIP-2930 transaction",
+			input: domain.ContractResultResponse{
+				BlockNumber:      456,
+				BlockHash:        makeHexString("5"),
+				Hash:             makeHexString("6"),
+				From:             "0x" + strings.Repeat("7", 40),
+				To:               "0x" + strings.Repeat("8", 40),
+				GasUsed:          21000,
+				GasPrice:         "0x5678",
+				TransactionIndex: 2,
+				Amount:           2000000,
+				V:                28,
+				R:                makeHexString("c"),
+				S:                makeHexString("d"),
+				Nonce:            6,
+				Type:             1,
+				ChainID:          "0x1",
+			},
+			expected: domain.Transaction2930{
+				Transaction: domain.Transaction{
+					BlockHash:        stringPtr(makeHexString("5")),
+					BlockNumber:      stringPtr("0x1c8"), // 456 in hex
+					From:             "0x" + strings.Repeat("7", 40),
+					To:               stringPtr("0x" + strings.Repeat("8", 40)),
+					Gas:              "0x5208", // 21000 in hex
+					GasPrice:         "0x5678",
+					Hash:             makeHexString("6"),
+					Nonce:            "0x6",
+					TransactionIndex: stringPtr("0x2"),
+					Value:            "0x1e8480", // 2000000 in hex
+					V:                "0x1c",     // 28 in hex
+					R:                makeHexString("c"),
+					S:                makeHexString("d"),
+					Type:             "0x1",
+					ChainId:          stringPtr("0x1"),
+				},
+				AccessList: []domain.AccessListEntry{},
+			},
+		},
+		{
+			name: "EIP-1559 transaction",
+			input: domain.ContractResultResponse{
+				BlockNumber:          789,
+				BlockHash:            makeHexString("9"),
+				Hash:                 makeHexString("f"),
+				From:                 "0x" + strings.Repeat("a", 40),
+				To:                   "0x" + strings.Repeat("b", 40),
+				GasUsed:              21000,
+				GasPrice:             "0x5678",
+				TransactionIndex:     3,
+				Amount:               3000000,
+				V:                    29,
+				R:                    makeHexString("e"),
+				S:                    makeHexString("f"),
+				Nonce:                7,
+				Type:                 2,
+				ChainID:              "0x1",
+				MaxPriorityFeePerGas: "0x1234",
+				MaxFeePerGas:         "0x5678",
+			},
+			expected: domain.Transaction1559{
+				Transaction: domain.Transaction{
+					BlockHash:        stringPtr(makeHexString("9")),
+					BlockNumber:      stringPtr("0x315"), // 789 in hex
+					From:             "0x" + strings.Repeat("a", 40),
+					To:               stringPtr("0x" + strings.Repeat("b", 40)),
+					Gas:              "0x5208", // 21000 in hex
+					GasPrice:         "0x5678",
+					Hash:             makeHexString("f"),
+					Nonce:            "0x7",
+					TransactionIndex: stringPtr("0x3"),
+					Value:            "0x2dc6c0", // 3000000 in hex
+					V:                "0x1d",     // 29 in hex
+					R:                makeHexString("e"),
+					S:                makeHexString("f"),
+					Type:             "0x2",
+					ChainId:          stringPtr("0x1"),
+				},
+				AccessList:           []domain.AccessListEntry{},
+				MaxPriorityFeePerGas: "0x1234",
+				MaxFeePerGas:         "0x5678",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := service.ProcessTransactionResponse(tc.input)
+
+			// Type-specific assertions
+			switch expected := tc.expected.(type) {
+			case domain.Transaction:
+				actual, ok := result.(domain.Transaction)
+				assert.True(t, ok, "Expected Transaction type")
+				assert.Equal(t, expected, actual)
+
+			case domain.Transaction2930:
+				actual, ok := result.(domain.Transaction2930)
+				assert.True(t, ok, "Expected Transaction2930 type")
+				assert.Equal(t, expected, actual)
+
+			case domain.Transaction1559:
+				actual, ok := result.(domain.Transaction1559)
+				assert.True(t, ok, "Expected Transaction1559 type")
+				assert.Equal(t, expected, actual)
+			}
+		})
+	}
+}
+
+// Helper function to create string pointers
+func stringPtr(s string) *string {
+	return &s
+}
