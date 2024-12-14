@@ -1,6 +1,8 @@
 package service
 
 import (
+	"encoding/json"
+	"fmt"
 	"math/big"
 	"strconv"
 	"strings"
@@ -167,7 +169,165 @@ func ProcessTransaction(contractResult domain.ContractResults) interface{} {
 	}
 }
 
+func ParseTransactionCallObject(s *EthService, transaction interface{}) (*domain.TransactionCallObject, error) {
+	var transactionCallObject domain.TransactionCallObject
+	jsonBytes, err := json.Marshal(transaction)
+	if err != nil {
+		s.logger.Error("Error marshaling transaction", zap.Error(err))
+		return nil, err
+	}
+
+	if err := json.Unmarshal(jsonBytes, &transactionCallObject); err != nil {
+		s.logger.Error("Error unmarshaling transaction", zap.Error(err))
+		return nil, err
+	}
+
+	return &transactionCallObject, nil
+}
+
+func FormatTransactionCallObject(s *EthService, transactionCallObject *domain.TransactionCallObject, blockParam interface{}, estimate bool) (map[string]interface{}, error) {
+	result := make(map[string]interface{})
+
+	// Handle value conversion if present
+	if transactionCallObject.Value != "" && transactionCallObject.Value != "0" && transactionCallObject.Value != "0x" {
+		value, err := weibarHexToTinyBarInt(transactionCallObject.Value)
+		if err != nil {
+			return nil, err
+		}
+		result["value"] = strconv.FormatInt(value, 10)
+	}
+
+	// Handle gas price
+	if transactionCallObject.GasPrice != "" && transactionCallObject.GasPrice != "0x" {
+		gasPrice, err := strconv.ParseInt(strings.TrimPrefix(transactionCallObject.GasPrice, "0x"), 16, 64)
+		if err != nil {
+			return nil, err
+		}
+		result["gasPrice"] = strconv.FormatInt(gasPrice, 10)
+	}
+	// else {
+	// 	// Fetch gas price if not provided
+	// 	gasPrice, errMap := s.GetGasPrice()
+	// 	if errMap != nil {
+	// 		return nil, fmt.Errorf("failed to get gas price: %v", errMap["message"])
+	// 	}
+
+	// 	// Convert hex string to decimal
+	// 	gasPriceStr, ok := gasPrice.(string)
+	// 	if !ok {
+	// 		return nil, fmt.Errorf("invalid gas price format")
+	// 	}
+
+	// 	gasPriceInt, err := strconv.ParseInt(strings.TrimPrefix(gasPriceStr, "0x"), 16, 64)
+	// 	if err != nil {
+	// 		return nil, fmt.Errorf("failed to parse gas price: %v", err)
+	// 	}
+
+	// 	result["gasPrice"] = strconv.FormatInt(gasPriceInt, 10)
+	// }
+	// TODO: Decide whether gasPrice is needed, commented for now.
+
+	// Handle gas only if present and not empty
+	if transactionCallObject.Gas != "" && transactionCallObject.Gas != "0x" {
+		gas, err := strconv.ParseInt(strings.TrimPrefix(transactionCallObject.Gas, "0x"), 16, 64)
+		if err != nil {
+			return nil, err
+		}
+		result["gas"] = strconv.FormatInt(gas, 10)
+	}
+
+	// Handle from address when not provided but value is present
+	if transactionCallObject.From != "" || (transactionCallObject.Value != "" && transactionCallObject.Value != "0" && transactionCallObject.Value != "0x") {
+		if transactionCallObject.From != "" {
+			result["from"] = transactionCallObject.From
+		} else {
+			result["from"] = "0x17b2b8c63fa35402088640e426c6709a254c7ffb" // TODO: For now we just hardcode random account
+		}
+	}
+
+	// Handle input/data field consistency - prioritize input over data if both are present
+	if transactionCallObject.Input != "" && transactionCallObject.Data != "" {
+		// If both are present and different, return error
+		if transactionCallObject.Input != transactionCallObject.Data {
+			return nil, fmt.Errorf("both input and data fields are present with different values")
+		}
+		result["data"] = transactionCallObject.Input
+	} else if transactionCallObject.Input != "" {
+		result["data"] = transactionCallObject.Input
+	} else if transactionCallObject.Data != "" {
+		result["data"] = transactionCallObject.Data
+	}
+
+	if blockParam != nil {
+		result["block"] = blockParam
+	}
+
+	// Copy any remaining non-empty fields
+	if transactionCallObject.To != "" {
+		result["to"] = transactionCallObject.To
+	}
+	if transactionCallObject.Nonce != "" && transactionCallObject.Nonce != "0x" {
+		result["nonce"] = transactionCallObject.Nonce
+	}
+	result["estimate"] = estimate
+
+	return result, nil
+}
+
+// Helper function to convert weibar hex to tinybar int
+const TINYBAR_TO_WEIBAR_COEF = 10000000000 // 10^10
+
+func weibarHexToTinyBarInt(value string) (int64, error) {
+	// Handle "0x" case
+	if value == "0x" {
+		return 0, nil
+	}
+
+	// Convert the hex string to big.Int
+	weiBigInt := new(big.Int)
+	if strings.HasPrefix(value, "0x") {
+		_, success := weiBigInt.SetString(value[2:], 16)
+		if !success {
+			return 0, fmt.Errorf("failed to parse hex value: %s", value)
+		}
+	} else {
+		_, success := weiBigInt.SetString(value, 10)
+		if !success {
+			return 0, fmt.Errorf("failed to parse value: %s", value)
+		}
+	}
+
+	// Create coefficient as big.Int
+	coefBigInt := big.NewInt(TINYBAR_TO_WEIBAR_COEF)
+
+	// Calculate tinybar value
+	tinybarValue := new(big.Int).Div(weiBigInt, coefBigInt)
+
+	// Check if there was a fractional part that got discarded
+	if tinybarValue.Cmp(big.NewInt(0)) == 0 && weiBigInt.Cmp(big.NewInt(0)) > 0 {
+		return 1, nil // Round up to the smallest unit of tinybar
+	}
+
+	// Convert to int64 and check if it fits
+	if !tinybarValue.IsInt64() {
+		return 0, fmt.Errorf("tinybar value exceeds int64 range: %s", tinybarValue.String())
+	}
+
+	return tinybarValue.Int64(), nil
+}
+
 // Utility functions
+
+func NormalizeHexString(hexStr string) string {
+	if len(hexStr) > 2 && hexStr[:2] == "0x" {
+		trimmed := strings.TrimLeft(hexStr[2:], "0")
+		if trimmed == "" {
+			return "0x0"
+		}
+		return "0x" + trimmed
+	}
+	return hexStr
+}
 
 func hexify(n int64) string {
 	return "0x" + strconv.FormatInt(n, 16)

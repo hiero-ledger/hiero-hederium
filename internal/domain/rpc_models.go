@@ -63,6 +63,18 @@ type AccessListEntry struct {
 	StorageKeys []string `json:"storageKeys"`
 }
 
+type TransactionCallObject struct {
+	From     string `json:"from"`
+	To       string `json:"to"`
+	Gas      string `json:"gas"`
+	GasPrice string `json:"gasPrice"`
+	Value    string `json:"value"`
+	Data     string `json:"data"`
+	Input    string `json:"input"`
+	Nonce    string `json:"nonce"`
+	Estimate bool   `json:"estimate"`
+}
+
 // NewBlock creates a new Block instance with default values for non-nullable fields
 func NewBlock() *Block {
 	return &Block{

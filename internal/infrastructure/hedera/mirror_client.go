@@ -1,6 +1,7 @@
 package hedera
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -20,6 +21,7 @@ type MirrorNodeClient interface {
 	GetBalance(address string, timestampTo string) string
 	GetAccount(address string, timestampTo string) interface{}
 	GetContractResult(transactionId string) interface{}
+	PostCall(callObject map[string]interface{}) interface{}
 }
 
 type MirrorClient struct {
@@ -301,4 +303,44 @@ func (m *MirrorClient) GetContractResult(transactionId string) interface{} {
 	}
 
 	return result
+}
+
+func (m *MirrorClient) PostCall(callObject map[string]interface{}) interface{} {
+	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
+	defer cancel()
+
+	jsonBody, err := json.Marshal(callObject)
+	if err != nil {
+		m.logger.Error("Error marshaling call object", zap.Error(err))
+		return nil
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.BaseURL+"/api/v1/contracts/call", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		m.logger.Error("Error creating request for contract call", zap.Error(err))
+		return nil
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		m.logger.Error("Error making contract call", zap.Error(err))
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		m.logger.Error("Mirror node returned non-OK status", zap.Int("status", resp.StatusCode))
+		return nil
+	}
+
+	var result struct {
+		Result string `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		m.logger.Error("Error decoding response body", zap.Error(err))
+		return nil
+	}
+
+	return result.Result
 }
