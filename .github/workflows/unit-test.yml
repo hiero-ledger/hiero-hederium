@@ -2,9 +2,9 @@ name: CI - Unit Tests
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 concurrency:
   group: pr-checks-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -21,10 +21,24 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v3
         with:
-          go-version: '1.20.4' # use a valid Go version
+          go-version: "1.20.4"
 
       - name: Install dependencies
         run: go mod download
 
-      - name: Run unit tests
-        run: go test ./... -v
+      - name: Run unit tests with coverage
+        run: go test ./... -v -coverprofile=coverage.out
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Go test coverage
+        uses: vladopajic/go-test-coverage@v2
+        with:
+          profile: coverage.out
+          local-prefix: github.com/georgi-l95/Hederium
+          threshold-file: 80
+          threshold-package: 80
+          threshold-total: 85
