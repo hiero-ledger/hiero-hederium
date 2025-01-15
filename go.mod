@@ -1,6 +1,8 @@
-module github.com/georgi-l95/Hederium
+module github.com/LimeChain/Hederium
 
-go 1.20
+go 1.21
+
+toolchain go1.23.4
 
 require github.com/stretchr/testify v1.10.0
 

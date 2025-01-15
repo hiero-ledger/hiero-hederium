@@ -6,11 +6,11 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
-	"github.com/georgi-l95/Hederium/internal/infrastructure/config"
-	"github.com/georgi-l95/Hederium/internal/infrastructure/hedera"
-	"github.com/georgi-l95/Hederium/internal/infrastructure/limiter"
-	"github.com/georgi-l95/Hederium/internal/infrastructure/logger"
-	"github.com/georgi-l95/Hederium/internal/transport"
+	"github.com/LimeChain/Hederium/internal/infrastructure/config"
+	"github.com/LimeChain/Hederium/internal/infrastructure/hedera"
+	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
+	"github.com/LimeChain/Hederium/internal/infrastructure/logger"
+	"github.com/LimeChain/Hederium/internal/transport"
 )
 
 func main() {
