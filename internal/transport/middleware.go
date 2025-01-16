@@ -3,7 +3,7 @@ package transport
 import (
 	"net/http"
 
-	"github.com/georgi-l95/Hederium/internal/infrastructure/limiter"
+	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
 	"github.com/gin-gonic/gin"
 )
 

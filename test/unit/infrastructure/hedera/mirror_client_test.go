@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/georgi-l95/Hederium/internal/domain"
-	"github.com/georgi-l95/Hederium/internal/infrastructure/hedera"
+	"github.com/LimeChain/Hederium/internal/domain"
+	"github.com/LimeChain/Hederium/internal/infrastructure/hedera"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )

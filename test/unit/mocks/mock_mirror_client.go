@@ -7,7 +7,7 @@ package mocks
 import (
 	reflect "reflect"
 
-	domain "github.com/georgi-l95/Hederium/internal/domain"
+	domain "github.com/LimeChain/Hederium/internal/domain"
 	gomock "github.com/golang/mock/gomock"
 )
 

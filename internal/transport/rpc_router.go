@@ -4,9 +4,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"github.com/georgi-l95/Hederium/internal/infrastructure/hedera"
-	"github.com/georgi-l95/Hederium/internal/infrastructure/limiter"
-	"github.com/georgi-l95/Hederium/internal/service"
+	"github.com/LimeChain/Hederium/internal/infrastructure/hedera"
+	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
+	"github.com/LimeChain/Hederium/internal/service"
 )
 
 var ethService *service.EthService

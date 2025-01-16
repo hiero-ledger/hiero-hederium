@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/georgi-l95/Hederium/internal/domain"
-	"github.com/georgi-l95/Hederium/internal/service"
-	"github.com/georgi-l95/Hederium/test/unit/mocks"
+	"github.com/LimeChain/Hederium/internal/domain"
+	"github.com/LimeChain/Hederium/internal/service"
+	"github.com/LimeChain/Hederium/test/unit/mocks"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
