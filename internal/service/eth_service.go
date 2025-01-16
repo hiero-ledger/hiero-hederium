@@ -441,6 +441,7 @@ func (s *EthService) GetTransactionReceipt(hash string) interface{} {
 	// TODO: Implement resolveEvmAddress for from/to addresses
 
 	// Create receipt
+	// TODO: add utility function to convert to hex
 	receipt := domain.TransactionReceipt{
 		BlockHash:         contractResultResponse.BlockHash[:66],
 		BlockNumber:       "0x" + strconv.FormatInt(contractResultResponse.BlockNumber, 16),

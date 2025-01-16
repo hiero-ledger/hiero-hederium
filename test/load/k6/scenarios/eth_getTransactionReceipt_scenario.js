@@ -45,4 +45,4 @@ export const options = {
 
 export default function () {
   getTransactionReceipt();
-} 
+}
