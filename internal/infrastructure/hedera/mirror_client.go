@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/georgi-l95/Hederium/internal/domain"
+	"github.com/LimeChain/Hederium/internal/domain"
 	"go.uber.org/zap"
 )
 

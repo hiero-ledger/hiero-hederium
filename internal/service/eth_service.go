@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/georgi-l95/Hederium/internal/domain"
-	infrahedera "github.com/georgi-l95/Hederium/internal/infrastructure/hedera"
-	"github.com/georgi-l95/Hederium/internal/infrastructure/limiter"
+	"github.com/LimeChain/Hederium/internal/domain"
+	infrahedera "github.com/LimeChain/Hederium/internal/infrastructure/hedera"
+	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
 	"go.uber.org/zap"
 )
 

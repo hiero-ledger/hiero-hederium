@@ -4,7 +4,7 @@
   <img src="assets/logo.png" alt="Hederium Logo" width="100%"/>
 </p>
 
-[![CI - Unit Tests](https://github.com/georgi-l95/Hederium/actions/workflows/unit-test.yml/badge.svg)](https://github.com/georgi-l95/Hederium/actions/workflows/unit-test.yml)
+[![CI - Unit Tests](https://github.com/LimeChain/Hederium/actions/workflows/unit-test.yml/badge.svg)](https://github.com/LimeChain/Hederium/actions/workflows/unit-test.yml)
 [![License](https://img.shields.io/badge/license-apache2-blue.svg)](LICENSE)
 [![Made With](https://img.shields.io/badge/made_with-go-blue)](https://golang.org/)
 
@@ -21,7 +21,7 @@ Hederium is designed to implement the Hashio protocol in Go, offering high perfo
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/georgi-l95/Hederium.git
+   git clone https://github.com/LimeChain/Hederium.git
    cd Hederium
    ```
 
@@ -75,4 +75,4 @@ This project is licensed under the terms of the LICENSE file included in the rep
 
 ## Contact
 
-Project Link: [https://github.com/georgi-l95/Hederium](https://github.com/georgi-l95/Hederium)
+Project Link: [https://github.com/LimeChain/Hederium](https://github.com/LimeChain/Hederium)
