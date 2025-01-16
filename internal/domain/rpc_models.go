@@ -117,7 +117,7 @@ type TransactionReceipt struct {
 	Status            string  `json:"status"`
 	To                string  `json:"to"`
 	TransactionHash   string  `json:"transactionHash"`
-	TransactionIndex  *string `json:"transactionIndex"`
+	TransactionIndex  string  `json:"transactionIndex"`
 	Type              *string `json:"type"`
-	RevertReason      *string `json:"revertReason,omitempty"`
+	RevertReason      string  `json:"revertReason,omitempty"`
 }

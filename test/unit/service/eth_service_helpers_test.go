@@ -498,6 +498,10 @@ func TestProcessTransactionResponse(t *testing.T) {
 		return "0x" + strings.Repeat(char, 64)
 	}
 
+	intPtr := func(i int) *int {
+		return &i
+	}
+
 	testCases := []struct {
 		name     string
 		input    domain.ContractResultResponse
@@ -519,7 +523,7 @@ func TestProcessTransactionResponse(t *testing.T) {
 				R:                makeHexString("a"),
 				S:                makeHexString("b"),
 				Nonce:            5,
-				Type:             0,
+				Type:             intPtr(0),
 				ChainID:          "0x1",
 			},
 			expected: domain.Transaction{
@@ -556,7 +560,7 @@ func TestProcessTransactionResponse(t *testing.T) {
 				R:                makeHexString("c"),
 				S:                makeHexString("d"),
 				Nonce:            6,
-				Type:             1,
+				Type:             intPtr(1),
 				ChainID:          "0x1",
 			},
 			expected: domain.Transaction2930{
@@ -596,7 +600,7 @@ func TestProcessTransactionResponse(t *testing.T) {
 				R:                    makeHexString("e"),
 				S:                    makeHexString("f"),
 				Nonce:                7,
-				Type:                 2,
+				Type:                 intPtr(2),
 				ChainID:              "0x1",
 				MaxPriorityFeePerGas: "0x1234",
 				MaxFeePerGas:         "0x5678",

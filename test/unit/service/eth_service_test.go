@@ -914,6 +914,7 @@ func TestGetTransactionByHash(t *testing.T) {
 		Nonce:              5,
 		FunctionParameters: "0x",
 		ChainID:            defaultChainId,
+		Type:               new(int),
 	}
 
 	testCases := []struct {
@@ -928,7 +929,8 @@ func TestGetTransactionByHash(t *testing.T) {
 			hash: testHash,
 			mockResult: func() domain.ContractResultResponse {
 				result := baseContractResult
-				result.Type = 0
+				typeVal := 0
+				result.Type = &typeVal
 				return result
 			}(),
 			expectedResult: true,
@@ -946,7 +948,8 @@ func TestGetTransactionByHash(t *testing.T) {
 			hash: testHash,
 			mockResult: func() domain.ContractResultResponse {
 				result := baseContractResult
-				result.Type = 1
+				typeVal := 1
+				result.Type = &typeVal
 				return result
 			}(),
 			expectedResult: true,
@@ -956,6 +959,8 @@ func TestGetTransactionByHash(t *testing.T) {
 				assert.Equal(t, "0x1", tx.Type)
 				assert.Empty(t, tx.AccessList)
 				assert.Equal(t, testHash, tx.Hash)
+				assert.Equal(t, "0x7b", *tx.BlockNumber) // 123 in hex
+				assert.Equal(t, defaultChainId, *tx.ChainId)
 			},
 		},
 		{
@@ -963,7 +968,8 @@ func TestGetTransactionByHash(t *testing.T) {
 			hash: testHash,
 			mockResult: func() domain.ContractResultResponse {
 				result := baseContractResult
-				result.Type = 2
+				typeVal := 2
+				result.Type = &typeVal
 				result.MaxPriorityFeePerGas = "0x1234"
 				result.MaxFeePerGas = "0x5678"
 				return result
@@ -992,14 +998,11 @@ func TestGetTransactionByHash(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			mockClient.EXPECT().
 				GetContractResult(tc.hash).
-				Return(tc.mockResult)
+				Return(tc.mockResult).
+				Times(1)
 
 			result := s.GetTransactionByHash(tc.hash)
-
-			if !tc.expectedResult {
-				assert.Nil(t, result)
-			} else {
-				assert.NotNil(t, result)
+			if tc.checkFields != nil {
 				tc.checkFields(t, result)
 			}
 		})
