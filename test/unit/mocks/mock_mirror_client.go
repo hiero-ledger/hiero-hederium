@@ -17,6 +17,7 @@ type MockMirrorClient struct {
 	recorder *MockMirrorClientMockRecorder
 }
 
+
 // MockMirrorClientMockRecorder is the mock recorder for MockMirrorClient.
 type MockMirrorClientMockRecorder struct {
 	mock *MockMirrorClient

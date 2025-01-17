@@ -66,7 +66,7 @@ func TestGetFeeWeibars_Error(t *testing.T) {
 		defaultChainId,
 	)
 
-	result, errMap := service.GetFeeWeibars(s, "", "") // Should be handled better
+	result, errMap := service.GetFeeWeibars(s, "", "")
 	assert.Nil(t, result)
 	assert.NotNil(t, errMap)
 	assert.Equal(t, -32000, errMap["code"])
