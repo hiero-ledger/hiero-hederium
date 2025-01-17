@@ -406,6 +406,75 @@ func (s *EthService) GetTransactionByHash(hash string) interface{} {
 	return transaction
 }
 
+func (s *EthService) GetTransactionReceipt(hash string) interface{} {
+	s.logger.Info("Getting transaction receipt", zap.String("hash", hash))
+
+	contractResult := s.mClient.GetContractResult(hash)
+	if contractResult == nil {
+		// TODO: Here we should handle synthetic transactions
+		return nil
+	}
+	contractResultResponse := contractResult.(domain.ContractResultResponse)
+
+	// Convert logs
+	logs := make([]domain.Log, len(contractResultResponse.Logs))
+	for i, log := range contractResultResponse.Logs {
+		logs[i] = domain.Log{
+			Address:          log.Address,
+			BlockHash:        contractResultResponse.BlockHash[:66],
+			BlockNumber:      "0x" + strconv.FormatInt(contractResultResponse.BlockNumber, 16),
+			Data:             log.Data,
+			LogIndex:         "0x" + strconv.FormatInt(int64(i), 16),
+			Removed:          false,
+			Topics:           log.Topics,
+			TransactionHash:  hash,
+			TransactionIndex: "0x" + strconv.FormatInt(int64(contractResultResponse.TransactionIndex), 16),
+		}
+	}
+
+	// TODO: Check if the address is a system contract here
+	// Default values
+	const emptyHex = "0x"
+	const emptyBloom = "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+	const defaultRootHash = "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+	// TODO: Check revert reason, if matches error_message, return it, else it's ASCII so make it hex and return then
+	// TODO: Implement resolveEvmAddress for from/to addresses
+
+	// Create receipt
+	// TODO: add utility function to convert to hex
+	receipt := domain.TransactionReceipt{
+		BlockHash:         contractResultResponse.BlockHash[:66],
+		BlockNumber:       "0x" + strconv.FormatInt(contractResultResponse.BlockNumber, 16),
+		From:              contractResultResponse.From, // TODO: resolve EVM address
+		To:                contractResultResponse.To,   // TODO: resolve EVM address
+		CumulativeGasUsed: "0x" + strconv.FormatInt(contractResultResponse.BlockGasUsed, 16),
+		GasUsed:           "0x" + strconv.FormatInt(contractResultResponse.GasUsed, 16),
+		ContractAddress:   contractResultResponse.Address, // TODO: Set if contract creation
+		Logs:              logs,
+		LogsBloom: func() string {
+			if contractResultResponse.Bloom == emptyHex {
+				return emptyBloom
+			}
+			return contractResultResponse.Bloom
+		}(),
+		TransactionHash:   hash,
+		TransactionIndex:  "0x" + strconv.FormatInt(int64(contractResultResponse.TransactionIndex), 16),
+		EffectiveGasPrice: "0x" + contractResultResponse.GasPrice, // TODO: Calculate effective gas price if needed
+		Root:              defaultRootHash,
+		Status:            contractResultResponse.Status,
+		Type: func() *string {
+			if contractResultResponse.Type == nil {
+				return nil
+			}
+			hexType := "0x" + strconv.FormatInt(int64(*contractResultResponse.Type), 16)
+			return &hexType
+		}(),
+	}
+
+	s.logger.Info("Returning transaction receipt", zap.Any("receipt", receipt))
+	return receipt
+}
+
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation
 func (s *EthService) GetAccounts() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting accounts")
