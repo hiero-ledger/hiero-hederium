@@ -41,7 +41,7 @@ func TestGetFeeWeibars_Success(t *testing.T) {
 		defaultChainId,
 	)
 
-	result, errMap := service.GetFeeWeibars(s)
+	result, errMap := service.GetFeeWeibars(s, "", "") // Should be handled better!
 	assert.Nil(t, errMap)
 
 	// Expected weibars = tinybars * 10^8
@@ -66,7 +66,7 @@ func TestGetFeeWeibars_Error(t *testing.T) {
 		defaultChainId,
 	)
 
-	result, errMap := service.GetFeeWeibars(s)
+	result, errMap := service.GetFeeWeibars(s, "", "") // Should be handled better
 	assert.Nil(t, result)
 	assert.NotNil(t, errMap)
 	assert.Equal(t, -32000, errMap["code"])

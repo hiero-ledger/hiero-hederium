@@ -16,7 +16,7 @@ import (
 type MirrorNodeClient interface {
 	GetLatestBlock() (map[string]interface{}, error)
 	GetBlockByHashOrNumber(hashOrNumber string) *domain.BlockResponse
-	GetNetworkFees() (int64, error)
+	GetNetworkFees(timestampTo, order string) (int64, error)
 	GetContractResults(timestamp domain.Timestamp) []domain.ContractResults
 	GetBalance(address string, timestampTo string) string
 	GetAccount(address string, timestampTo string) interface{}
@@ -101,11 +101,24 @@ func (m *MirrorClient) GetBlockByHashOrNumber(hashOrNumber string) *domain.Block
 	return &result
 }
 
-func (m *MirrorClient) GetNetworkFees() (int64, error) {
+func (m *MirrorClient) GetNetworkFees(timestampTo, order string) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
 	defer cancel()
+	// I do not know if this is the best way to handle this
+	queryParams := ""
+	if timestampTo != "" {
+		queryParams += "?timestamp=lte:" + timestampTo
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BaseURL+"/api/v1/network/fees", nil)
+	if order != "" {
+		if queryParams == "" {
+			queryParams += fmt.Sprintf("?order=%s", order)
+		} else {
+			queryParams += fmt.Sprintf("&order=%s", order)
+		}
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BaseURL+"/api/v1/network/fees"+queryParams, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -115,11 +128,18 @@ func (m *MirrorClient) GetNetworkFees() (int64, error) {
 		return 0, err
 	}
 	defer resp.Body.Close()
-
+	// TODO: If the mirror node does not return fee then ask the SDK for the fee
+	// For now the default fee is 2300
+	var checkSDK bool
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
+		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
+		//return 0, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
+		checkSDK = true
 	}
 
+	if checkSDK {
+		return 2300, nil
+	}
 	var feeResponse domain.FeeResponse
 
 	if err := json.NewDecoder(resp.Body).Decode(&feeResponse); err != nil {

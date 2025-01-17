@@ -136,7 +136,7 @@ func TestGetNetworkFees_Success(t *testing.T) {
 	defer server.Close()
 
 	client := hedera.NewMirrorClient(server.URL, 30, logger)
-	fees, err := client.GetNetworkFees()
+	fees, err := client.GetNetworkFees("", "") // Should be handled better
 
 	assert.NoError(t, err)
 	assert.Equal(t, int64(100000), fees) // Should return the EthereumTransaction fee
@@ -239,7 +239,7 @@ func TestGetNetworkFees_NoEthereumFee(t *testing.T) {
 	defer server.Close()
 
 	client := hedera.NewMirrorClient(server.URL, 30, logger)
-	fees, err := client.GetNetworkFees()
+	fees, err := client.GetNetworkFees("", "") //  Should be handled better
 
 	assert.NoError(t, err)
 	assert.Equal(t, int64(0), fees) // Should return 0 when no EthereumTransaction fee is found
@@ -258,7 +258,7 @@ func TestGetNetworkFees_EmptyResponse(t *testing.T) {
 	defer server.Close()
 
 	client := hedera.NewMirrorClient(server.URL, 30, logger)
-	_, err := client.GetNetworkFees()
+	_, err := client.GetNetworkFees("", "") // Should be handled better
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no fees returned")

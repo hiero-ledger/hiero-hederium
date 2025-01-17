@@ -17,6 +17,7 @@ type MockMirrorClient struct {
 	recorder *MockMirrorClientMockRecorder
 }
 
+
 // MockMirrorClientMockRecorder is the mock recorder for MockMirrorClient.
 type MockMirrorClientMockRecorder struct {
 	mock *MockMirrorClient
@@ -120,7 +121,7 @@ func (mr *MockMirrorClientMockRecorder) GetLatestBlock() *gomock.Call {
 }
 
 // GetNetworkFees mocks base method.
-func (m *MockMirrorClient) GetNetworkFees() (int64, error) {
+func (m *MockMirrorClient) GetNetworkFees(timestampTo, order string) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNetworkFees")
 	ret0, _ := ret[0].(int64)
