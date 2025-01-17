@@ -10,6 +10,13 @@ type Fee struct {
 	TransactionType string `json:"transaction_type"`
 }
 
+type FeeHistory struct {
+	BaseFeePerGas []string   `json:"base_fee_per_gas"`
+	GasUsedRatio  []float64  `json:"gas_used_ratio"`
+	OldestBlock   string     `json:"oldest_block"`
+	Reward        [][]string `json:"reward,omitempty"`
+}
+
 type BlockResponse struct {
 	Count        int       `json:"count"`
 	HapiVersion  string    `json:"hapi_version"`
