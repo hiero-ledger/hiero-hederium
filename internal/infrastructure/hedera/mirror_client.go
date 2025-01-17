@@ -129,14 +129,13 @@ func (m *MirrorClient) GetNetworkFees(timestampTo, order string) (int64, error) 
 	}
 	defer resp.Body.Close()
 	// TODO: If the mirror node does not return fee then ask the SDK for the fee
-	// For now the default fee is 2300
 	var checkSDK bool
 	if resp.StatusCode != http.StatusOK {
 		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
 		//return 0, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
 		checkSDK = true
 	}
-
+	// For now the default fee is 2300
 	if checkSDK {
 		return 2300, nil
 	}

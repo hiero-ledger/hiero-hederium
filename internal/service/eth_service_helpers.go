@@ -16,6 +16,7 @@ import (
 //
 // Parameters:
 //   - s: Pointer to EthService instance containing the mirror client
+//   - params: Optional parameters for timestamp and order
 //
 // Returns:
 //   - *big.Int: The fee amount in weibars, or nil if there was an error
@@ -23,8 +24,19 @@ import (
 //     The error map contains:
 //   - "code": -32000 for failed requests
 //   - "message": Description of the error
-func GetFeeWeibars(s *EthService) (*big.Int, map[string]interface{}) {
-	gasTinybars, err := s.mClient.GetNetworkFees()
+func GetFeeWeibars(s *EthService, params ...string) (*big.Int, map[string]interface{}) {
+	// Default values
+	timestampTo := ""
+	order := ""
+
+	if len(params) > 0 {
+		timestampTo = params[0]
+	}
+	if len(params) > 1 {
+		order = params[1]
+	}
+
+	gasTinybars, err := s.mClient.GetNetworkFees(timestampTo, order)
 	if err != nil {
 		return nil, map[string]interface{}{
 			"code":    -32000,
