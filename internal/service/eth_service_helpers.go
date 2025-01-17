@@ -113,8 +113,8 @@ func ProcessBlock(s *EthService, block *domain.BlockResponse, showDetails bool) 
 	return ethBlock, nil
 }
 
-// ProcessBlock converts a Hedera block response into an Ethereum-compatible block format.
-// It takes a pointer to an EthService, a BlockResponse, and a boolean flag indicating whether
+// ProcessBlock converts a Hedera block response into an Ethereum- block format.
+// It takes a poincompatibleter to an EthService, a BlockResponse, and a boolean flag indicating whether
 // to include full transaction details.
 //
 // The function performs the following:
@@ -470,4 +470,53 @@ func NormalizeHexString(hexStr string) string {
 
 func hexify(n int64) string {
 	return "0x" + strconv.FormatInt(n, 16)
+}
+
+func HexToDec(hexStr string) (int64, map[string]interface{}) {
+	dec, err := strconv.ParseInt(strings.TrimPrefix(hexStr, "0x"), 16, 64)
+	if err != nil {
+		return 0, map[string]interface{}{
+			"code":    -32000,
+			"message": "Failed to parse hex value",
+		}
+	}
+	return dec, nil
+}
+
+func (s *EthService) getBlockNumberByHashOrTag(blockNumberOrTag string) (interface{}, map[string]interface{}) {
+	s.logger.Debug("Getting block number by hash or tag", zap.String("blockNumberOrTag", blockNumberOrTag))
+	switch blockNumberOrTag {
+	case "latest", "pending":
+		latestBlock, errMap := s.GetBlockNumber()
+		if errMap != nil {
+			s.logger.Debug("Failed to get latest block number")
+			return "0x0", errMap
+		}
+
+		latestBlockStr, ok := latestBlock.(string)
+		if !ok {
+			s.logger.Debug("Invalid block number format")
+			return "0x0", errMap
+		}
+
+		// Convert hex string to int, remove "0x" prefix
+		latestBlockNum, err := HexToDec(latestBlockStr)
+		if err != nil {
+			s.logger.Debug("Failed to parse latest block number")
+			return "0x0", errMap
+		}
+		return latestBlockNum, nil
+
+	case "earliest":
+		return 1, nil //!!!We return the genesis block number(maybe)!!!
+	default:
+		// Convert hex string to int, remove "0x" prefix
+		latestBlockNum, err := HexToDec(blockNumberOrTag)
+		if err != nil {
+			s.logger.Debug("Failed to parse latest block number")
+			return "0x0", err
+		}
+
+		return latestBlockNum, nil
+	}
 }

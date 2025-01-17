@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"math/big"
 	"strconv"
 	"strings"
@@ -9,6 +10,11 @@ import (
 	infrahedera "github.com/LimeChain/Hederium/internal/infrastructure/hedera"
 	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
 	"go.uber.org/zap"
+)
+
+const (
+	maxBlockCountForResult = 10
+	defaultUsedGasRatio    = 0.5
 )
 
 type EthService struct {
@@ -77,7 +83,7 @@ func (s *EthService) GetBlockNumber() (interface{}, map[string]interface{}) {
 // and returned as a hex string with "0x" prefix.
 func (s *EthService) GetGasPrice() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting gas price")
-	weibars, err := GetFeeWeibars(s)
+	weibars, err := GetFeeWeibars(s, "", "") //Make it better, please
 	if err != nil {
 		errMsg := "Failed to fetch gas price"
 		s.logger.Error(errMsg)
@@ -103,7 +109,7 @@ func (s *EthService) GetChainId() (interface{}, map[string]interface{}) {
 	return s.chainId, nil
 }
 
-// GetBlockByHash retrieves a block by its hash and optionally includes detailed transaction information.
+// retrieves a block by its hash and optionally includes detailed transaction information.
 // Parameters:
 //   - hash: The hash of the block to retrieve
 //   - showDetails: If true, returns full transaction objects; if false, only transaction hashes
@@ -473,6 +479,191 @@ func (s *EthService) GetTransactionReceipt(hash string) interface{} {
 
 	s.logger.Info("Returning transaction receipt", zap.Any("receipt", receipt))
 	return receipt
+}
+
+func (s *EthService) FeeHistory(blockCount string, newestBlock string, rewardPercentiles []string) (interface{}, map[string]interface{}) {
+	s.logger.Info("Getting fee history", zap.String("blockCount", blockCount), zap.String("newestBlock", newestBlock), zap.Any("rewardPercentiles", rewardPercentiles))
+
+	//Get the block number of the newest block
+	latestBlockNumber, err := s.GetBlockNumber()
+	if err != nil {
+		return nil, map[string]interface{}{
+			"code":    -32000,
+			"message": "Failed to get latest block number1",
+		}
+	}
+
+	latestBlockHex, ok := latestBlockNumber.(string)
+	if !ok {
+		return nil, map[string]interface{}{
+			"code":    -32000,
+			"message": "Failed to parse latest block number2",
+		}
+	}
+	latestBlockInt, errMap := HexToDec(latestBlockHex)
+	if errMap != nil {
+		return nil, errMap
+	}
+	newestBlockNumber, errMap := s.getBlockNumberByHashOrTag(newestBlock)
+	if errMap != nil {
+		return nil, errMap
+	}
+
+	newestBlockInt, ok := newestBlockNumber.(int64)
+	if !ok {
+		return nil, errMap
+	}
+
+	//Convert the block number to decimal
+	blockCountInt, errMap := HexToDec(blockCount)
+	if errMap != nil {
+		return nil, errMap
+	}
+
+	//Check if the blockCount is greater then the one we need
+	if blockCountInt > int64(maxBlockCountForResult) {
+		blockCountInt = int64(maxBlockCountForResult)
+	}
+
+	if newestBlockInt > latestBlockInt {
+		newestBlockInt = latestBlockInt
+	}
+
+	oldestBlockInt := newestBlockInt - blockCountInt + 1
+
+	fixed_Fee := false // TODO: see how to get this fixed_Fee
+	if fixed_Fee {
+		if oldestBlockInt < 0 {
+			blockCountInt = 1
+			oldestBlockInt = 1
+		}
+		fee, errMap := s.GetGasPrice()
+		if errMap != nil {
+			return nil, errMap
+		}
+		feeHex, ok := fee.(string)
+		if !ok {
+			return nil, map[string]interface{}{
+				"code":    -32000,
+				"message": "Failed to parse fee",
+			}
+		}
+
+		feeHistory := s.getRepeatedFeeHistory(blockCountInt, oldestBlockInt, rewardPercentiles, feeHex)
+		return feeHistory, nil
+	}
+
+	feeHistory, errMap := s.getFeeHistory(blockCountInt, newestBlockInt, latestBlockInt, rewardPercentiles)
+	if errMap != nil {
+		return nil, errMap
+	}
+
+	return feeHistory, nil
+}
+
+func (s *EthService) getRepeatedFeeHistory(blockCount, oldestBlockInt int64, rewardPercentiles []string, fee string) *domain.FeeHistory {
+	feeHistory := &domain.FeeHistory{
+		BaseFeePerGas: make([]string, blockCount+1),
+		GasUsedRatio:  make([]float64, blockCount),
+		OldestBlock:   fmt.Sprintf("0x%x", oldestBlockInt),
+	}
+
+	for i := int64(0); i < blockCount; i++ {
+		feeHistory.BaseFeePerGas[i] = fee
+		feeHistory.GasUsedRatio[i] = defaultUsedGasRatio
+	}
+
+	feeHistory.BaseFeePerGas[blockCount] = fee
+
+	//Check if there are any reward percentiles
+	if len(rewardPercentiles) > 0 {
+		rewards := make([][]string, blockCount)
+		for i := range rewards {
+			rewards[i] = make([]string, len(rewardPercentiles))
+			for j := range rewards[i] {
+				rewards[i][j] = "0x0" // Default reward
+			}
+		}
+		feeHistory.Reward = rewards
+	}
+
+	return feeHistory
+}
+
+func (s *EthService) getFeeHistory(blockCount, newestBlockInt, latestBlockInt int64, rewardPercentiles []string) (*domain.FeeHistory, map[string]interface{}) {
+	oldestBlockNumber := newestBlockInt - blockCount + 1
+	if oldestBlockNumber < 0 {
+		oldestBlockNumber = 0
+	}
+
+	feeHistory := &domain.FeeHistory{
+		BaseFeePerGas: []string{},
+		GasUsedRatio:  []float64{},
+		OldestBlock:   fmt.Sprintf("0x%x", oldestBlockNumber),
+	}
+
+	// Get fees from oldest to newest blocks
+	for blockNumber := oldestBlockNumber; blockNumber <= newestBlockInt; blockNumber++ {
+		fee, errMap := s.getFeeByBlockNumber(blockNumber)
+		if errMap != nil {
+			return nil, errMap
+		}
+
+		feeHistory.BaseFeePerGas = append(feeHistory.BaseFeePerGas, fee)
+		feeHistory.GasUsedRatio = append(feeHistory.GasUsedRatio, defaultUsedGasRatio)
+	}
+
+	// Get the fee for the next block if the newest block is not the latest
+	var nextBaseFeePerGas string
+	var errMap map[string]interface{}
+	if latestBlockInt > newestBlockInt {
+		nextBaseFeePerGas, errMap = s.getFeeByBlockNumber(newestBlockInt + 1)
+		if errMap != nil {
+			return nil, errMap
+		}
+	} else {
+		nextBaseFeePerGas = feeHistory.BaseFeePerGas[len(feeHistory.BaseFeePerGas)-1]
+	}
+
+	if nextBaseFeePerGas != "" {
+		feeHistory.BaseFeePerGas = append(feeHistory.BaseFeePerGas, nextBaseFeePerGas)
+	}
+
+	// Check if there are any reward percentiles
+	if len(rewardPercentiles) > 0 {
+		rewards := make([][]string, blockCount)
+		for i := range rewards {
+			rewards[i] = make([]string, len(rewardPercentiles))
+			for j := range rewards[i] {
+				rewards[i][j] = "0x0" // Default reward
+			}
+		}
+		feeHistory.Reward = rewards
+	}
+
+	return feeHistory, nil
+}
+
+func (s *EthService) getFeeByBlockNumber(blockNumber int64) (string, map[string]interface{}) {
+	block := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockNumber, 10))
+	if block == nil {
+		return "", map[string]interface{}{
+			"code":    -32000,
+			"message": "Failed to get block data",
+		}
+	}
+
+	fee, err := GetFeeWeibars(s, block.Timestamp.To, "asc") // Asc hardcoded for now
+	if err != nil {
+		return "", map[string]interface{}{
+			"code":    -32000,
+			"message": "Failed to get fee data",
+		}
+	}
+	s.logger.Info("fee", zap.Any("fee", fee))
+
+	// Implement dec to hex func
+	return "0x" + strconv.FormatUint(fee.Uint64(), 16), nil
 }
 
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation

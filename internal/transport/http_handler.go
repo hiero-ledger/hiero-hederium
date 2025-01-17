@@ -322,6 +322,59 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		}
 
 		return ethService.GetTransactionReceipt(txHash), nil
+	case "eth_feeHistory":
+		paramsArray, ok := params.([]interface{})
+		if !ok || (len(paramsArray) != 2 && len(paramsArray) != 3) {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid params for eth_feeHistory: expected [blockCount, newestBlock] or [blockCount, newestBlock, rewardPercentiles]",
+			}
+		}
+
+		blockCount, ok := paramsArray[0].(string)
+		if !ok || !strings.HasPrefix(blockCount, "0x") || !regexp.MustCompile("^0x[0-9a-fA-F]$").MatchString(blockCount) {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid blockCount: expected hex string with 0x prefix",
+			}
+		}
+
+		newestBlock, ok := paramsArray[1].(string)
+		if !ok || !strings.HasPrefix(newestBlock, "0x") || !regexp.MustCompile("^0x[0-9a-fA-F]$").MatchString(newestBlock) {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid newestBlock: expected hex string with 0x prefix",
+			}
+		}
+		// We should check if the rewardPercentiles is a list of monotonically increasing integer (maybe)
+		var rewardPercentiles []string
+		if len(paramsArray) == 3 {
+			rawRewardPercentiles, ok := paramsArray[2].([]interface{})
+			if !ok {
+				return nil, map[string]interface{}{
+					"code":    -32602,
+					"message": "Invalid rewardPercentiles: expected list of strings",
+				}
+			}
+
+			for _, rawPercentile := range rawRewardPercentiles {
+				percentile, ok := rawPercentile.(string)
+				if !ok || !strings.HasPrefix(percentile, "0x") || !regexp.MustCompile("^0x[0-9a-fA-F]$").MatchString(percentile) {
+					return nil, map[string]interface{}{
+						"code":    -32602,
+						"message": "Invalid rewardPercentiles: expected list of strings",
+					}
+				}
+				rewardPercentiles = append(rewardPercentiles, percentile)
+			}
+		}
+
+		if len(paramsArray) == 2 {
+			return ethService.FeeHistory(blockCount, newestBlock, nil)
+		}
+
+		return ethService.FeeHistory(blockCount, newestBlock, rewardPercentiles)
+
 	case "eth_blockNumber":
 		return ethService.GetBlockNumber()
 	case "eth_gasPrice":
