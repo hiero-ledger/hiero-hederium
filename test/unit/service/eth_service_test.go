@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -914,6 +915,7 @@ func TestGetTransactionByHash(t *testing.T) {
 		Nonce:              5,
 		FunctionParameters: "0x",
 		ChainID:            defaultChainId,
+		Type:               new(int),
 	}
 
 	testCases := []struct {
@@ -928,7 +930,8 @@ func TestGetTransactionByHash(t *testing.T) {
 			hash: testHash,
 			mockResult: func() domain.ContractResultResponse {
 				result := baseContractResult
-				result.Type = 0
+				typeVal := 0
+				result.Type = &typeVal
 				return result
 			}(),
 			expectedResult: true,
@@ -946,7 +949,8 @@ func TestGetTransactionByHash(t *testing.T) {
 			hash: testHash,
 			mockResult: func() domain.ContractResultResponse {
 				result := baseContractResult
-				result.Type = 1
+				typeVal := 1
+				result.Type = &typeVal
 				return result
 			}(),
 			expectedResult: true,
@@ -956,6 +960,8 @@ func TestGetTransactionByHash(t *testing.T) {
 				assert.Equal(t, "0x1", tx.Type)
 				assert.Empty(t, tx.AccessList)
 				assert.Equal(t, testHash, tx.Hash)
+				assert.Equal(t, "0x7b", *tx.BlockNumber) // 123 in hex
+				assert.Equal(t, defaultChainId, *tx.ChainId)
 			},
 		},
 		{
@@ -963,7 +969,8 @@ func TestGetTransactionByHash(t *testing.T) {
 			hash: testHash,
 			mockResult: func() domain.ContractResultResponse {
 				result := baseContractResult
-				result.Type = 2
+				typeVal := 2
+				result.Type = &typeVal
 				result.MaxPriorityFeePerGas = "0x1234"
 				result.MaxFeePerGas = "0x5678"
 				return result
@@ -992,16 +999,157 @@ func TestGetTransactionByHash(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			mockClient.EXPECT().
 				GetContractResult(tc.hash).
-				Return(tc.mockResult)
+				Return(tc.mockResult).
+				Times(1)
 
 			result := s.GetTransactionByHash(tc.hash)
-
-			if !tc.expectedResult {
-				assert.Nil(t, result)
-			} else {
-				assert.NotNil(t, result)
+			if tc.checkFields != nil {
 				tc.checkFields(t, result)
 			}
 		})
 	}
+}
+
+func TestGetTransactionReceipt(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger, _ := zap.NewDevelopment()
+
+	t.Run("Success case with full transaction receipt", func(t *testing.T) {
+		mockClient := mocks.NewMockMirrorClient(ctrl)
+		s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
+
+		txHash := "0x123456"
+		blockHash := "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+		blockNumber := int64(12345)
+		transactionIndex := 1
+		gasUsed := int64(21000)
+		blockGasUsed := int64(100000)
+		from := "0xabc"
+		to := "0xdef"
+		contractAddress := "0xcontract"
+		gasPrice := "5000"
+		txType := 2
+
+		// Mock contract result with logs
+		contractResult := domain.ContractResultResponse{
+			BlockHash:        blockHash + "extra", // Adding extra to test trimming to 66 chars
+			BlockNumber:      blockNumber,
+			TransactionIndex: transactionIndex,
+			GasUsed:          gasUsed,
+			BlockGasUsed:     blockGasUsed,
+			From:             from,
+			To:               to,
+			Address:          contractAddress,
+			GasPrice:         gasPrice,
+			Status:           "0x1",
+			Type:             &txType,
+			Logs: []domain.MirroNodeLogs{
+				{
+					Address: "0xlog1",
+					Data:    "0xdata1",
+					Topics:  []string{"0xtopic1", "0xtopic2"},
+				},
+				{
+					Address: "0xlog2",
+					Data:    "0xdata2",
+					Topics:  []string{"0xtopic3"},
+				},
+			},
+			Bloom: "0x1234", // Custom bloom value
+		}
+
+		mockClient.EXPECT().
+			GetContractResult(txHash).
+			Return(contractResult)
+
+		result := s.GetTransactionReceipt(txHash)
+		receipt, ok := result.(domain.TransactionReceipt)
+		assert.True(t, ok, "Result should be of type domain.TransactionReceipt")
+
+		// Verify all fields
+		assert.Equal(t, blockHash[:66], receipt.BlockHash)
+		assert.Equal(t, "0x"+strconv.FormatInt(blockNumber, 16), receipt.BlockNumber)
+		assert.Equal(t, from, receipt.From)
+		assert.Equal(t, to, receipt.To)
+		assert.Equal(t, "0x"+strconv.FormatInt(blockGasUsed, 16), receipt.CumulativeGasUsed)
+		assert.Equal(t, "0x"+strconv.FormatInt(gasUsed, 16), receipt.GasUsed)
+		assert.Equal(t, contractAddress, receipt.ContractAddress)
+		assert.Equal(t, txHash, receipt.TransactionHash)
+		assert.Equal(t, "0x"+strconv.FormatInt(int64(transactionIndex), 16), receipt.TransactionIndex)
+		assert.Equal(t, "0x"+gasPrice, receipt.EffectiveGasPrice)
+		assert.Equal(t, "0x1", receipt.Status)
+		assert.Equal(t, "0x"+strconv.FormatInt(int64(txType), 16), *receipt.Type)
+		assert.Equal(t, "0x1234", receipt.LogsBloom)
+
+		// Verify logs
+		assert.Len(t, receipt.Logs, 2)
+		assert.Equal(t, "0xlog1", receipt.Logs[0].Address)
+		assert.Equal(t, "0xdata1", receipt.Logs[0].Data)
+		assert.Equal(t, []string{"0xtopic1", "0xtopic2"}, receipt.Logs[0].Topics)
+		assert.Equal(t, "0x0", receipt.Logs[0].LogIndex)
+		assert.Equal(t, txHash, receipt.Logs[0].TransactionHash)
+		assert.Equal(t, blockHash[:66], receipt.Logs[0].BlockHash)
+		assert.Equal(t, receipt.BlockNumber, receipt.Logs[0].BlockNumber)
+		assert.Equal(t, receipt.TransactionIndex, receipt.Logs[0].TransactionIndex)
+		assert.False(t, receipt.Logs[0].Removed)
+	})
+
+	t.Run("Transaction not found", func(t *testing.T) {
+		mockClient := mocks.NewMockMirrorClient(ctrl)
+		s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
+
+		txHash := "0xnonexistent"
+		mockClient.EXPECT().
+			GetContractResult(txHash).
+			Return(nil)
+
+		result := s.GetTransactionReceipt(txHash)
+		assert.Nil(t, result)
+	})
+
+	t.Run("Empty bloom filter", func(t *testing.T) {
+		mockClient := mocks.NewMockMirrorClient(ctrl)
+		s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
+
+		txHash := "0x123456"
+		contractResult := domain.ContractResultResponse{
+			BlockHash:   "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+			BlockNumber: 12345,
+			Status:      "0x1",
+			Bloom:       "0x", // Empty bloom
+		}
+
+		mockClient.EXPECT().
+			GetContractResult(txHash).
+			Return(contractResult)
+
+		result := s.GetTransactionReceipt(txHash)
+		receipt, ok := result.(domain.TransactionReceipt)
+		assert.True(t, ok)
+		assert.Equal(t, "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", receipt.LogsBloom)
+	})
+
+	t.Run("Nil transaction type", func(t *testing.T) {
+		mockClient := mocks.NewMockMirrorClient(ctrl)
+		s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
+
+		txHash := "0x123456"
+		contractResult := domain.ContractResultResponse{
+			BlockHash:   "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+			BlockNumber: 12345,
+			Status:      "0x1",
+			Type:        nil, // Nil type
+		}
+
+		mockClient.EXPECT().
+			GetContractResult(txHash).
+			Return(contractResult)
+
+		result := s.GetTransactionReceipt(txHash)
+		receipt, ok := result.(domain.TransactionReceipt)
+		assert.True(t, ok)
+		assert.Nil(t, receipt.Type)
+	})
 }

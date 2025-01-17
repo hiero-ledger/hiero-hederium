@@ -64,39 +64,39 @@ type ContractResults struct {
 }
 
 type ContractResultResponse struct {
-	Address              string        `json:"address"`
-	Amount               int           `json:"amount"`
-	Bloom                string        `json:"bloom"`
-	CallResult           string        `json:"call_result"`
-	ContractID           string        `json:"contract_id"`
-	CreatedContractIDs   []string      `json:"created_contract_ids"`
-	ErrorMessage         *string       `json:"error_message"`
-	From                 string        `json:"from"`
-	FunctionParameters   string        `json:"function_parameters"`
-	GasConsumed          int64         `json:"gas_consumed"`
-	GasLimit             int64         `json:"gas_limit"`
-	GasUsed              int64         `json:"gas_used"`
-	Timestamp            string        `json:"timestamp"`
-	To                   string        `json:"to"`
-	Hash                 string        `json:"hash"`
-	BlockHash            string        `json:"block_hash"`
-	BlockNumber          int64         `json:"block_number"`
-	Logs                 []interface{} `json:"logs"`
-	Result               string        `json:"result"`
-	TransactionIndex     int           `json:"transaction_index"`
-	Status               string        `json:"status"`
-	FailedInitcode       *string       `json:"failed_initcode"`
-	AccessList           string        `json:"access_list"`
-	BlockGasUsed         int64         `json:"block_gas_used"`
-	ChainID              string        `json:"chain_id"`
-	GasPrice             string        `json:"gas_price"`
-	MaxFeePerGas         string        `json:"max_fee_per_gas"`
-	MaxPriorityFeePerGas string        `json:"max_priority_fee_per_gas"`
-	R                    string        `json:"r"`
-	S                    string        `json:"s"`
-	Type                 int           `json:"type"`
-	V                    int           `json:"v"`
-	Nonce                int64         `json:"nonce"`
+	Address              string          `json:"address"`
+	Amount               int             `json:"amount"`
+	Bloom                string          `json:"bloom"`
+	CallResult           string          `json:"call_result"`
+	ContractID           string          `json:"contract_id"`
+	CreatedContractIDs   []string        `json:"created_contract_ids"`
+	ErrorMessage         *string         `json:"error_message"`
+	From                 string          `json:"from"`
+	FunctionParameters   string          `json:"function_parameters"`
+	GasConsumed          int64           `json:"gas_consumed"`
+	GasLimit             int64           `json:"gas_limit"`
+	GasUsed              int64           `json:"gas_used"`
+	Timestamp            string          `json:"timestamp"`
+	To                   string          `json:"to"`
+	Hash                 string          `json:"hash"`
+	BlockHash            string          `json:"block_hash"`
+	BlockNumber          int64           `json:"block_number"`
+	Logs                 []MirroNodeLogs `json:"logs"`
+	Result               string          `json:"result"`
+	TransactionIndex     int             `json:"transaction_index"`
+	Status               string          `json:"status"`
+	FailedInitcode       *string         `json:"failed_initcode"`
+	AccessList           string          `json:"access_list"`
+	BlockGasUsed         int64           `json:"block_gas_used"`
+	ChainID              string          `json:"chain_id"`
+	GasPrice             string          `json:"gas_price"`
+	MaxFeePerGas         string          `json:"max_fee_per_gas"`
+	MaxPriorityFeePerGas string          `json:"max_priority_fee_per_gas"`
+	R                    string          `json:"r"`
+	S                    string          `json:"s"`
+	Type                 *int            `json:"type"`
+	V                    int             `json:"v"`
+	Nonce                int64           `json:"nonce"`
 	StateChanges         []struct {
 		Address      string `json:"address"`
 		ContractID   string `json:"contract_id"`
@@ -104,6 +104,15 @@ type ContractResultResponse struct {
 		ValueRead    string `json:"value_read"`
 		ValueWritten string `json:"value_written"`
 	} `json:"state_changes"`
+}
+
+type MirroNodeLogs struct {
+	Address    string   `json:"address"`
+	Bloom      string   `json:"bloom"`
+	ContractID string   `json:"contract_id"`
+	Data       string   `json:"data"`
+	Index      int      `json:"index"`
+	Topics     []string `json:"topics"`
 }
 
 type AccountResponse struct {
