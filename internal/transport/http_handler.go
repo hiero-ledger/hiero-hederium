@@ -384,7 +384,40 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		}
 
 		return ethService.FeeHistory(blockCount, newestBlock, rewardPercentiles)
+	case "eth_getStorageAt":
+		paramsArray, ok := params.([]interface{})
+		if !ok || len(paramsArray) != 3 {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid params for eth_getStorageAt: expected [address, slot, blockNumberOrTag]",
+			}
+		}
 
+		address, ok := paramsArray[0].(string)
+		if !ok || !strings.HasPrefix(address, "0x") || len(address) != 42 {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid address: must be a 20-byte hex string starting with 0x",
+			}
+		}
+
+		slot, ok := paramsArray[1].(string)
+		if !ok || !strings.HasPrefix(slot, "0x") {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid slot: must be a hex string starting with 0x (e.g. 0x0)",
+			}
+		}
+
+		blockNumberOrTag, ok := paramsArray[2].(string)
+		if !ok {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid block parameter: must be a string (e.g. 'latest' or '0x1')",
+			}
+		}
+
+		return ethService.GetStorageAt(address, slot, blockNumberOrTag)
 	case "eth_blockNumber":
 		return ethService.GetBlockNumber()
 	case "eth_gasPrice":

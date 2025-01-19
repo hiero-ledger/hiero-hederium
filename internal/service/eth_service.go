@@ -565,6 +565,12 @@ func (s *EthService) FeeHistory(blockCount string, newestBlock string, rewardPer
 	return feeHistory, nil
 }
 
+func (s *EthService) GetStorageAt(address, slot, blockNumberOrHash string) (interface{}, map[string]interface{}) {
+	s.logger.Info("Getting storage at", zap.String("address", address), zap.String("slot", slot), zap.String("blockNumberOrHash", blockNumberOrHash))
+
+	return nil, nil
+}
+
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation
 func (s *EthService) GetAccounts() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting accounts")
