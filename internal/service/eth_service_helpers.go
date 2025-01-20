@@ -508,7 +508,8 @@ func (s *EthService) getBlockNumberByHashOrTag(blockNumberOrTag string) (interfa
 		return latestBlockNum, nil
 
 	case "earliest":
-		return 1, nil //!!!We return the genesis block number(maybe)!!!
+		var earliestBlockNum int64 = 0
+		return earliestBlockNum, nil
 	default:
 		// Convert hex string to int, remove "0x" prefix
 		latestBlockNum, err := HexToDec(blockNumberOrTag)

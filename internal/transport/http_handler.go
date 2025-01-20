@@ -340,12 +340,22 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		}
 
 		newestBlock, ok := paramsArray[1].(string)
-		if !ok || !strings.HasPrefix(newestBlock, "0x") || !regexp.MustCompile("^0x[0-9a-fA-F]$").MatchString(newestBlock) {
+		if !ok {
 			return nil, map[string]interface{}{
 				"code":    -32602,
-				"message": "Invalid newestBlock: expected hex string with 0x prefix",
+				"message": "Invalid newestBlock: expected hex string with 0x prefix or latest/pending/earliest",
 			}
 		}
+
+		if newestBlock != "latest" && newestBlock != "pending" && newestBlock != "earliest" {
+			if !strings.HasPrefix(newestBlock, "0x") && !regexp.MustCompile("^0x[0-9a-fA-F]$").MatchString(newestBlock) {
+				return nil, map[string]interface{}{
+					"code":    -32602,
+					"message": "Invalid newestBlock: expected hex string with 0x prefix or latest/pending/earliest",
+				}
+			}
+		}
+
 		// We should check if the rewardPercentiles is a list of monotonically increasing integer (maybe)
 		var rewardPercentiles []string
 		if len(paramsArray) == 3 {
