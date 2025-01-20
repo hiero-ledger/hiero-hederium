@@ -17,6 +17,10 @@ type MockMirrorClient struct {
 	recorder *MockMirrorClientMockRecorder
 }
 
+// GetContractStateByAddressAndSlot implements hedera.MirrorNodeClient.
+func (m *MockMirrorClient) GetContractStateByAddressAndSlot(address string, slot int64, timestampTo string) (*domain.ContractStateResponse, error) {
+	return nil, nil
+}
 
 // MockMirrorClientMockRecorder is the mock recorder for MockMirrorClient.
 type MockMirrorClientMockRecorder struct {

@@ -386,10 +386,10 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		return ethService.FeeHistory(blockCount, newestBlock, rewardPercentiles)
 	case "eth_getStorageAt":
 		paramsArray, ok := params.([]interface{})
-		if !ok || len(paramsArray) != 3 {
+		if !ok || len(paramsArray) < 1 || len(paramsArray) > 3 {
 			return nil, map[string]interface{}{
 				"code":    -32602,
-				"message": "Invalid params for eth_getStorageAt: expected [address, slot, blockNumberOrTag]",
+				"message": "Invalid params for eth_getStorageAt: expected [address, slot, blockNumberOrTag] or [address, slot]",
 			}
 		}
 
@@ -407,6 +407,10 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 				"code":    -32602,
 				"message": "Invalid slot: must be a hex string starting with 0x (e.g. 0x0)",
 			}
+		}
+
+		if len(paramsArray) == 2 {
+			return ethService.GetStorageAt(address, slot, "latest")
 		}
 
 		blockNumberOrTag, ok := paramsArray[2].(string)

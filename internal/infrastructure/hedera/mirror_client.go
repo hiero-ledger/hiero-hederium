@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/LimeChain/Hederium/internal/domain"
@@ -22,6 +23,7 @@ type MirrorNodeClient interface {
 	GetAccount(address string, timestampTo string) interface{}
 	GetContractResult(transactionId string) interface{}
 	PostCall(callObject map[string]interface{}) interface{}
+	GetContractStateByAddressAndSlot(address string, slot int64, timestampTo string) (*domain.ContractStateResponse, error)
 }
 
 type MirrorClient struct {
@@ -364,4 +366,49 @@ func (m *MirrorClient) PostCall(callObject map[string]interface{}) interface{} {
 	}
 
 	return result.Result
+}
+
+func (m *MirrorClient) GetContractStateByAddressAndSlot(address string, slot int64, timestampTo string) (*domain.ContractStateResponse, error) {
+	queryParams := make([]string, 0, 3)
+
+	// Hardcode limit and order
+	queryParams = append(queryParams, "limit=100", "order=desc")
+
+	// If we have a blockEndTimestamp, add it
+	if timestampTo != "" {
+		queryParams = append(queryParams, "timestamp="+timestampTo)
+	}
+
+	queryParams = append(queryParams, "slot="+fmt.Sprint(slot))
+
+	url := fmt.Sprintf("%s/api/v1/contracts/%s/state?%s", m.BaseURL, address, strings.Join(queryParams, "&"))
+
+	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		m.logger.Error("Error creating request to get contract state", zap.Error(err))
+		return nil, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		m.logger.Error("Error getting contract state", zap.Error(err))
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
+		return nil, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
+	}
+
+	var result domain.ContractStateResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		m.logger.Error("Error decoding response body", zap.Error(err))
+		return nil, err
+	}
+
+	return &result, nil
 }
