@@ -24,6 +24,8 @@ type MirrorNodeClient interface {
 	GetContractResult(transactionId string) interface{}
 	PostCall(callObject map[string]interface{}) interface{}
 	GetContractStateByAddressAndSlot(address string, slot string, timestampTo string) (*domain.ContractStateResponse, error)
+	GetContractResultsLogsByAddress(address string, queryParams map[string]interface{}) ([]domain.ContractResults, error)
+	GetContractResultsLogsWithRetry(queryParams map[string]interface{}) ([]domain.ContractResults, error)
 }
 
 type MirrorClient struct {
@@ -413,4 +415,139 @@ func (m *MirrorClient) GetContractStateByAddressAndSlot(address string, slot str
 	}
 
 	return &result, nil
+}
+
+// Hardcoded for now
+const (
+	maxRetries = 5
+	retryDelay = 2 * time.Second
+)
+
+func (m *MirrorClient) GetContractResultsLogsWithRetry(queryParams map[string]interface{}) ([]domain.ContractResults, error) {
+	var logResults []domain.ContractResults
+
+	queryParamsStr := ""
+	for key, value := range queryParams {
+		queryParamsStr += fmt.Sprintf("%s=%v&", key, value)
+	}
+	queryParamsStr = strings.TrimSuffix(queryParamsStr, "&")
+
+	queryParamsStr += "&order=desc" // Hardcoded order for now
+
+	url := fmt.Sprintf("%s/api/v1/contracts/results/logs?%s", m.BaseURL, queryParamsStr)
+
+	m.logger.Info("Getting contract results logs with retry", zap.String("url", url))
+
+	for i := 0; i < maxRetries; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			m.logger.Error("Error creating request", zap.Error(err))
+			return nil, err
+		}
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			m.logger.Error("Error making request", zap.Error(err))
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
+			return nil, err
+		}
+
+		var result struct {
+			Logs  []domain.ContractResults `json:"logs"`
+			Links struct {
+				Next *string `json:"next"`
+			} `json:"links"`
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			m.logger.Error("Error decoding response body", zap.Error(err))
+			return nil, err
+		}
+
+		logResults = result.Logs
+
+		foundImmatureRecord := false
+		for _, log := range logResults {
+			if log.TransactionIndex == 0 || log.BlockNumber == 0 || log.BlockHash == "0x" {
+				foundImmatureRecord = true
+				break
+			}
+		}
+
+		if !foundImmatureRecord {
+			return logResults, nil
+		}
+
+		time.Sleep(retryDelay)
+	}
+
+	return logResults, nil
+}
+
+func (m *MirrorClient) GetContractResultsLogsByAddress(address string, queryParams map[string]interface{}) ([]domain.ContractResults, error) {
+	var allLogs []domain.ContractResults
+
+	queryParamsStr := ""
+	for key, value := range queryParams {
+		queryParamsStr += fmt.Sprintf("%s=%v&", key, value)
+	}
+	queryParamsStr = strings.TrimSuffix(queryParamsStr, "&")
+	queryParamsStr += "&order=desc" // Hardcoded order for now
+
+	currentURL := fmt.Sprintf("%s/api/v1/contracts/%s/results/logs?%s", m.BaseURL, address, queryParamsStr)
+
+	m.logger.Info("Getting contract results logs", zap.String("url", currentURL))
+
+	for currentURL != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, currentURL, nil)
+		if err != nil {
+			m.logger.Error("Error creating request", zap.Error(err))
+			return nil, err
+		}
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			m.logger.Error("Error making request", zap.Error(err))
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
+			return nil, err
+		}
+
+		var result struct {
+			Logs  []domain.ContractResults `json:"logs"`
+			Links struct {
+				Next *string `json:"next"`
+			} `json:"links"`
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			m.logger.Error("Error decoding response body", zap.Error(err))
+			return nil, err
+		}
+
+		allLogs = append(allLogs, result.Logs...)
+
+		if result.Links.Next != nil {
+			currentURL = m.BaseURL + *result.Links.Next
+		} else {
+			currentURL = ""
+		}
+	}
+
+	return allLogs, nil
 }

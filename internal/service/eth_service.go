@@ -16,6 +16,7 @@ const (
 	maxBlockCountForResult = 10
 	defaultUsedGasRatio    = 0.5
 	zeroHex32Bytes         = "0x0000000000000000000000000000000000000000000000000000000000000000"
+	blockRangeLimit        = 10
 )
 
 type EthService struct {
@@ -639,6 +640,208 @@ func (s *EthService) GetStorageAt(address, slot, blockNumberOrHash string) (inte
 	s.logger.Info("Returning storage", zap.Any("storage", result))
 
 	return result.State[0].Value, nil
+}
+
+func (s *EthService) GetLogs(logParams domain.LogParams) (interface{}, map[string]interface{}) {
+	s.logger.Info("Getting logs", zap.Any("logParams", logParams))
+	params := make(map[string]interface{})
+
+	if logParams.BlockHash != "" {
+		if !s.validateBlockHashAndAddTimestampToParams(params, logParams.BlockHash) {
+			return nil, map[string]interface{}{
+				"code":    -32000,
+				"message": "Invalid block hash",
+			}
+		}
+	} else {
+		if valid, errMap := s.validateBlockRangeAndAddTimestampToParams(params, logParams.FromBlock, logParams.ToBlock, logParams.Address); !valid {
+			s.logger.Debug("Error validatingBlockRange", zap.String("fromBlock", logParams.FromBlock), zap.String("toBlock", logParams.ToBlock))
+			if errMap != nil {
+				return nil, errMap
+			}
+
+			return nil, map[string]interface{}{
+				"code":    -32000,
+				"message": "Invalid block range",
+			}
+		}
+	}
+
+	if logParams.Topics != nil {
+		for i, topic := range logParams.Topics {
+			if topic != "" {
+				params[fmt.Sprintf("topic%d", i)] = topic
+			}
+		}
+	}
+
+	s.logger.Debug("Received log parameters", zap.Any("params", params))
+
+	logs, err := s.getLogsWithParams(logParams.Address, params)
+	if err != nil {
+		return nil, map[string]interface{}{
+			"code":    -32000,
+			"message": "Failed to get logs",
+		}
+	}
+
+	return logs, nil
+}
+
+func (s *EthService) getLogsWithParams(address []string, params map[string]interface{}) ([]domain.Log, map[string]interface{}) {
+	addresses := address
+
+	var logs []domain.Log
+
+	if len(address) == 0 {
+		logResults, err := s.mClient.GetContractResultsLogsWithRetry(params)
+		if err != nil {
+			s.logger.Error("Failed to get logs", zap.Error(err))
+			return nil, map[string]interface{}{
+				"code":    -32000,
+				"message": "Failed to get logs",
+			}
+		}
+
+		for _, logResult := range logResults {
+			logs = append(logs, domain.Log{
+				Address:          logResult.Address,
+				BlockHash:        logResult.BlockHash,
+				BlockNumber:      "0x" + strconv.FormatInt(logResult.BlockNumber, 16),
+				Data:             logResult.Result,
+				TransactionHash:  logResult.Hash,
+				TransactionIndex: strconv.Itoa(logResult.TransactionIndex),
+			})
+		}
+
+	}
+
+	for _, addr := range addresses {
+		logResults, err := s.mClient.GetContractResultsLogsByAddress(addr, params)
+		if err != nil {
+			s.logger.Error("Failed to get logs", zap.Error(err))
+			return nil, map[string]interface{}{
+				"code":    -32000,
+				"message": "Failed to get logs",
+			}
+		}
+		for _, logResult := range logResults {
+			logs = append(logs, domain.Log{
+				Address:          logResult.Address,
+				BlockHash:        logResult.BlockHash,
+				BlockNumber:      "0x" + strconv.FormatInt(logResult.BlockNumber, 16),
+				Data:             logResult.Result,
+				TransactionHash:  logResult.Hash,
+				TransactionIndex: strconv.Itoa(logResult.TransactionIndex),
+			})
+		}
+	}
+
+	if logs == nil {
+		return []domain.Log{}, nil
+	}
+
+	return logs, nil
+}
+
+func (s *EthService) validateBlockHashAndAddTimestampToParams(params map[string]interface{}, blockHash string) bool {
+	block := s.mClient.GetBlockByHashOrNumber(blockHash)
+	if block == nil {
+		s.logger.Debug("Failed to get block data")
+		return false
+	}
+	s.logger.Debug("Received block data", zap.Any("block", block))
+
+	params["timestamp"] = fmt.Sprintf("gte:%s&timestamp=lte:%s", block.Timestamp.From, block.Timestamp.To)
+
+	s.logger.Debug("Returning timestamp", zap.Any("timestamp", params["timestamp"]))
+
+	return true
+}
+
+func (s *EthService) validateBlockRangeAndAddTimestampToParams(params map[string]interface{}, fromBlock, toBlock string, address []string) (bool, map[string]interface{}) {
+	latestBlock, errMap := s.GetBlockNumber()
+	if errMap != nil {
+		s.logger.Debug("Failed to get latest block number")
+		return false, errMap
+	}
+
+	latestBlockStr, ok := latestBlock.(string)
+	if !ok {
+		return false, errMap
+	}
+
+	if fromBlock == "latest" || fromBlock == "pending" {
+		fromBlock = latestBlockStr
+	}
+
+	if toBlock == "latest" || toBlock == "pending" {
+		toBlock = latestBlockStr
+	}
+
+	latestBlockNum, errMap := HexToDec(latestBlockStr)
+	if errMap != nil {
+		s.logger.Debug("Failed to parse latest block number", zap.Any("error", errMap))
+		return false, errMap
+	}
+
+	toBlockNum, errMap := HexToDec(toBlock)
+	if errMap != nil {
+		return false, errMap
+	}
+
+	if toBlockNum < latestBlockNum && fromBlock == "" {
+		s.logger.Debug("Invalid block range", zap.String("toBlock", toBlock), zap.String("latestBlock", latestBlockStr))
+		return false, map[string]interface{}{
+			"code":    -32000,
+			"message": "Invalid block range",
+		}
+	}
+
+	fromBlockNum, errMap := HexToDec(fromBlock)
+	if errMap != nil {
+		return false, errMap
+	}
+
+	fromBlockResponse := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(fromBlockNum, 10))
+	if fromBlockResponse == nil {
+		s.logger.Debug("Failed to get from block data")
+		return false, errMap
+	}
+
+	var timestamp string
+
+	timestamp = fmt.Sprintf("gte:%s", fromBlockResponse.Timestamp.From)
+
+	if fromBlock == toBlock {
+		timestamp += fmt.Sprintf("timestamp=lte:%s", fromBlockResponse.Timestamp.To)
+
+	} else {
+		fromBlockNum := fromBlockResponse.Number
+		toBlockResponse := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(toBlockNum, 10))
+
+		var toBlockNum int
+
+		if toBlockResponse != nil {
+			timestamp = fmt.Sprintf("%s&timestamp=lte:%s", timestamp, toBlockResponse.Timestamp.To)
+			toBlockNum = toBlockResponse.Number
+		}
+
+		if fromBlockNum > toBlockNum {
+			return false, nil
+		}
+
+		blockRangeLimit := maxBlockCountForResult
+		isSingleAddress := len(address) == 1
+		if !isSingleAddress && toBlockNum-fromBlockNum > blockRangeLimit {
+			return false, nil
+		}
+	}
+
+	s.logger.Debug("Returning timestamp", zap.String("timestamp", timestamp))
+	params["timestamp"] = timestamp
+
+	return true, nil
 }
 
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation
