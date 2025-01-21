@@ -1,7 +1,6 @@
 package service
 
 import (
-	"fmt"
 	"math/big"
 	"strconv"
 	"strings"
@@ -83,7 +82,11 @@ func (s *EthService) GetBlockNumber() (interface{}, map[string]interface{}) {
 // and returned as a hex string with "0x" prefix.
 func (s *EthService) GetGasPrice() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting gas price")
-	weibars, err := GetFeeWeibars(s, "", "") //Make it better, please
+
+	timestampTo := "" // We pass empty, because we want gas from latest block
+	order := ""
+
+	weibars, err := GetFeeWeibars(s, timestampTo, order)
 	if err != nil {
 		errMsg := "Failed to fetch gas price"
 		s.logger.Error(errMsg)
@@ -559,111 +562,6 @@ func (s *EthService) FeeHistory(blockCount string, newestBlock string, rewardPer
 	}
 
 	return feeHistory, nil
-}
-
-func (s *EthService) getRepeatedFeeHistory(blockCount, oldestBlockInt int64, rewardPercentiles []string, fee string) *domain.FeeHistory {
-	feeHistory := &domain.FeeHistory{
-		BaseFeePerGas: make([]string, blockCount+1),
-		GasUsedRatio:  make([]float64, blockCount),
-		OldestBlock:   fmt.Sprintf("0x%x", oldestBlockInt),
-	}
-
-	for i := int64(0); i < blockCount; i++ {
-		feeHistory.BaseFeePerGas[i] = fee
-		feeHistory.GasUsedRatio[i] = defaultUsedGasRatio
-	}
-
-	feeHistory.BaseFeePerGas[blockCount] = fee
-
-	//Check if there are any reward percentiles
-	if len(rewardPercentiles) > 0 {
-		rewards := make([][]string, blockCount)
-		for i := range rewards {
-			rewards[i] = make([]string, len(rewardPercentiles))
-			for j := range rewards[i] {
-				rewards[i][j] = "0x0" // Default reward
-			}
-		}
-		feeHistory.Reward = rewards
-	}
-
-	return feeHistory
-}
-
-func (s *EthService) getFeeHistory(blockCount, newestBlockInt, latestBlockInt int64, rewardPercentiles []string) (*domain.FeeHistory, map[string]interface{}) {
-	oldestBlockNumber := newestBlockInt - blockCount + 1
-	if oldestBlockNumber < 0 {
-		oldestBlockNumber = 0
-	}
-
-	feeHistory := &domain.FeeHistory{
-		BaseFeePerGas: []string{},
-		GasUsedRatio:  []float64{},
-		OldestBlock:   fmt.Sprintf("0x%x", oldestBlockNumber),
-	}
-
-	// Get fees from oldest to newest blocks
-	for blockNumber := oldestBlockNumber; blockNumber <= newestBlockInt; blockNumber++ {
-		fee, errMap := s.getFeeByBlockNumber(blockNumber)
-		if errMap != nil {
-			return nil, errMap
-		}
-
-		feeHistory.BaseFeePerGas = append(feeHistory.BaseFeePerGas, fee)
-		feeHistory.GasUsedRatio = append(feeHistory.GasUsedRatio, defaultUsedGasRatio)
-	}
-
-	// Get the fee for the next block if the newest block is not the latest
-	var nextBaseFeePerGas string
-	var errMap map[string]interface{}
-	if latestBlockInt > newestBlockInt {
-		nextBaseFeePerGas, errMap = s.getFeeByBlockNumber(newestBlockInt + 1)
-		if errMap != nil {
-			return nil, errMap
-		}
-	} else {
-		nextBaseFeePerGas = feeHistory.BaseFeePerGas[len(feeHistory.BaseFeePerGas)-1]
-	}
-
-	if nextBaseFeePerGas != "" {
-		feeHistory.BaseFeePerGas = append(feeHistory.BaseFeePerGas, nextBaseFeePerGas)
-	}
-
-	// Check if there are any reward percentiles
-	if len(rewardPercentiles) > 0 {
-		rewards := make([][]string, blockCount)
-		for i := range rewards {
-			rewards[i] = make([]string, len(rewardPercentiles))
-			for j := range rewards[i] {
-				rewards[i][j] = "0x0" // Default reward
-			}
-		}
-		feeHistory.Reward = rewards
-	}
-
-	return feeHistory, nil
-}
-
-func (s *EthService) getFeeByBlockNumber(blockNumber int64) (string, map[string]interface{}) {
-	block := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockNumber, 10))
-	if block == nil {
-		return "", map[string]interface{}{
-			"code":    -32000,
-			"message": "Failed to get block data",
-		}
-	}
-
-	fee, err := GetFeeWeibars(s, block.Timestamp.To, "asc") // Asc hardcoded for now
-	if err != nil {
-		return "", map[string]interface{}{
-			"code":    -32000,
-			"message": "Failed to get fee data",
-		}
-	}
-	s.logger.Info("fee", zap.Any("fee", fee))
-
-	// Implement dec to hex func
-	return "0x" + strconv.FormatUint(fee.Uint64(), 16), nil
 }
 
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation

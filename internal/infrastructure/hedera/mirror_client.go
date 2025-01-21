@@ -104,19 +104,18 @@ func (m *MirrorClient) GetBlockByHashOrNumber(hashOrNumber string) *domain.Block
 func (m *MirrorClient) GetNetworkFees(timestampTo, order string) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
 	defer cancel()
-	// I do not know if this is the best way to handle this
+
 	queryParams := ""
-	if timestampTo != "" {
-		queryParams += "?timestamp=lte:" + timestampTo
+	if order == "" {
+		order = "desc"
 	}
 
-	if order != "" {
-		if queryParams == "" {
-			queryParams += fmt.Sprintf("?order=%s", order)
-		} else {
-			queryParams += fmt.Sprintf("&order=%s", order)
-		}
+	if timestampTo != "" {
+		queryParams += fmt.Sprintf("?order=%s", order)
+		queryParams += "&timestamp=lte:" + timestampTo
 	}
+
+	m.logger.Debug("Asking this endpoint:", zap.String("url", m.BaseURL+"/api/v1/network/fees"+queryParams))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BaseURL+"/api/v1/network/fees"+queryParams, nil)
 	if err != nil {
@@ -135,26 +134,29 @@ func (m *MirrorClient) GetNetworkFees(timestampTo, order string) (int64, error) 
 		//return 0, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
 		checkSDK = true
 	}
-	// For now the default fee is 2300
+	// For now the default fee is 23
 	if checkSDK {
-		return 2300, nil
+		return 23, nil
 	}
 	var feeResponse domain.FeeResponse
 
 	if err := json.NewDecoder(resp.Body).Decode(&feeResponse); err != nil {
 		return 0, err
 	}
+
 	if len(feeResponse.Fees) == 0 {
 		return 0, fmt.Errorf("no fees returned by mirror node")
 	}
 
 	var gasTinybars int64
+	// Here there is a difference between the Nodejs and GO implementations so I will hardcode it for now
 	for _, fee := range feeResponse.Fees {
 		if fee.TransactionType == "EthereumTransaction" {
-			gasTinybars = fee.Gas
+			gasTinybars = fee.Gas * 100
 			break
 		}
 	}
+
 	return gasTinybars, nil
 }
 

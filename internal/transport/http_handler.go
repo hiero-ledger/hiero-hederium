@@ -332,7 +332,7 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		}
 
 		blockCount, ok := paramsArray[0].(string)
-		if !ok || !strings.HasPrefix(blockCount, "0x") || !regexp.MustCompile("^0x[0-9a-fA-F]$").MatchString(blockCount) {
+		if !ok || !regexp.MustCompile("^0x[0-9a-fA-F]+$").MatchString(blockCount) {
 			return nil, map[string]interface{}{
 				"code":    -32602,
 				"message": "Invalid blockCount: expected hex string with 0x prefix",

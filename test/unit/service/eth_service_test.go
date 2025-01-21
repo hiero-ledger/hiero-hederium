@@ -181,7 +181,7 @@ func TestGetGasPrice(t *testing.T) {
 	// Create mock client
 	mockClient := mocks.NewMockMirrorClient(ctrl)
 	mockClient.EXPECT().
-		GetNetworkFees().
+		GetNetworkFees("", "").
 		Return(int64(100), nil) // Return 100 tinybars
 
 	s := service.NewEthService(
@@ -209,7 +209,7 @@ func TestGetGasPrice_Error(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	mockClient := mocks.NewMockMirrorClient(ctrl)
 	mockClient.EXPECT().
-		GetNetworkFees().
+		GetNetworkFees("", "").
 		Return(int64(0), fmt.Errorf("network error"))
 
 	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
