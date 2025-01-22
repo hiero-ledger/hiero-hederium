@@ -583,12 +583,7 @@ func (s *EthService) GetStorageAt(address, slot, blockNumberOrHash string) (inte
 
 	timestampTo := blockResponse.Timestamp.To
 
-	slotInt, errMap := HexToDec(slot)
-	if errMap != nil {
-		return nil, errMap
-	}
-
-	result, err := s.mClient.GetContractStateByAddressAndSlot(address, slotInt, timestampTo)
+	result, err := s.mClient.GetContractStateByAddressAndSlot(address, slot, timestampTo)
 	if err != nil {
 		return nil, map[string]interface{}{
 			"code":    -32000,

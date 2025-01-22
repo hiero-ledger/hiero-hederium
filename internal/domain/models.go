@@ -179,8 +179,10 @@ type AccountResponse struct {
 	} `json:"links"`
 }
 
+type ContractState struct {
+	Value string `json:"value"`
+}
+
 type ContractStateResponse struct {
-	State []struct {
-		Value string `json:"value"`
-	} `json:"state"`
+	State []ContractState `json:"state"`
 }

@@ -394,7 +394,7 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		}
 
 		address, ok := paramsArray[0].(string)
-		if !ok || !strings.HasPrefix(address, "0x") || len(address) != 42 {
+		if !ok || !IsValidAddress(address) {
 			return nil, map[string]interface{}{
 				"code":    -32602,
 				"message": "Invalid address: must be a 20-byte hex string starting with 0x",
@@ -402,7 +402,7 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		}
 
 		slot, ok := paramsArray[1].(string)
-		if !ok || !strings.HasPrefix(slot, "0x") {
+		if !ok || !IsValidHexNumber(slot) {
 			return nil, map[string]interface{}{
 				"code":    -32602,
 				"message": "Invalid slot: must be a hex string starting with 0x (e.g. 0x0)",
@@ -414,10 +414,10 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		}
 
 		blockNumberOrTag, ok := paramsArray[2].(string)
-		if !ok {
+		if !ok || !IsValidBlockNumberOrTag(blockNumberOrTag) {
 			return nil, map[string]interface{}{
 				"code":    -32602,
-				"message": "Invalid block parameter: must be a string (e.g. 'latest' or '0x1')",
+				"message": "Invalid block parameter: must be a tag (latest/pending/earliest) or hex number starting with 0x",
 			}
 		}
 

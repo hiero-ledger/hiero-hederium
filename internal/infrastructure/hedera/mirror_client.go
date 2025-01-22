@@ -23,7 +23,7 @@ type MirrorNodeClient interface {
 	GetAccount(address string, timestampTo string) interface{}
 	GetContractResult(transactionId string) interface{}
 	PostCall(callObject map[string]interface{}) interface{}
-	GetContractStateByAddressAndSlot(address string, slot int64, timestampTo string) (*domain.ContractStateResponse, error)
+	GetContractStateByAddressAndSlot(address string, slot string, timestampTo string) (*domain.ContractStateResponse, error)
 }
 
 type MirrorClient struct {
@@ -368,7 +368,7 @@ func (m *MirrorClient) PostCall(callObject map[string]interface{}) interface{} {
 	return result.Result
 }
 
-func (m *MirrorClient) GetContractStateByAddressAndSlot(address string, slot int64, timestampTo string) (*domain.ContractStateResponse, error) {
+func (m *MirrorClient) GetContractStateByAddressAndSlot(address string, slot string, timestampTo string) (*domain.ContractStateResponse, error) {
 	queryParams := make([]string, 0, 3)
 
 	// Hardcode limit and order
@@ -382,6 +382,8 @@ func (m *MirrorClient) GetContractStateByAddressAndSlot(address string, slot int
 	queryParams = append(queryParams, "slot="+fmt.Sprint(slot))
 
 	url := fmt.Sprintf("%s/api/v1/contracts/%s/state?%s", m.BaseURL, address, strings.Join(queryParams, "&"))
+
+	m.logger.Info("Getting contract state", zap.String("url", url))
 
 	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
 	defer cancel()
