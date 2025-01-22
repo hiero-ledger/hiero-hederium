@@ -1,11 +1,11 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
 import { Counter } from "k6/metrics";
-import { getBaseUrl, getDefaultHeaders } from "../common.js";
+import { getBaseUrl, getDefaultHeaders, config } from "../common.js";
 
 const errors = new Counter("errors");
 
-export function getFeeHistory() {
+export default function getFeeHistory() {
   const payload = JSON.stringify({
     method: "eth_feeHistory",
     params: [
@@ -53,3 +53,8 @@ export function getFeeHistory() {
 
   sleep(1);
 } 
+
+export const options = {
+  vus: config.vus,
+  duration: config.duration,
+}; 
