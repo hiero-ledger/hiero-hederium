@@ -637,6 +637,18 @@ func (s *EthService) GetLogs(logParams domain.LogParams) (interface{}, map[strin
 	return logs, nil
 }
 
+func (s *EthService) GetBlockTransactionCountByHash(blockHash string) (interface{}, map[string]interface{}) {
+	s.logger.Info("Getting block transaction count by hash", zap.String("blockHash", blockHash))
+
+	block := s.mClient.GetBlockByHashOrNumber(blockHash)
+
+	if block == nil {
+		return nil, nil
+	}
+
+	return "0x" + strconv.FormatInt(int64(block.Count), 16), nil
+}
+
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation
 func (s *EthService) GetAccounts() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting accounts")
