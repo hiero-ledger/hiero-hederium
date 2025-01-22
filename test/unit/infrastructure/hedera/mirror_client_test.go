@@ -552,3 +552,82 @@ func TestPostCall(t *testing.T) {
 		})
 	}
 }
+
+func TestGetContractStateByAddressAndSlot(t *testing.T) {
+	logger, _ := setupTest(t)
+
+	testCases := []struct {
+		name          string
+		address       string
+		slot          string
+		timestampTo   string
+		mockResponse  *domain.ContractStateResponse
+		expectedError bool
+		statusCode    int
+	}{
+		{
+			name:        "Successful contract state fetch",
+			address:     "0x1234567890123456789012345678901234567890",
+			slot:        "0x0000000000000000000000000000000000000000000000000000000000000001",
+			timestampTo: "2023-12-09T12:00:00.000Z",
+			mockResponse: &domain.ContractStateResponse{
+				State: []domain.ContractState{
+					{
+						Value: "0x0000000000000000000000000000000000000000000000000000000000000123",
+					},
+				},
+			},
+			expectedError: false,
+			statusCode:    http.StatusOK,
+		},
+		{
+			name:          "Server error",
+			address:       "0x1234567890123456789012345678901234567890",
+			slot:          "0x0000000000000000000000000000000000000000000000000000000000000001",
+			timestampTo:   "2023-12-09T12:00:00.000Z",
+			mockResponse:  nil,
+			expectedError: true,
+			statusCode:    http.StatusInternalServerError,
+		},
+		{
+			name:          "Invalid response structure",
+			address:       "0x1234567890123456789012345678901234567890",
+			slot:          "0x0000000000000000000000000000000000000000000000000000000000000001",
+			timestampTo:   "2023-12-09T12:00:00.000Z",
+			mockResponse:  nil,
+			expectedError: true,
+			statusCode:    http.StatusOK,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/api/v1/contracts/"+tc.address+"/state", r.URL.Path)
+				assert.Contains(t, r.URL.RawQuery, "limit=100")
+				assert.Contains(t, r.URL.RawQuery, "order=desc")
+				assert.Contains(t, r.URL.RawQuery, "slot="+tc.slot)
+				if tc.timestampTo != "" {
+					assert.Contains(t, r.URL.RawQuery, "timestamp="+tc.timestampTo)
+				}
+
+				w.WriteHeader(tc.statusCode)
+				if tc.mockResponse != nil {
+					json.NewEncoder(w).Encode(tc.mockResponse)
+				}
+			}))
+			defer server.Close()
+
+			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			result, err := client.GetContractStateByAddressAndSlot(tc.address, tc.slot, tc.timestampTo)
+
+			if tc.expectedError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.mockResponse, result)
+			}
+		})
+	}
+}
