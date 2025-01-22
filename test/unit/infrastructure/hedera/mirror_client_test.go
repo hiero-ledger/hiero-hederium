@@ -557,13 +557,14 @@ func TestGetContractStateByAddressAndSlot(t *testing.T) {
 	logger, _ := setupTest(t)
 
 	testCases := []struct {
-		name          string
-		address       string
-		slot          string
-		timestampTo   string
-		mockResponse  *domain.ContractStateResponse
-		expectedError bool
-		statusCode    int
+		name           string
+		address        string
+		slot           string
+		timestampTo    string
+		mockResponse   *domain.ContractStateResponse
+		expectedResult *domain.ContractStateResponse
+		expectedError  bool
+		statusCode     int
 	}{
 		{
 			name:        "Successful contract state fetch",
@@ -577,26 +578,45 @@ func TestGetContractStateByAddressAndSlot(t *testing.T) {
 					},
 				},
 			},
+			expectedResult: &domain.ContractStateResponse{
+				State: []domain.ContractState{
+					{
+						Value: "0x0000000000000000000000000000000000000000000000000000000000000123",
+					},
+				},
+			},
 			expectedError: false,
 			statusCode:    http.StatusOK,
 		},
 		{
-			name:          "Server error",
-			address:       "0x1234567890123456789012345678901234567890",
-			slot:          "0x0000000000000000000000000000000000000000000000000000000000000001",
-			timestampTo:   "2023-12-09T12:00:00.000Z",
-			mockResponse:  nil,
-			expectedError: true,
-			statusCode:    http.StatusInternalServerError,
+			name:           "Not found error (404)",
+			address:        "0x1234567890123456789012345678901234567890",
+			slot:           "0x0000000000000000000000000000000000000000000000000000000000000001",
+			timestampTo:    "2023-12-09T12:00:00.000Z",
+			mockResponse:   nil,
+			expectedResult: nil,
+			expectedError:  false,
+			statusCode:     http.StatusNotFound,
 		},
 		{
-			name:          "Invalid response structure",
-			address:       "0x1234567890123456789012345678901234567890",
-			slot:          "0x0000000000000000000000000000000000000000000000000000000000000001",
-			timestampTo:   "2023-12-09T12:00:00.000Z",
-			mockResponse:  nil,
-			expectedError: true,
-			statusCode:    http.StatusOK,
+			name:           "Server error (500)",
+			address:        "0x1234567890123456789012345678901234567890",
+			slot:           "0x0000000000000000000000000000000000000000000000000000000000000001",
+			timestampTo:    "2023-12-09T12:00:00.000Z",
+			mockResponse:   nil,
+			expectedResult: nil,
+			expectedError:  false,
+			statusCode:     http.StatusInternalServerError,
+		},
+		{
+			name:           "Invalid response structure",
+			address:        "0x1234567890123456789012345678901234567890",
+			slot:           "0x0000000000000000000000000000000000000000000000000000000000000001",
+			timestampTo:    "2023-12-09T12:00:00.000Z",
+			mockResponse:   nil,
+			expectedResult: nil,
+			expectedError:  true,
+			statusCode:     http.StatusOK,
 		},
 	}
 
@@ -626,7 +646,7 @@ func TestGetContractStateByAddressAndSlot(t *testing.T) {
 				assert.Nil(t, result)
 			} else {
 				assert.NoError(t, err)
-				assert.Equal(t, tc.mockResponse, result)
+				assert.Equal(t, tc.expectedResult, result)
 			}
 		})
 	}

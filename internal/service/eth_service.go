@@ -15,6 +15,7 @@ import (
 const (
 	maxBlockCountForResult = 10
 	defaultUsedGasRatio    = 0.5
+	zeroHex32Bytes         = "0x0000000000000000000000000000000000000000000000000000000000000000"
 )
 
 type EthService struct {
@@ -593,7 +594,7 @@ func (s *EthService) GetStorageAt(address, slot, blockNumberOrHash string) (inte
 
 	if result == nil || len(result.State) == 0 {
 		s.logger.Info("Returning default storage value")
-		return "0x0000000000000000000000000000000000000000000000000000000000000000", nil
+		return zeroHex32Bytes, nil // Default value
 	}
 	s.logger.Info("Returning storage", zap.Any("storage", result))
 

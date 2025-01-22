@@ -403,7 +403,7 @@ func (m *MirrorClient) GetContractStateByAddressAndSlot(address string, slot str
 
 	if resp.StatusCode != http.StatusOK {
 		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
-		return nil, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
+		return nil, nil // Here we return nil, nil to tell the service that the mirror node did not return a state
 	}
 
 	var result domain.ContractStateResponse
