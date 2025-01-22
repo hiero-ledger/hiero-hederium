@@ -649,6 +649,30 @@ func (s *EthService) GetBlockTransactionCountByHash(blockHash string) (interface
 	return "0x" + strconv.FormatInt(int64(block.Count), 16), nil
 }
 
+func (s *EthService) GetBlockTransactionCountByNumber(blockNumberOrTag string) (interface{}, map[string]interface{}) {
+	s.logger.Info("Getting block transaction count by number", zap.String("blockNumber", blockNumberOrTag))
+	blockNumber, errMap := s.getBlockNumberByHashOrTag(blockNumberOrTag)
+	if errMap != nil {
+		return nil, errMap
+	}
+
+	blockNumberInt, ok := blockNumber.(int64)
+	if !ok {
+		return nil, map[string]interface{}{
+			"code":    -32000,
+			"message": "Invalid block number",
+		}
+	}
+
+	block := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockNumberInt, 10))
+
+	if block == nil {
+		return nil, nil
+	}
+
+	return "0x" + strconv.FormatInt(int64(block.Count), 16), nil
+}
+
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation
 func (s *EthService) GetAccounts() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting accounts")
