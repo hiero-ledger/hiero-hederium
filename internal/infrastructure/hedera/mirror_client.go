@@ -424,16 +424,7 @@ const (
 )
 
 func (m *MirrorClient) GetContractResultsLogsWithRetry(queryParams map[string]interface{}) ([]domain.ContractResults, error) {
-	var logResults []domain.ContractResults
-
-	queryParamsStr := ""
-	for key, value := range queryParams {
-		queryParamsStr += fmt.Sprintf("%s=%v&", key, value)
-	}
-	queryParamsStr = strings.TrimSuffix(queryParamsStr, "&")
-
-	queryParamsStr += "&order=desc" // Hardcoded order for now
-
+	queryParamsStr := formatQueryParams(queryParams)
 	url := fmt.Sprintf("%s/api/v1/contracts/results/logs?%s", m.BaseURL, queryParamsStr)
 
 	m.logger.Info("Getting contract results logs with retry", zap.String("url", url))
@@ -457,7 +448,7 @@ func (m *MirrorClient) GetContractResultsLogsWithRetry(queryParams map[string]in
 
 		if resp.StatusCode != http.StatusOK {
 			m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
-			return nil, err
+			return nil, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
 		}
 
 		var result struct {
@@ -468,14 +459,13 @@ func (m *MirrorClient) GetContractResultsLogsWithRetry(queryParams map[string]in
 		}
 
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			m.logger.Error("Error decoding response body", zap.Error(err))
+			m.logger.Error("Error decoding response", zap.Error(err))
 			return nil, err
 		}
 
-		logResults = result.Logs
-
+		// Проверяваме за незрели записи
 		foundImmatureRecord := false
-		for _, log := range logResults {
+		for _, log := range result.Logs {
 			if log.TransactionIndex == 0 || log.BlockNumber == 0 || log.BlockHash == "0x" {
 				foundImmatureRecord = true
 				break
@@ -483,71 +473,66 @@ func (m *MirrorClient) GetContractResultsLogsWithRetry(queryParams map[string]in
 		}
 
 		if !foundImmatureRecord {
-			return logResults, nil
+			return result.Logs, nil
 		}
 
 		time.Sleep(retryDelay)
 	}
 
-	return logResults, nil
+	return nil, fmt.Errorf("max retries exceeded waiting for mature records")
+}
+
+func formatQueryParams(params map[string]interface{}) string {
+	var queryParams []string
+	for key, value := range params {
+		queryParams = append(queryParams, fmt.Sprintf("%s=%v", key, value))
+	}
+	queryParamsStr := strings.Join(queryParams, "&")
+	if queryParamsStr != "" {
+		queryParamsStr += "&order=desc" // Hardcoded order for now
+	}
+	return queryParamsStr
 }
 
 func (m *MirrorClient) GetContractResultsLogsByAddress(address string, queryParams map[string]interface{}) ([]domain.ContractResults, error) {
-	var allLogs []domain.ContractResults
-
-	queryParamsStr := ""
-	for key, value := range queryParams {
-		queryParamsStr += fmt.Sprintf("%s=%v&", key, value)
-	}
-	queryParamsStr = strings.TrimSuffix(queryParamsStr, "&")
-	queryParamsStr += "&order=desc" // Hardcoded order for now
-
+	queryParamsStr := formatQueryParams(queryParams)
 	currentURL := fmt.Sprintf("%s/api/v1/contracts/%s/results/logs?%s", m.BaseURL, address, queryParamsStr)
 
 	m.logger.Info("Getting contract results logs", zap.String("url", currentURL))
 
-	for currentURL != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
-		defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
+	defer cancel()
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, currentURL, nil)
-		if err != nil {
-			m.logger.Error("Error creating request", zap.Error(err))
-			return nil, err
-		}
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			m.logger.Error("Error making request", zap.Error(err))
-			return nil, err
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
-			return nil, err
-		}
-
-		var result struct {
-			Logs  []domain.ContractResults `json:"logs"`
-			Links struct {
-				Next *string `json:"next"`
-			} `json:"links"`
-		}
-
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			m.logger.Error("Error decoding response body", zap.Error(err))
-			return nil, err
-		}
-
-		allLogs = append(allLogs, result.Logs...)
-
-		if result.Links.Next != nil {
-			currentURL = m.BaseURL + *result.Links.Next
-		} else {
-			currentURL = ""
-		}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, currentURL, nil)
+	if err != nil {
+		m.logger.Error("Error creating request", zap.Error(err))
+		return nil, err
 	}
 
-	return allLogs, nil
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		m.logger.Error("Error making request", zap.Error(err))
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
+		return nil, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Logs  []domain.ContractResults `json:"logs"`
+		Links struct {
+			Next *string `json:"next"`
+		} `json:"links"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		m.logger.Error("Error decoding response", zap.Error(err))
+		return nil, err
+	}
+
+	return result.Logs, nil
+
 }

@@ -1560,3 +1560,178 @@ func TestGetStorageAt(t *testing.T) {
 		})
 	}
 }
+
+func TestGetLogs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger, _ := zap.NewDevelopment()
+	mockClient := mocks.NewMockMirrorClient(ctrl)
+
+	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
+
+	testCases := []struct {
+		name           string
+		logParams      domain.LogParams
+		setupMocks     func()
+		expectedResult interface{}
+		expectError    bool
+	}{
+		{
+			name: "Success with block hash",
+			logParams: domain.LogParams{
+				BlockHash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+				Address:   []string{"0x742d35Cc6634C0532925a3b844Bc454e4438f44e"},
+				Topics:    []string{"0xtopic1", "0xtopic2"},
+			},
+			setupMocks: func() {
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef").
+					Return(&domain.BlockResponse{
+						Timestamp: domain.Timestamp{
+							From: "2023-01-01T00:00:00.000Z",
+							To:   "2023-01-01T00:00:01.000Z",
+						},
+					})
+
+				expectedParams := map[string]interface{}{
+					"timestamp": "gte:2023-01-01T00:00:00.000Z&timestamp=lte:2023-01-01T00:00:01.000Z",
+					"topic0":    "0xtopic1",
+					"topic1":    "0xtopic2",
+				}
+
+				mockClient.EXPECT().
+					GetContractResultsLogsByAddress("0x742d35Cc6634C0532925a3b844Bc454e4438f44e", expectedParams).
+					Return([]domain.ContractResults{
+						{
+							Address:          "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+							BlockHash:        "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+							BlockNumber:      100,
+							Result:           "0xdata",
+							Hash:             "0xtxhash",
+							TransactionIndex: 1,
+						},
+					}, nil)
+			},
+			expectedResult: []domain.Log{
+				{
+					Address:          "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+					BlockHash:        "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+					BlockNumber:      "0x64", // 100 in hex
+					Data:             "0xdata",
+					TransactionHash:  "0xtxhash",
+					TransactionIndex: "1",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "Success with block range",
+			logParams: domain.LogParams{
+				FromBlock: "0x1",
+				ToBlock:   "0x2",
+				Address:   []string{},
+			},
+			setupMocks: func() {
+				mockClient.EXPECT().
+					GetLatestBlock().
+					Return(map[string]interface{}{"number": float64(100)}, nil)
+
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("1").
+					Return(&domain.BlockResponse{
+						Number: 1,
+						Timestamp: domain.Timestamp{
+							From: "2023-01-01T00:00:00.000Z",
+						},
+					})
+
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("2").
+					Return(&domain.BlockResponse{
+						Number: 2,
+						Timestamp: domain.Timestamp{
+							To: "2023-01-01T00:00:02.000Z",
+						},
+					})
+
+				expectedParams := map[string]interface{}{
+					"timestamp": "gte:2023-01-01T00:00:00.000Z&timestamp=lte:2023-01-01T00:00:02.000Z",
+				}
+
+				mockClient.EXPECT().
+					GetContractResultsLogsWithRetry(expectedParams).
+					Return([]domain.ContractResults{
+						{
+							BlockHash:        "0xblockhash",
+							BlockNumber:      1,
+							Result:           "0xdata",
+							Hash:             "0xtxhash",
+							TransactionIndex: 0,
+						},
+					}, nil)
+			},
+			expectedResult: []domain.Log{
+				{
+					BlockHash:        "0xblockhash",
+					BlockNumber:      "0x1",
+					Data:             "0xdata",
+					TransactionHash:  "0xtxhash",
+					TransactionIndex: "0",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "Invalid block hash",
+			logParams: domain.LogParams{
+				BlockHash: "0xinvalid",
+			},
+			setupMocks: func() {
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("0xinvalid").
+					Return(nil)
+			},
+			expectedResult: nil,
+			expectError:    true,
+		},
+		{
+			name: "Block range too large",
+			logParams: domain.LogParams{
+				FromBlock: "0x1",
+				ToBlock:   "0x64", // 100 in hex
+			},
+			setupMocks: func() {
+				mockClient.EXPECT().
+					GetLatestBlock().
+					Return(map[string]interface{}{"number": float64(100)}, nil)
+
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("1").
+					Return(&domain.BlockResponse{Number: 1})
+
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("100").
+					Return(&domain.BlockResponse{Number: 100})
+			},
+			expectedResult: nil,
+			expectError:    true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setupMocks()
+
+			result, errMap := s.GetLogs(tc.logParams)
+
+			if tc.expectError {
+				assert.NotNil(t, errMap)
+				assert.Equal(t, -32000, errMap["code"])
+			} else {
+				assert.Nil(t, errMap)
+				assert.Equal(t, tc.expectedResult, result)
+			}
+		})
+	}
+}

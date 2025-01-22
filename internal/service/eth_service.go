@@ -16,7 +16,7 @@ const (
 	maxBlockCountForResult = 10
 	defaultUsedGasRatio    = 0.5
 	zeroHex32Bytes         = "0x0000000000000000000000000000000000000000000000000000000000000000"
-	blockRangeLimit        = 10
+	blockRangeLimit        = 1000
 )
 
 type EthService struct {
