@@ -120,18 +120,18 @@ func (mr *MockMirrorClientMockRecorder) GetLatestBlock() *gomock.Call {
 }
 
 // GetNetworkFees mocks base method.
-func (m *MockMirrorClient) GetNetworkFees() (int64, error) {
+func (m *MockMirrorClient) GetNetworkFees(timestampTo, order string) (int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNetworkFees")
+	ret := m.ctrl.Call(m, "GetNetworkFees", timestampTo, order)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetNetworkFees indicates an expected call of GetNetworkFees.
-func (mr *MockMirrorClientMockRecorder) GetNetworkFees() *gomock.Call {
+func (mr *MockMirrorClientMockRecorder) GetNetworkFees(timestampTo, order interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNetworkFees", reflect.TypeOf((*MockMirrorClient)(nil).GetNetworkFees))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNetworkFees", reflect.TypeOf((*MockMirrorClient)(nil).GetNetworkFees), timestampTo, order)
 }
 
 // PostCall mocks base method.

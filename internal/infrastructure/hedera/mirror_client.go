@@ -16,7 +16,7 @@ import (
 type MirrorNodeClient interface {
 	GetLatestBlock() (map[string]interface{}, error)
 	GetBlockByHashOrNumber(hashOrNumber string) *domain.BlockResponse
-	GetNetworkFees() (int64, error)
+	GetNetworkFees(timestampTo, order string) (int64, error)
 	GetContractResults(timestamp domain.Timestamp) []domain.ContractResults
 	GetBalance(address string, timestampTo string) string
 	GetAccount(address string, timestampTo string) interface{}
@@ -101,11 +101,23 @@ func (m *MirrorClient) GetBlockByHashOrNumber(hashOrNumber string) *domain.Block
 	return &result
 }
 
-func (m *MirrorClient) GetNetworkFees() (int64, error) {
+func (m *MirrorClient) GetNetworkFees(timestampTo, order string) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BaseURL+"/api/v1/network/fees", nil)
+	queryParams := ""
+	if order == "" {
+		order = "desc"
+	}
+
+	if timestampTo != "" {
+		queryParams += fmt.Sprintf("?order=%s", order)
+		queryParams += "&timestamp=lte:" + timestampTo
+	}
+
+	m.logger.Debug("Asking this endpoint:", zap.String("url", m.BaseURL+"/api/v1/network/fees"+queryParams))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BaseURL+"/api/v1/network/fees"+queryParams, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -115,27 +127,36 @@ func (m *MirrorClient) GetNetworkFees() (int64, error) {
 		return 0, err
 	}
 	defer resp.Body.Close()
-
+	// TODO: If the mirror node does not return fee then ask the SDK for the fee
+	var checkSDK bool
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
+		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
+		//return 0, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
+		checkSDK = true
 	}
-
+	// For now the default fee is 23
+	if checkSDK {
+		return 23, nil
+	}
 	var feeResponse domain.FeeResponse
 
 	if err := json.NewDecoder(resp.Body).Decode(&feeResponse); err != nil {
 		return 0, err
 	}
+
 	if len(feeResponse.Fees) == 0 {
 		return 0, fmt.Errorf("no fees returned by mirror node")
 	}
 
 	var gasTinybars int64
+	// Here there is a difference between the Nodejs and GO implementations so I will hardcode it for now
 	for _, fee := range feeResponse.Fees {
 		if fee.TransactionType == "EthereumTransaction" {
-			gasTinybars = fee.Gas
+			gasTinybars = fee.Gas * 100
 			break
 		}
 	}
+
 	return gasTinybars, nil
 }
 

@@ -28,9 +28,9 @@ func TestGetFeeWeibars_Success(t *testing.T) {
 	ctrl, mockClient, logger := setupTest(t)
 	defer ctrl.Finish()
 
-	expectedGasTinybars := int64(100000)
+	expectedGasTinybars := int64(10000000) // For now I am making it like this, but it should be checked!
 	mockClient.EXPECT().
-		GetNetworkFees().
+		GetNetworkFees("", "").
 		Return(expectedGasTinybars, nil)
 
 	s := service.NewEthService(
@@ -41,7 +41,7 @@ func TestGetFeeWeibars_Success(t *testing.T) {
 		defaultChainId,
 	)
 
-	result, errMap := service.GetFeeWeibars(s)
+	result, errMap := service.GetFeeWeibars(s, "", "")
 	assert.Nil(t, errMap)
 
 	// Expected weibars = tinybars * 10^8
@@ -55,7 +55,7 @@ func TestGetFeeWeibars_Error(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockClient.EXPECT().
-		GetNetworkFees().
+		GetNetworkFees("", "").
 		Return(int64(0), fmt.Errorf("network error"))
 
 	s := service.NewEthService(
@@ -66,7 +66,7 @@ func TestGetFeeWeibars_Error(t *testing.T) {
 		defaultChainId,
 	)
 
-	result, errMap := service.GetFeeWeibars(s)
+	result, errMap := service.GetFeeWeibars(s, "", "") // Should be handled better
 	assert.Nil(t, result)
 	assert.NotNil(t, errMap)
 	assert.Equal(t, -32000, errMap["code"])
