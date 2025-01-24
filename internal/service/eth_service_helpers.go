@@ -16,6 +16,7 @@ import (
 //
 // Parameters:
 //   - s: Pointer to EthService instance containing the mirror client
+//   - params: Optional parameters for timestamp and order
 //
 // Returns:
 //   - *big.Int: The fee amount in weibars, or nil if there was an error
@@ -23,8 +24,19 @@ import (
 //     The error map contains:
 //   - "code": -32000 for failed requests
 //   - "message": Description of the error
-func GetFeeWeibars(s *EthService) (*big.Int, map[string]interface{}) {
-	gasTinybars, err := s.mClient.GetNetworkFees()
+func GetFeeWeibars(s *EthService, params ...string) (*big.Int, map[string]interface{}) {
+	// Default values
+	timestampTo := ""
+	order := ""
+
+	if len(params) > 0 {
+		timestampTo = params[0]
+	}
+	if len(params) > 1 {
+		order = params[1]
+	}
+
+	gasTinybars, err := s.mClient.GetNetworkFees(timestampTo, order)
 	if err != nil {
 		return nil, map[string]interface{}{
 			"code":    -32000,
@@ -101,8 +113,8 @@ func ProcessBlock(s *EthService, block *domain.BlockResponse, showDetails bool) 
 	return ethBlock, nil
 }
 
-// ProcessBlock converts a Hedera block response into an Ethereum-compatible block format.
-// It takes a pointer to an EthService, a BlockResponse, and a boolean flag indicating whether
+// ProcessBlock converts a Hedera block response into an Ethereum- block format.
+// It takes a poincompatibleter to an EthService, a BlockResponse, and a boolean flag indicating whether
 // to include full transaction details.
 //
 // The function performs the following:
@@ -458,4 +470,157 @@ func NormalizeHexString(hexStr string) string {
 
 func hexify(n int64) string {
 	return "0x" + strconv.FormatInt(n, 16)
+}
+
+func HexToDec(hexStr string) (int64, map[string]interface{}) {
+	dec, err := strconv.ParseInt(strings.TrimPrefix(hexStr, "0x"), 16, 64)
+	if err != nil {
+		return 0, map[string]interface{}{
+			"code":    -32000,
+			"message": "Failed to parse hex value",
+		}
+	}
+	return dec, nil
+}
+
+func (s *EthService) getBlockNumberByHashOrTag(blockNumberOrTag string) (interface{}, map[string]interface{}) {
+	s.logger.Debug("Getting block number by hash or tag", zap.String("blockNumberOrTag", blockNumberOrTag))
+	switch blockNumberOrTag {
+	case "latest", "pending":
+		latestBlock, errMap := s.GetBlockNumber()
+		if errMap != nil {
+			s.logger.Debug("Failed to get latest block number")
+			return "0x0", errMap
+		}
+
+		latestBlockStr, ok := latestBlock.(string)
+		if !ok {
+			s.logger.Debug("Invalid block number format")
+			return "0x0", errMap
+		}
+
+		// Convert hex string to int, remove "0x" prefix
+		latestBlockNum, err := HexToDec(latestBlockStr)
+		if err != nil {
+			s.logger.Debug("Failed to parse latest block number")
+			return "0x0", errMap
+		}
+		return latestBlockNum, nil
+
+	case "earliest":
+		return int64(0), nil
+	default:
+		// Convert hex string to int, remove "0x" prefix
+		latestBlockNum, err := HexToDec(blockNumberOrTag)
+		if err != nil {
+			s.logger.Debug("Failed to parse latest block number")
+			return "0x0", err
+		}
+
+		return latestBlockNum, nil
+	}
+}
+
+func (s *EthService) getFeeHistory(blockCount, newestBlockInt, latestBlockInt int64, rewardPercentiles []string) (*domain.FeeHistory, map[string]interface{}) {
+	oldestBlockNumber := newestBlockInt - blockCount + 1
+	if oldestBlockNumber < 0 {
+		oldestBlockNumber = 0
+	}
+
+	feeHistory := &domain.FeeHistory{
+		BaseFeePerGas: []string{},
+		GasUsedRatio:  []float64{},
+		OldestBlock:   fmt.Sprintf("0x%x", oldestBlockNumber),
+	}
+
+	// Get fees from oldest to newest blocks
+	for blockNumber := oldestBlockNumber; blockNumber <= newestBlockInt; blockNumber++ {
+		fee, errMap := s.getFeeByBlockNumber(blockNumber)
+		if errMap != nil {
+			return nil, errMap
+		}
+
+		feeHistory.BaseFeePerGas = append(feeHistory.BaseFeePerGas, fee)
+		feeHistory.GasUsedRatio = append(feeHistory.GasUsedRatio, defaultUsedGasRatio)
+	}
+
+	// Get the fee for the next block if the newest block is not the latest
+	var nextBaseFeePerGas string
+	var errMap map[string]interface{}
+	if latestBlockInt > newestBlockInt {
+		nextBaseFeePerGas, errMap = s.getFeeByBlockNumber(newestBlockInt + 1)
+		if errMap != nil {
+			return nil, errMap
+		}
+	} else {
+		nextBaseFeePerGas = feeHistory.BaseFeePerGas[len(feeHistory.BaseFeePerGas)-1]
+	}
+
+	if nextBaseFeePerGas != "" {
+		feeHistory.BaseFeePerGas = append(feeHistory.BaseFeePerGas, nextBaseFeePerGas)
+	}
+
+	// Check if there are any reward percentiles
+	if len(rewardPercentiles) > 0 {
+		rewards := make([][]string, blockCount)
+		for i := range rewards {
+			rewards[i] = make([]string, len(rewardPercentiles))
+			for j := range rewards[i] {
+				rewards[i][j] = "0x0" // Default reward
+			}
+		}
+		feeHistory.Reward = rewards
+	}
+
+	return feeHistory, nil
+}
+
+func (s *EthService) getFeeByBlockNumber(blockNumber int64) (string, map[string]interface{}) {
+	block := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockNumber, 10))
+	if block == nil {
+		return "", map[string]interface{}{
+			"code":    -32000,
+			"message": "Failed to get block data",
+		}
+	}
+
+	fee, err := GetFeeWeibars(s, block.Timestamp.To, "desc") // Hardcode desc to be sure that we get latest
+	if err != nil {
+		return "", map[string]interface{}{
+			"code":    -32000,
+			"message": "Failed to get fee data",
+		}
+	}
+
+	// Implement dec to hex func
+	return "0x" + strconv.FormatUint(fee.Uint64(), 16), nil
+}
+
+func (s *EthService) getRepeatedFeeHistory(blockCount, oldestBlockInt int64, rewardPercentiles []string, fee string) *domain.FeeHistory {
+	feeHistory := &domain.FeeHistory{
+		BaseFeePerGas: make([]string, blockCount+1),
+		GasUsedRatio:  make([]float64, blockCount),
+		OldestBlock:   fmt.Sprintf("0x%x", oldestBlockInt),
+	}
+
+	for i := int64(0); i < blockCount; i++ {
+		feeHistory.BaseFeePerGas[i] = fee
+		feeHistory.GasUsedRatio[i] = defaultUsedGasRatio
+	}
+
+	feeHistory.BaseFeePerGas[blockCount] = fee
+
+	//Check if there are any reward percentiles
+	if len(rewardPercentiles) > 0 {
+		rewards := make([][]string, blockCount)
+		for i := range rewards {
+			rewards[i] = make([]string, len(rewardPercentiles))
+			for j := range rewards[i] {
+				rewards[i][j] = "0x0" // Default reward
+			}
+		}
+		feeHistory.Reward = rewards
+	}
+
+	return feeHistory
 }
