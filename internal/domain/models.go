@@ -201,3 +201,24 @@ type ContractResultsLogResponse struct {
 		Next *string `json:"next"`
 	} `json:"links"`
 }
+
+type ContractResponse struct {
+	AdminKey                      *string   `json:"admin_key"`
+	AutoRenewAccount              *string   `json:"auto_renew_account"`
+	AutoRenewPeriod               int64     `json:"auto_renew_period"`
+	ContractID                    string    `json:"contract_id"`
+	CreatedTimestamp              string    `json:"created_timestamp"`
+	Deleted                       bool      `json:"deleted"`
+	EvmAddress                    string    `json:"evm_address"`
+	ExpirationTimestamp           string    `json:"expiration_timestamp"`
+	FileID                        *string   `json:"file_id"`
+	MaxAutomaticTokenAssociations int       `json:"max_automatic_token_associations"`
+	Memo                          string    `json:"memo"`
+	Nonce                         int64     `json:"nonce"`
+	ObtainerID                    *string   `json:"obtainer_id"`
+	PermanentRemoval              *string   `json:"permanent_removal"`
+	ProxyAccountID                *string   `json:"proxy_account_id"`
+	Timestamp                     Timestamp `json:"timestamp"`
+	Bytecode                      *string   `json:"bytecode"`
+	RuntimeBytecode               *string   `json:"runtime_bytecode"`
+}
