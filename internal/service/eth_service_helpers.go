@@ -99,6 +99,7 @@ func ProcessBlock(s *EthService, block *domain.BlockResponse, showDetails bool) 
 		}
 
 		// TODO: Resolve evm addresses
+
 		if showDetails {
 			tx := ProcessTransaction(contractResult)
 			ethBlock.Transactions = append(ethBlock.Transactions, tx)
@@ -775,4 +776,72 @@ func (s *EthService) getLogsWithParams(address []string, params map[string]inter
 	}
 
 	return logs, nil
+}
+
+// Optimise the function to avoid multiple calls to the mirror node
+func (s *EthService) resolveEvmAddress(address string) (*string, map[string]interface{}) {
+	result, errMap := s.resolveAddressType(address)
+	if errMap != nil {
+		return nil, errMap
+	}
+
+	if accountData, ok := result.(*domain.AccountResponse); ok {
+		return &accountData.EvmAddress, nil
+	}
+
+	if contractData, ok := result.(*domain.ContractResponse); ok {
+		return &contractData.EvmAddress, nil
+	}
+
+	return nil, map[string]interface{}{
+		"code":    -32000,
+		"message": "Unable to resolve EVM address",
+	}
+}
+
+func (s *EthService) resolveAddressType(address string) (interface{}, map[string]interface{}) {
+	if contractData, _ := s.mClient.GetContractById(address); contractData != nil {
+		return contractData, nil
+	}
+
+	if accountData, _ := s.mClient.GetAccountById(address); accountData != nil {
+		return accountData, nil
+	}
+
+	return nil, map[string]interface{}{
+		"code":    -32000,
+		"message": "Unable to identify address type",
+	}
+}
+
+func (s *EthService) getTransactionByBlockAndIndex(queryParamas map[string]interface{}) (interface{}, map[string]interface{}) {
+	transaction, err := s.mClient.GetContractResultWithRetry(queryParamas)
+	if err != nil {
+		return nil, map[string]interface{}{
+			"code":    -32000,
+			"message": "Failed to get transaction",
+		}
+	}
+
+	if transaction == nil {
+		return nil, nil
+	}
+
+	evmAddressTo, errMap := s.resolveEvmAddress(transaction.To)
+	if errMap != nil {
+		return nil, errMap
+	}
+
+	evmAddressFrom, errMap := s.resolveEvmAddress(transaction.From)
+	if errMap != nil {
+		return nil, errMap
+	}
+
+	s.logger.Info("Processing contract result", zap.Any("evmAddressTO", evmAddressTo))
+	s.logger.Info("Processing contract result", zap.Any("evmAddressFROM", evmAddressFrom))
+
+	transaction.To = *evmAddressTo
+	transaction.From = *evmAddressFrom
+
+	return ProcessTransaction(*transaction), nil
 }

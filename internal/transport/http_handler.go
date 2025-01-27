@@ -573,6 +573,32 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		}
 
 		return ethService.GetBlockTransactionCountByNumber(blockNumber)
+	case "eth_getTransactionByBlockHashAndIndex":
+		paramsArray, ok := params.([]interface{})
+		if !ok || len(paramsArray) != 2 {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid params for eth_getTransactionByBlockHashAndIndex: expected [blockHash, transactionIndex]",
+			}
+		}
+
+		blockHash, ok := paramsArray[0].(string)
+		if !ok || !IsValidBlockHash(blockHash) {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid blockHash: expected 0x followed by 64 hexadecimal characters",
+			}
+		}
+
+		txIndex, ok := paramsArray[1].(string)
+		if !ok || !IsValidHexNumber(txIndex) {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid transactionIndex: expected hex string with 0x prefix",
+			}
+		}
+
+		return ethService.GetTransactionByBlockHashAndIndex(blockHash, txIndex)
 	case "eth_blockNumber":
 		return ethService.GetBlockNumber()
 	case "eth_gasPrice":
