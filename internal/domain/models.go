@@ -178,3 +178,11 @@ type AccountResponse struct {
 		Next string `json:"next"`
 	} `json:"links"`
 }
+
+type ContractState struct {
+	Value string `json:"value"`
+}
+
+type ContractStateResponse struct {
+	State []ContractState `json:"state"`
+}

@@ -1313,3 +1313,250 @@ func TestFeeHistory(t *testing.T) {
 		})
 	}
 }
+
+func TestGetStorageAt(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger, _ := zap.NewDevelopment()
+	mockClient := mocks.NewMockMirrorClient(ctrl)
+
+	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
+
+	testCases := []struct {
+		name           string
+		address        string
+		slot           string
+		blockParam     string
+		mockBlock      *domain.BlockResponse
+		mockState      *domain.ContractStateResponse
+		expectedResult interface{}
+		expectError    bool
+		setupMock      func()
+	}{
+		{
+			name:       "Success with latest block",
+			address:    "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+			slot:       "0x0",
+			blockParam: "latest",
+			mockBlock: &domain.BlockResponse{
+				Timestamp: domain.Timestamp{
+					To: "2023-12-09T12:00:00.000Z",
+				},
+			},
+			mockState: &domain.ContractStateResponse{
+				State: []domain.ContractState{
+					{
+						Value: "0x0000000000000000000000000000000000000000000000000000000000000064",
+					},
+				},
+			},
+			expectedResult: "0x0000000000000000000000000000000000000000000000000000000000000064",
+			expectError:    false,
+			setupMock: func() {
+				mockClient.EXPECT().
+					GetLatestBlock().
+					Return(map[string]interface{}{"number": float64(100)}, nil)
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("100").
+					Return(&domain.BlockResponse{
+						Timestamp: domain.Timestamp{
+							To: "2023-12-09T12:00:00.000Z",
+						},
+					})
+				mockClient.EXPECT().
+					GetContractStateByAddressAndSlot(
+						"0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+						"0x0",
+						"2023-12-09T12:00:00.000Z",
+					).
+					Return(&domain.ContractStateResponse{
+						State: []domain.ContractState{
+							{
+								Value: "0x0000000000000000000000000000000000000000000000000000000000000064",
+							},
+						},
+					}, nil)
+			},
+		},
+		{
+			name:       "Success with earliest block",
+			address:    "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+			slot:       "0x1",
+			blockParam: "earliest",
+			mockBlock: &domain.BlockResponse{
+				Timestamp: domain.Timestamp{
+					To: "2023-01-01T00:00:00.000Z",
+				},
+			},
+			mockState: &domain.ContractStateResponse{
+				State: []domain.ContractState{
+					{
+						Value: "0x0000000000000000000000000000000000000000000000000000000000000032",
+					},
+				},
+			},
+			expectedResult: "0x0000000000000000000000000000000000000000000000000000000000000032",
+			expectError:    false,
+			setupMock: func() {
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("0").
+					Return(&domain.BlockResponse{
+						Timestamp: domain.Timestamp{
+							To: "2023-01-01T00:00:00.000Z",
+						},
+					})
+				mockClient.EXPECT().
+					GetContractStateByAddressAndSlot(
+						"0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+						"0x1",
+						"2023-01-01T00:00:00.000Z",
+					).
+					Return(&domain.ContractStateResponse{
+						State: []domain.ContractState{
+							{
+								Value: "0x0000000000000000000000000000000000000000000000000000000000000032",
+							},
+						},
+					}, nil)
+			},
+		},
+		{
+			name:       "Success with specific block number",
+			address:    "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+			slot:       "0x2",
+			blockParam: "0x50",
+			mockBlock: &domain.BlockResponse{
+				Timestamp: domain.Timestamp{
+					To: "2023-06-01T00:00:00.000Z",
+				},
+			},
+			mockState: &domain.ContractStateResponse{
+				State: []domain.ContractState{
+					{
+						Value: "0x0000000000000000000000000000000000000000000000000000000000000096",
+					},
+				},
+			},
+			expectedResult: "0x0000000000000000000000000000000000000000000000000000000000000096",
+			expectError:    false,
+			setupMock: func() {
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("80").
+					Return(&domain.BlockResponse{
+						Timestamp: domain.Timestamp{
+							To: "2023-06-01T00:00:00.000Z",
+						},
+					})
+				mockClient.EXPECT().
+					GetContractStateByAddressAndSlot(
+						"0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+						"0x2",
+						"2023-06-01T00:00:00.000Z",
+					).
+					Return(&domain.ContractStateResponse{
+						State: []domain.ContractState{
+							{
+								Value: "0x0000000000000000000000000000000000000000000000000000000000000096",
+							},
+						},
+					}, nil)
+			},
+		},
+		{
+			name:        "Block not found",
+			address:     "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+			slot:        "0x0",
+			blockParam:  "0x999",
+			mockBlock:   nil,
+			mockState:   nil,
+			expectError: true,
+			setupMock: func() {
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("2457").
+					Return(nil)
+			},
+		},
+		{
+			name:       "Empty state response",
+			address:    "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+			slot:       "0x3",
+			blockParam: "latest",
+			mockBlock: &domain.BlockResponse{
+				Timestamp: domain.Timestamp{
+					To: "2023-12-09T12:00:00.000Z",
+				},
+			},
+			mockState:      &domain.ContractStateResponse{State: []domain.ContractState{}},
+			expectedResult: "0x0000000000000000000000000000000000000000000000000000000000000000",
+			expectError:    false,
+			setupMock: func() {
+				mockClient.EXPECT().
+					GetLatestBlock().
+					Return(map[string]interface{}{"number": float64(100)}, nil)
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("100").
+					Return(&domain.BlockResponse{
+						Timestamp: domain.Timestamp{
+							To: "2023-12-09T12:00:00.000Z",
+						},
+					})
+				mockClient.EXPECT().
+					GetContractStateByAddressAndSlot(
+						"0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+						"0x3",
+						"2023-12-09T12:00:00.000Z",
+					).
+					Return(&domain.ContractStateResponse{State: []domain.ContractState{}}, nil)
+			},
+		},
+		{
+			name:       "Error getting state",
+			address:    "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+			slot:       "0x4",
+			blockParam: "latest",
+			mockBlock: &domain.BlockResponse{
+				Timestamp: domain.Timestamp{
+					To: "2023-12-09T12:00:00.000Z",
+				},
+			},
+			mockState:   nil,
+			expectError: true,
+			setupMock: func() {
+				mockClient.EXPECT().
+					GetLatestBlock().
+					Return(map[string]interface{}{"number": float64(100)}, nil)
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("100").
+					Return(&domain.BlockResponse{
+						Timestamp: domain.Timestamp{
+							To: "2023-12-09T12:00:00.000Z",
+						},
+					})
+				mockClient.EXPECT().
+					GetContractStateByAddressAndSlot(
+						"0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+						"0x4",
+						"2023-12-09T12:00:00.000Z",
+					).
+					Return(nil, fmt.Errorf("failed to get storage"))
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setupMock()
+
+			result, errMap := s.GetStorageAt(tc.address, tc.slot, tc.blockParam)
+
+			if tc.expectError {
+				assert.NotNil(t, errMap)
+				assert.Equal(t, -32000, errMap["code"])
+			} else {
+				assert.Nil(t, errMap)
+				assert.Equal(t, tc.expectedResult, result)
+			}
+		})
+	}
+}
