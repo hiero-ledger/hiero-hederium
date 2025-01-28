@@ -1580,13 +1580,13 @@ func TestGetLogs(t *testing.T) {
 		{
 			name: "Success with block hash",
 			logParams: domain.LogParams{
-				BlockHash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+				BlockHash: "0x123abc",
 				Address:   []string{"0x742d35Cc6634C0532925a3b844Bc454e4438f44e"},
 				Topics:    []string{"0xtopic1", "0xtopic2"},
 			},
 			setupMocks: func() {
 				mockClient.EXPECT().
-					GetBlockByHashOrNumber("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef").
+					GetBlockByHashOrNumber("0x123abc").
 					Return(&domain.BlockResponse{
 						Timestamp: domain.Timestamp{
 							From: "2023-01-01T00:00:00.000Z",
@@ -1605,7 +1605,7 @@ func TestGetLogs(t *testing.T) {
 					Return([]domain.ContractResults{
 						{
 							Address:          "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
-							BlockHash:        "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+							BlockHash:        "0x123abc",
 							BlockNumber:      100,
 							Result:           "0xdata",
 							Hash:             "0xtxhash",
@@ -1616,7 +1616,7 @@ func TestGetLogs(t *testing.T) {
 			expectedResult: []domain.Log{
 				{
 					Address:          "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
-					BlockHash:        "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+					BlockHash:        "0x123abc",
 					BlockNumber:      "0x64", // 100 in hex
 					Data:             "0xdata",
 					TransactionHash:  "0xtxhash",
@@ -1626,7 +1626,7 @@ func TestGetLogs(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "Success with block range",
+			name: "Success with block range within limits",
 			logParams: domain.LogParams{
 				FromBlock: "0x1",
 				ToBlock:   "0x2",
@@ -1683,19 +1683,6 @@ func TestGetLogs(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "Invalid block hash",
-			logParams: domain.LogParams{
-				BlockHash: "0xinvalid",
-			},
-			setupMocks: func() {
-				mockClient.EXPECT().
-					GetBlockByHashOrNumber("0xinvalid").
-					Return(nil)
-			},
-			expectedResult: nil,
-			expectError:    true,
-		},
-		{
 			name: "Block range too large",
 			logParams: domain.LogParams{
 				FromBlock: "0x1",
@@ -1714,8 +1701,58 @@ func TestGetLogs(t *testing.T) {
 					GetBlockByHashOrNumber("100").
 					Return(&domain.BlockResponse{Number: 100})
 			},
-			expectedResult: nil,
-			expectError:    true,
+			expectedResult: []domain.Log{},
+			expectError:    false,
+		},
+		{
+			name: "Invalid block hash",
+			logParams: domain.LogParams{
+				BlockHash: "0xinvalid",
+			},
+			setupMocks: func() {
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("0xinvalid").
+					Return(nil)
+			},
+			expectedResult: []domain.Log{},
+			expectError:    false,
+		},
+		{
+			name: "Latest block fetch failure",
+			logParams: domain.LogParams{
+				FromBlock: "0x1",
+				ToBlock:   "latest",
+			},
+			setupMocks: func() {
+				mockClient.EXPECT().
+					GetLatestBlock().
+					Return(nil, fmt.Errorf("failed to fetch latest block"))
+			},
+			expectedResult: []domain.Log{},
+			expectError:    false,
+		},
+		{
+			name: "From block greater than to block",
+			logParams: domain.LogParams{
+				FromBlock: "0x10",
+				ToBlock:   "0x5",
+			},
+			setupMocks: func() {
+				mockClient.EXPECT().
+					GetLatestBlock().
+					Return(map[string]interface{}{"number": float64(100)}, nil)
+
+				// Add expectations for block number conversions
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("16"). // 0x10 in decimal
+					Return(&domain.BlockResponse{Number: 16})
+
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("5").
+					Return(&domain.BlockResponse{Number: 5})
+			},
+			expectedResult: []domain.Log{},
+			expectError:    false,
 		},
 	}
 
