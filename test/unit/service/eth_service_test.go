@@ -169,6 +169,72 @@ func TestUncleRelatedMethods(t *testing.T) {
 	})
 }
 
+func TestGetBlockTransactionCountByHash(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger, _ := zap.NewDevelopment()
+	mockClient := mocks.NewMockMirrorClient(ctrl)
+
+	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
+
+	testCases := []struct {
+		name           string
+		blockHash      string
+		mockResponse   *domain.BlockResponse
+		expectedResult interface{}
+		expectedError  map[string]interface{}
+	}{
+		{
+			name:      "Success with transactions",
+			blockHash: "0x123abc",
+			mockResponse: &domain.BlockResponse{
+				Count: 5,
+			},
+			expectedResult: "0x5",
+			expectedError:  nil,
+		},
+		{
+			name:           "Block not found",
+			blockHash:      "0xnonexistent",
+			mockResponse:   nil,
+			expectedResult: nil,
+			expectedError:  nil,
+		},
+		{
+			name:      "Zero transactions",
+			blockHash: "0x456def",
+			mockResponse: &domain.BlockResponse{
+				Count: 0,
+			},
+			expectedResult: "0x0",
+			expectedError:  nil,
+		},
+		{
+			name:      "Large number of transactions",
+			blockHash: "0x789ghi",
+			mockResponse: &domain.BlockResponse{
+				Count: 1000,
+			},
+			expectedResult: "0x3e8", // 1000 in hex
+			expectedError:  nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockClient.EXPECT().
+				GetBlockByHashOrNumber(tc.blockHash).
+				Return(tc.mockResponse)
+
+			result, errMap := s.GetBlockTransactionCountByHash(tc.blockHash)
+
+			assert.Equal(t, tc.expectedResult, result)
+			assert.Equal(t, tc.expectedError, errMap)
+		})
+	}
+}
+
 func TestGetGasPrice(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

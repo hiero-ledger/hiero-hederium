@@ -23,3 +23,7 @@ func IsValidBlockHashOrTag(blockHash string) bool {
 func IsValidHexHash(hexHash string) bool {
 	return regexp.MustCompile("^0x[a-fA-F0-9]{64}$").MatchString(hexHash)
 }
+
+func IsValidBlockHash(blockHash string) bool {
+	return regexp.MustCompile("^0x[a-fA-F0-9]{64}$").MatchString(blockHash)
+}
