@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"math/big"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ const (
 	maxBlockCountForResult = 10
 	defaultUsedGasRatio    = 0.5
 	zeroHex32Bytes         = "0x0000000000000000000000000000000000000000000000000000000000000000"
+	blockRangeLimit        = 1000
 )
 
 type EthService struct {
@@ -598,6 +600,41 @@ func (s *EthService) GetStorageAt(address, slot, blockNumberOrHash string) (inte
 	s.logger.Info("Returning storage", zap.Any("storage", result))
 
 	return result.State[0].Value, nil
+}
+
+func (s *EthService) GetLogs(logParams domain.LogParams) (interface{}, map[string]interface{}) {
+	s.logger.Info("Getting logs", zap.Any("logParams", logParams))
+	params := make(map[string]interface{})
+
+	if logParams.BlockHash != "" {
+		if !s.validateBlockHashAndAddTimestampToParams(params, logParams.BlockHash) {
+			return []domain.Log{}, nil
+		}
+	} else {
+		if !s.validateBlockRangeAndAddTimestampToParams(params, logParams.FromBlock, logParams.ToBlock, logParams.Address) {
+			return []domain.Log{}, nil
+		}
+	}
+
+	if logParams.Topics != nil {
+		for i, topic := range logParams.Topics {
+			if topic != "" {
+				params[fmt.Sprintf("topic%d", i)] = topic
+			}
+		}
+	}
+
+	s.logger.Debug("Received log parameters", zap.Any("params", params))
+
+	logs, err := s.getLogsWithParams(logParams.Address, params)
+	if err != nil {
+		return nil, map[string]interface{}{
+			"code":    -32000,
+			"message": "Failed to get logs",
+		}
+	}
+
+	return logs, nil
 }
 
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation

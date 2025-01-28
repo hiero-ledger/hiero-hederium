@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/LimeChain/Hederium/internal/domain"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -422,6 +423,121 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		}
 
 		return ethService.GetStorageAt(address, slot, blockNumberOrTag)
+	case "eth_getLogs":
+		paramsArray, ok := params.([]interface{})
+		if !ok {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid params for eth_getLogs: expected object",
+			}
+		}
+
+		paramsMap, ok := paramsArray[0].(map[string]interface{})
+
+		if !ok {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid params for eth_getLogs: expected object",
+			}
+		}
+
+		logParams := &domain.LogParams{}
+
+		if address, ok := paramsMap["address"].(string); ok {
+			if !IsValidAddress(address) {
+				return nil, map[string]interface{}{
+					"code":    -32602,
+					"message": "Invalid address format: expected 0x followed by 40 hexadecimal characters",
+				}
+			}
+			logParams.Address = []string{address}
+		} else if addresses, ok := paramsMap["address"].([]interface{}); ok {
+			for _, addr := range addresses {
+				if addrStr, ok := addr.(string); ok {
+					if !IsValidAddress(addrStr) {
+						return nil, map[string]interface{}{
+							"code":    -32602,
+							"message": "Invalid address format: expected 0x followed by 40 hexadecimal characters",
+						}
+					}
+					logParams.Address = append(logParams.Address, addrStr)
+				}
+			}
+		}
+
+		if topics, ok := paramsMap["topics"].([]interface{}); ok {
+			for _, topic := range topics {
+				if topicStr, ok := topic.(string); ok {
+					if !IsValidHexHash(topicStr) {
+						return nil, map[string]interface{}{
+							"code":    -32602,
+							"message": "Invalid topic format: expected 0x followed by 64 hexadecimal characters",
+						}
+					}
+					logParams.Topics = append(logParams.Topics, topicStr)
+				}
+			}
+		}
+
+		if blockHash, ok := paramsMap["blockHash"].(string); ok {
+			if !IsValidBlockHashOrTag(blockHash) {
+				return nil, map[string]interface{}{
+					"code":    -32602,
+					"message": "Invalid blockHash format: expected 0x followed by 64 hexadecimal characters",
+				}
+			}
+			logParams.BlockHash = blockHash
+		}
+
+		if fromBlock, ok := paramsMap["fromBlock"].(string); ok {
+			if !IsValidBlockNumberOrTag(fromBlock) {
+				return nil, map[string]interface{}{
+					"code":    -32602,
+					"message": "Invalid fromBlock: must be a hex string (e.g. '0x1')",
+				}
+			}
+			logParams.FromBlock = fromBlock
+		}
+
+		if toBlock, ok := paramsMap["toBlock"].(string); ok {
+			if !IsValidBlockNumberOrTag(toBlock) {
+				return nil, map[string]interface{}{
+					"code":    -32602,
+					"message": "Invalid toBlock: must be a hex string (e.g. '0x1')",
+				}
+			}
+			logParams.ToBlock = toBlock
+		}
+
+		if logParams.BlockHash != "" {
+			if logParams.FromBlock != "" || logParams.ToBlock != "" {
+				return nil, map[string]interface{}{
+					"code":    -32602,
+					"message": "Invalid params: Can't use both blockHash and toBlock/fromBlock",
+				}
+			}
+		} else {
+			if logParams.FromBlock != "" && logParams.ToBlock == "" {
+				return nil, map[string]interface{}{
+					"code":    -32602,
+					"message": "Invalid params: Provided fromBlock parameter without specifying toBlock",
+				}
+			}
+			if logParams.ToBlock != "" && logParams.FromBlock == "" {
+				return nil, map[string]interface{}{
+					"code":    -32602,
+					"message": "Invalid params: Provided toBlock parameter without specifying fromBlock",
+				}
+			}
+			if logParams.FromBlock == "" && logParams.ToBlock == "" {
+				logParams.FromBlock = "latest"
+				logParams.ToBlock = "latest"
+			}
+
+		}
+
+
+		return ethService.GetLogs(*logParams)
 	case "eth_blockNumber":
 		return ethService.GetBlockNumber()
 	case "eth_gasPrice":
