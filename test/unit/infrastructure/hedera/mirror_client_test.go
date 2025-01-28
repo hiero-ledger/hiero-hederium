@@ -651,3 +651,188 @@ func TestGetContractStateByAddressAndSlot(t *testing.T) {
 		})
 	}
 }
+
+func TestGetContractResultsLogsByAddress(t *testing.T) {
+	logger, _ := setupTest(t)
+
+	testCases := []struct {
+		name           string
+		address        string
+		queryParams    map[string]interface{}
+		mockResponse   interface{}
+		expectedResult []domain.ContractResults
+		expectError    bool
+		statusCode     int
+	}{
+		{
+			name:    "Successful logs fetch",
+			address: "0x1234567890123456789012345678901234567890",
+			queryParams: map[string]interface{}{
+				"timestamp.gte": "1640995200.000000000",
+				"timestamp.lte": "1640995300.000000000",
+				"order":         "desc",
+			},
+			mockResponse: map[string]interface{}{
+				"logs": []map[string]interface{}{
+					{
+						"address": "0x1234567890123456789012345678901234567890",
+						"hash":    "0xtx1",
+						"result":  "SUCCESS",
+					},
+				},
+			},
+			expectedResult: []domain.ContractResults{
+				{
+					Address: "0x1234567890123456789012345678901234567890",
+					Hash:    "0xtx1",
+					Result:  "SUCCESS",
+				},
+			},
+			expectError: false,
+			statusCode:  http.StatusOK,
+		},
+		{
+			name:    "Server error",
+			address: "0x1234567890123456789012345678901234567890",
+			queryParams: map[string]interface{}{
+				"timestamp.gte": "1640995200.000000000",
+				"order":         "desc",
+			},
+			mockResponse:   map[string]interface{}{"error": "Internal server error"},
+			expectedResult: nil,
+			expectError:    true,
+			statusCode:     http.StatusInternalServerError,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/api/v1/contracts/"+tc.address+"/results/logs", r.URL.Path)
+				assert.Equal(t, http.MethodGet, r.Method)
+
+				queryValues := r.URL.Query()
+				for key, value := range tc.queryParams {
+					assert.Contains(t, queryValues.Get(key), value)
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				if tc.statusCode != http.StatusOK {
+					w.WriteHeader(tc.statusCode)
+					return
+				}
+
+				w.WriteHeader(tc.statusCode)
+				if tc.mockResponse != nil {
+					json.NewEncoder(w).Encode(tc.mockResponse)
+				}
+			}))
+			defer server.Close()
+
+			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			results, err := client.GetContractResultsLogsByAddress(tc.address, tc.queryParams)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, results)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedResult, results)
+			}
+		})
+	}
+}
+
+func TestGetContractResultsLogsWithRetry(t *testing.T) {
+	logger, _ := setupTest(t)
+
+	testCases := []struct {
+		name           string
+		queryParams    map[string]interface{}
+		mockResponse   interface{}
+		expectedResult []domain.ContractResults
+		expectError    bool
+		statusCode     int
+	}{
+		{
+			name: "Successful logs fetch",
+			queryParams: map[string]interface{}{
+				"timestamp.gte": "1640995200.000000000",
+				"timestamp.lte": "1640995300.000000000",
+				"order":         "desc",
+			},
+			mockResponse: map[string]interface{}{
+				"logs": []map[string]interface{}{
+					{
+						"address":           "0x1234567890123456789012345678901234567890",
+						"hash":              "0xtx1",
+						"result":            "SUCCESS",
+						"transaction_index": 1,
+						"block_number":      100,
+						"block_hash":        "0xblock1",
+					},
+				},
+			},
+			expectedResult: []domain.ContractResults{
+				{
+					Address:          "0x1234567890123456789012345678901234567890",
+					Hash:             "0xtx1",
+					Result:           "SUCCESS",
+					TransactionIndex: 1,
+					BlockNumber:      100,
+					BlockHash:        "0xblock1",
+				},
+			},
+			expectError: false,
+			statusCode:  http.StatusOK,
+		},
+		{
+			name: "Server error",
+			queryParams: map[string]interface{}{
+				"timestamp.gte": "1640995200.000000000",
+				"order":         "desc",
+			},
+			mockResponse:   map[string]interface{}{"error": "Internal server error"},
+			expectedResult: nil,
+			expectError:    true,
+			statusCode:     http.StatusInternalServerError,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/api/v1/contracts/results/logs", r.URL.Path)
+				assert.Equal(t, http.MethodGet, r.Method)
+
+				queryValues := r.URL.Query()
+				for key, value := range tc.queryParams {
+					assert.Contains(t, queryValues.Get(key), value)
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				if tc.statusCode != http.StatusOK {
+					w.WriteHeader(tc.statusCode)
+					return
+				}
+
+				w.WriteHeader(tc.statusCode)
+				if tc.mockResponse != nil {
+					json.NewEncoder(w).Encode(tc.mockResponse)
+				}
+			}))
+			defer server.Close()
+
+			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			results, err := client.GetContractResultsLogsWithRetry(tc.queryParams)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, results)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedResult, results)
+			}
+		})
+	}
+}

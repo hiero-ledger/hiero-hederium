@@ -186,3 +186,18 @@ type ContractState struct {
 type ContractStateResponse struct {
 	State []ContractState `json:"state"`
 }
+
+type LogParams struct {
+	BlockHash string
+	FromBlock string
+	ToBlock   string
+	Address   []string
+	Topics    []string
+}
+
+type ContractResultsLogResponse struct {
+	Logs  []ContractResults `json:"logs"`
+	Links struct {
+		Next *string `json:"next"`
+	} `json:"links"`
+}
