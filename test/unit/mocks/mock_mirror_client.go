@@ -192,9 +192,3 @@ func (mr *MockMirrorClientMockRecorder) GetContractResultsLogsWithRetry(queryPar
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetContractResultsLogsWithRetry", reflect.TypeOf((*MockMirrorClient)(nil).GetContractResultsLogsWithRetry), queryParams)
 }
-
-// GetContractStateByAddressAndSlot indicates an expected call of GetContractStateByAddressAndSlot.
-func (mr *MockMirrorClientMockRecorder) GetContractStateByAddressAndSlot(address interface{}, slot interface{}, timestampTo interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetContractStateByAddressAndSlot", reflect.TypeOf((*MockMirrorClient)(nil).GetContractStateByAddressAndSlot), address, slot, timestampTo)
-}

@@ -602,46 +602,6 @@ func (s *EthService) GetStorageAt(address, slot, blockNumberOrHash string) (inte
 	return result.State[0].Value, nil
 }
 
-func (s *EthService) GetStorageAt(address, slot, blockNumberOrHash string) (interface{}, map[string]interface{}) {
-	s.logger.Info("Getting storage at", zap.String("address", address), zap.String("slot", slot), zap.String("blockNumberOrHash", blockNumberOrHash))
-	blockInt, errMap := s.getBlockNumberByHashOrTag(blockNumberOrHash)
-	if errMap != nil {
-		return nil, errMap
-	}
-
-	blockResponse := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockInt.(int64), 10))
-
-	if blockResponse == nil {
-		return nil, map[string]interface{}{
-			"code":    -32000,
-			"message": "Failed to get block data",
-		}
-	}
-
-	timestampTo := blockResponse.Timestamp.To
-
-	slotInt, errMap := HexToDec(slot)
-	if errMap != nil {
-		return nil, errMap
-	}
-
-	result, err := s.mClient.GetContractStateByAddressAndSlot(address, slotInt, timestampTo)
-	if err != nil {
-		return nil, map[string]interface{}{
-			"code":    -32000,
-			"message": "Failed to get storage data",
-		}
-	}
-
-	if result == nil || len(result.State) == 0 {
-		s.logger.Info("Returning default storage value")
-		return "0x0000000000000000000000000000000000000000000000000000000000000000", nil
-	}
-	s.logger.Info("Returning storage", zap.Any("storage", result))
-
-	return result.State[0].Value, nil
-}
-
 func (s *EthService) GetLogs(logParams domain.LogParams) (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting logs", zap.Any("logParams", logParams))
 	params := make(map[string]interface{})
