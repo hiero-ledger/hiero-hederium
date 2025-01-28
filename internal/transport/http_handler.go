@@ -384,7 +384,44 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		}
 
 		return ethService.FeeHistory(blockCount, newestBlock, rewardPercentiles)
+	case "eth_getStorageAt":
+		paramsArray, ok := params.([]interface{})
+		if !ok || len(paramsArray) < 2 || len(paramsArray) > 3 {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid params for eth_getStorageAt: expected [address, slot, blockNumberOrTag] or [address, slot]",
+			}
+		}
 
+		address, ok := paramsArray[0].(string)
+		if !ok || !IsValidAddress(address) {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid address: must be a 20-byte hex string starting with 0x",
+			}
+		}
+
+		slot, ok := paramsArray[1].(string)
+		if !ok || !IsValidHexNumber(slot) {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid slot: must be a hex string starting with 0x (e.g. 0x0)",
+			}
+		}
+
+		if len(paramsArray) == 2 {
+			return ethService.GetStorageAt(address, slot, "latest")
+		}
+
+		blockNumberOrTag, ok := paramsArray[2].(string)
+		if !ok || !IsValidBlockNumberOrTag(blockNumberOrTag) {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid block parameter: must be a tag (latest/pending/earliest) or hex number starting with 0x",
+			}
+		}
+
+		return ethService.GetStorageAt(address, slot, blockNumberOrTag)
 	case "eth_blockNumber":
 		return ethService.GetBlockNumber()
 	case "eth_gasPrice":
