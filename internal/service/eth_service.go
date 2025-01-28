@@ -648,22 +648,11 @@ func (s *EthService) GetLogs(logParams domain.LogParams) (interface{}, map[strin
 
 	if logParams.BlockHash != "" {
 		if !s.validateBlockHashAndAddTimestampToParams(params, logParams.BlockHash) {
-			return nil, map[string]interface{}{
-				"code":    -32000,
-				"message": "Invalid block hash",
-			}
+			return []domain.Log{}, nil
 		}
 	} else {
-		if valid, errMap := s.validateBlockRangeAndAddTimestampToParams(params, logParams.FromBlock, logParams.ToBlock, logParams.Address); !valid {
-			s.logger.Debug("Error validatingBlockRange", zap.String("fromBlock", logParams.FromBlock), zap.String("toBlock", logParams.ToBlock))
-			if errMap != nil {
-				return nil, errMap
-			}
-
-			return nil, map[string]interface{}{
-				"code":    -32000,
-				"message": "Invalid block range",
-			}
+		if !s.validateBlockRangeAndAddTimestampToParams(params, logParams.FromBlock, logParams.ToBlock, logParams.Address) {
+			return []domain.Log{}, nil
 		}
 	}
 
@@ -683,62 +672,6 @@ func (s *EthService) GetLogs(logParams domain.LogParams) (interface{}, map[strin
 			"code":    -32000,
 			"message": "Failed to get logs",
 		}
-	}
-
-	return logs, nil
-}
-
-func (s *EthService) getLogsWithParams(address []string, params map[string]interface{}) ([]domain.Log, map[string]interface{}) {
-	addresses := address
-
-	var logs []domain.Log
-
-	if len(address) == 0 {
-		logResults, err := s.mClient.GetContractResultsLogsWithRetry(params)
-		if err != nil {
-			s.logger.Error("Failed to get logs", zap.Error(err))
-			return nil, map[string]interface{}{
-				"code":    -32000,
-				"message": "Failed to get logs",
-			}
-		}
-
-		for _, logResult := range logResults {
-			logs = append(logs, domain.Log{
-				Address:          logResult.Address,
-				BlockHash:        logResult.BlockHash,
-				BlockNumber:      "0x" + strconv.FormatInt(logResult.BlockNumber, 16),
-				Data:             logResult.Result,
-				TransactionHash:  logResult.Hash,
-				TransactionIndex: strconv.Itoa(logResult.TransactionIndex),
-			})
-		}
-
-	}
-
-	for _, addr := range addresses {
-		logResults, err := s.mClient.GetContractResultsLogsByAddress(addr, params)
-		if err != nil {
-			s.logger.Error("Failed to get logs", zap.Error(err))
-			return nil, map[string]interface{}{
-				"code":    -32000,
-				"message": "Failed to get logs",
-			}
-		}
-		for _, logResult := range logResults {
-			logs = append(logs, domain.Log{
-				Address:          logResult.Address,
-				BlockHash:        logResult.BlockHash,
-				BlockNumber:      "0x" + strconv.FormatInt(logResult.BlockNumber, 16),
-				Data:             logResult.Result,
-				TransactionHash:  logResult.Hash,
-				TransactionIndex: strconv.Itoa(logResult.TransactionIndex),
-			})
-		}
-	}
-
-	if logs == nil {
-		return []domain.Log{}, nil
 	}
 
 	return logs, nil

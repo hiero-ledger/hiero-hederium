@@ -640,16 +640,16 @@ func (s *EthService) validateBlockHashAndAddTimestampToParams(params map[string]
 	return true
 }
 
-func (s *EthService) validateBlockRangeAndAddTimestampToParams(params map[string]interface{}, fromBlock, toBlock string, address []string) (bool, map[string]interface{}) {
+func (s *EthService) validateBlockRangeAndAddTimestampToParams(params map[string]interface{}, fromBlock, toBlock string, address []string) bool {
 	latestBlock, errMap := s.GetBlockNumber()
 	if errMap != nil {
 		s.logger.Debug("Failed to get latest block number")
-		return false, errMap
+		return false
 	}
 
 	latestBlockStr, ok := latestBlock.(string)
 	if !ok {
-		return false, errMap
+		return false
 	}
 
 	if fromBlock == "latest" || fromBlock == "pending" {
@@ -663,31 +663,28 @@ func (s *EthService) validateBlockRangeAndAddTimestampToParams(params map[string
 	latestBlockNum, errMap := HexToDec(latestBlockStr)
 	if errMap != nil {
 		s.logger.Debug("Failed to parse latest block number", zap.Any("error", errMap))
-		return false, errMap
+		return false
 	}
 
 	toBlockNum, errMap := HexToDec(toBlock)
 	if errMap != nil {
-		return false, errMap
+		return false
 	}
 
 	if toBlockNum < latestBlockNum && fromBlock == "" {
 		s.logger.Debug("Invalid block range", zap.String("toBlock", toBlock), zap.String("latestBlock", latestBlockStr))
-		return false, map[string]interface{}{
-			"code":    -32000,
-			"message": "Invalid block range",
-		}
+		return false
 	}
 
 	fromBlockNum, errMap := HexToDec(fromBlock)
 	if errMap != nil {
-		return false, errMap
+		return false
 	}
 
 	fromBlockResponse := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(fromBlockNum, 10))
 	if fromBlockResponse == nil {
 		s.logger.Debug("Failed to get from block data")
-		return false, errMap
+		return false
 	}
 
 	var timestamp string
@@ -709,17 +706,73 @@ func (s *EthService) validateBlockRangeAndAddTimestampToParams(params map[string
 		}
 
 		if fromBlockNum > toBlockNum {
-			return false, nil
+			return false
 		}
 
 		isSingleAddress := len(address) == 1
 		if !isSingleAddress && toBlockNum-fromBlockNum > maxBlockCountForResult {
-			return false, nil
+			return false
 		}
 	}
 
 	s.logger.Debug("Returning timestamp", zap.String("timestamp", timestamp))
 	params["timestamp"] = timestamp
 
-	return true, nil
+	return true
+}
+
+func (s *EthService) getLogsWithParams(address []string, params map[string]interface{}) ([]domain.Log, map[string]interface{}) {
+	addresses := address
+
+	var logs []domain.Log
+
+	if len(address) == 0 {
+		logResults, err := s.mClient.GetContractResultsLogsWithRetry(params)
+		if err != nil {
+			s.logger.Error("Failed to get logs", zap.Error(err))
+			return nil, map[string]interface{}{
+				"code":    -32000,
+				"message": "Failed to get logs",
+			}
+		}
+
+		for _, logResult := range logResults {
+			logs = append(logs, domain.Log{
+				Address:          logResult.Address,
+				BlockHash:        logResult.BlockHash,
+				BlockNumber:      "0x" + strconv.FormatInt(logResult.BlockNumber, 16),
+				Data:             logResult.Result,
+				TransactionHash:  logResult.Hash,
+				TransactionIndex: strconv.Itoa(logResult.TransactionIndex),
+			})
+		}
+
+	}
+
+	for _, addr := range addresses {
+		logResults, err := s.mClient.GetContractResultsLogsByAddress(addr, params)
+		if err != nil {
+			s.logger.Error("Failed to get logs", zap.Error(err))
+			return nil, map[string]interface{}{
+				"code":    -32000,
+				"message": "Failed to get logs",
+			}
+		}
+		for _, logResult := range logResults {
+			logs = append(logs, domain.Log{
+				Address:          logResult.Address,
+				BlockHash:        logResult.BlockHash,
+				BlockNumber:      "0x" + strconv.FormatInt(logResult.BlockNumber, 16),
+				Data:             logResult.Result,
+				TransactionHash:  logResult.Hash,
+				TransactionIndex: strconv.Itoa(logResult.TransactionIndex),
+			})
+		}
+	}
+
+	if logs == nil {
+		return []domain.Log{}, nil
+	}
+
+	return logs, nil
 }

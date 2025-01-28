@@ -194,3 +194,10 @@ type LogParams struct {
 	Address   []string
 	Topics    []string
 }
+
+type ContractResultsLogResponse struct {
+	Logs  []ContractResults `json:"logs"`
+	Links struct {
+		Next *string `json:"next"`
+	} `json:"links"`
+}

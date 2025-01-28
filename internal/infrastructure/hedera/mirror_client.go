@@ -451,19 +451,13 @@ func (m *MirrorClient) GetContractResultsLogsWithRetry(queryParams map[string]in
 			return nil, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
 		}
 
-		var result struct {
-			Logs  []domain.ContractResults `json:"logs"`
-			Links struct {
-				Next *string `json:"next"`
-			} `json:"links"`
-		}
+		var result domain.ContractResultsLogResponse
 
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			m.logger.Error("Error decoding response", zap.Error(err))
 			return nil, err
 		}
 
-		// Проверяваме за незрели записи
 		foundImmatureRecord := false
 		for _, log := range result.Logs {
 			if log.TransactionIndex == 0 || log.BlockNumber == 0 || log.BlockHash == "0x" {
@@ -521,12 +515,7 @@ func (m *MirrorClient) GetContractResultsLogsByAddress(address string, queryPara
 		return nil, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
 	}
 
-	var result struct {
-		Logs  []domain.ContractResults `json:"logs"`
-		Links struct {
-			Next *string `json:"next"`
-		} `json:"links"`
-	}
+	var result domain.ContractResultsLogResponse
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		m.logger.Error("Error decoding response", zap.Error(err))

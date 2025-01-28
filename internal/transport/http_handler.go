@@ -516,7 +516,26 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 					"message": "Invalid params: Can't use both blockHash and toBlock/fromBlock",
 				}
 			}
+		} else {
+			if logParams.FromBlock != "" && logParams.ToBlock == "" {
+				return nil, map[string]interface{}{
+					"code":    -32602,
+					"message": "Invalid params: Provided fromBlock parameter without specifying toBlock",
+				}
+			}
+			if logParams.ToBlock != "" && logParams.FromBlock == "" {
+				return nil, map[string]interface{}{
+					"code":    -32602,
+					"message": "Invalid params: Provided toBlock parameter without specifying fromBlock",
+				}
+			}
+			if logParams.FromBlock == "" && logParams.ToBlock == "" {
+				logParams.FromBlock = "latest"
+				logParams.ToBlock = "latest"
+			}
+
 		}
+
 
 		return ethService.GetLogs(*logParams)
 	case "eth_blockNumber":
