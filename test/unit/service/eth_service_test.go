@@ -1838,3 +1838,105 @@ func TestGetLogs(t *testing.T) {
 		})
 	}
 }
+
+func TestGetBlockTransactionCountByNumber(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger, _ := zap.NewDevelopment()
+	mockClient := mocks.NewMockMirrorClient(ctrl)
+
+	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
+
+	testCases := []struct {
+		name            string
+		blockParam      string
+		mockLatestBlock map[string]interface{}
+		mockResponse    *domain.BlockResponse
+		expectedResult  interface{}
+		expectedError   map[string]interface{}
+		setupMock       func()
+	}{
+		{
+			name:       "Success with specific block number",
+			blockParam: "0x7b", // 123 in hex
+			mockResponse: &domain.BlockResponse{
+				Count: 5,
+			},
+			expectedResult: "0x5",
+			expectedError:  nil,
+			setupMock: func() {
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("123").
+					Return(&domain.BlockResponse{Count: 5})
+			},
+		},
+		{
+			name:       "Success with latest tag",
+			blockParam: "latest",
+			mockLatestBlock: map[string]interface{}{
+				"number": float64(100),
+			},
+			mockResponse: &domain.BlockResponse{
+				Count: 10,
+			},
+			expectedResult: "0xa",
+			expectedError:  nil,
+			setupMock: func() {
+				mockClient.EXPECT().
+					GetLatestBlock().
+					Return(map[string]interface{}{"number": float64(100)}, nil)
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("100").
+					Return(&domain.BlockResponse{Count: 10})
+			},
+		},
+		{
+			name:       "Success with earliest tag",
+			blockParam: "earliest",
+			mockResponse: &domain.BlockResponse{
+				Count: 1,
+			},
+			expectedResult: "0x1",
+			expectedError:  nil,
+			setupMock: func() {
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("0").
+					Return(&domain.BlockResponse{Count: 1})
+			},
+		},
+		{
+			name:           "Block not found",
+			blockParam:     "0x999",
+			mockResponse:   nil,
+			expectedResult: nil,
+			expectedError:  nil,
+			setupMock: func() {
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("2457"). // 0x999 in decimal
+					Return(nil)
+			},
+		},
+		{
+			name:           "Invalid block number format",
+			blockParam:     "0xinvalid",
+			expectedResult: nil,
+			expectedError: map[string]interface{}{
+				"code":    -32000,
+				"message": "Failed to parse hex value",
+			},
+			setupMock: func() {},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setupMock()
+
+			result, errMap := s.GetBlockTransactionCountByNumber(tc.blockParam)
+
+			assert.Equal(t, tc.expectedResult, result)
+			assert.Equal(t, tc.expectedError, errMap)
+		})
+	}
+}
