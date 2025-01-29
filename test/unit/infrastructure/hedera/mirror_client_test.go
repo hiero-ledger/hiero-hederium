@@ -1146,3 +1146,79 @@ func TestGetContractResultWithRetry(t *testing.T) {
 		})
 	}
 }
+
+func TestGetTokenById(t *testing.T) {
+	logger, _ := setupTest(t)
+
+	testCases := []struct {
+		name           string
+		tokenId        string
+		mockResponse   interface{}
+		expectedResult *domain.TokenResponse
+		expectError    bool
+		statusCode     int
+	}{
+		{
+			name:    "Successful token fetch",
+			tokenId: "0.0.123",
+			mockResponse: &domain.TokenResponse{
+				TokenId:     "0.0.123",
+				Name:        "Test Token",
+				Symbol:      "TST",
+				Decimals:    18,
+				TotalSupply: 1000000,
+				Type:        "FUNGIBLE_COMMON",
+			},
+			expectedResult: &domain.TokenResponse{
+				TokenId:     "0.0.123",
+				Name:        "Test Token",
+				Symbol:      "TST",
+				Decimals:    18,
+				TotalSupply: 1000000,
+				Type:        "FUNGIBLE_COMMON",
+			},
+			expectError: false,
+			statusCode:  http.StatusOK,
+		},
+		{
+			name:           "Server error",
+			tokenId:        "0.0.123",
+			mockResponse:   map[string]interface{}{"error": "Internal server error"},
+			expectedResult: nil,
+			expectError:    true,
+			statusCode:     http.StatusInternalServerError,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/api/v1/tokens/"+tc.tokenId, r.URL.String())
+				assert.Equal(t, http.MethodGet, r.Method)
+
+				w.WriteHeader(tc.statusCode)
+				if tc.mockResponse != nil {
+					json.NewEncoder(w).Encode(tc.mockResponse)
+				}
+			}))
+			defer server.Close()
+
+			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			result, err := client.GetTokenById(tc.tokenId)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+				assert.Contains(t, err.Error(), "mirror node returned status 500")
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedResult.TokenId, result.TokenId)
+				assert.Equal(t, tc.expectedResult.Name, result.Name)
+				assert.Equal(t, tc.expectedResult.Symbol, result.Symbol)
+				assert.Equal(t, tc.expectedResult.Decimals, result.Decimals)
+				assert.Equal(t, tc.expectedResult.TotalSupply, result.TotalSupply)
+				assert.Equal(t, tc.expectedResult.Type, result.Type)
+			}
+		})
+	}
+}

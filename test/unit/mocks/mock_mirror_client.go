@@ -35,6 +35,21 @@ func (m *MockMirrorClient) EXPECT() *MockMirrorClientMockRecorder {
 	return m.recorder
 }
 
+// GetTokenById implements hedera.MirrorNodeClient.
+func (m *MockMirrorClient) GetTokenById(idOrAlias string) (*domain.TokenResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTokenById", idOrAlias)
+	ret0, _ := ret[0].(*domain.TokenResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTokenById indicates an expected call of GetTokenById.
+func (mr *MockMirrorClientMockRecorder) GetTokenById(idOrAlias interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTokenById", reflect.TypeOf((*MockMirrorClient)(nil).GetTokenById), idOrAlias)
+}
+
 // GetAccountById implements hedera.MirrorNodeClient.
 func (m *MockMirrorClient) GetAccountById(idOrAliasOrEvmAddress string) (*domain.AccountResponse, error) {
 	m.ctrl.T.Helper()
