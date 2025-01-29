@@ -809,8 +809,17 @@ func (s *EthService) resolveAddressType(address string) (interface{}, map[string
 		return accountData, nil
 	}
 
-	if tokenData, _ := s.mClient.GetTokenById(address); tokenData != nil {
-		return tokenData, nil
+	// TODO: Make it in constant
+	if strings.HasPrefix(address, "0x000000000000") {
+		addressNum, errMap := HexToDec(address)
+		if errMap != nil {
+			return nil, errMap
+		}
+
+		tokenId := "0.0." + strconv.FormatInt(addressNum, 10)
+		if tokenData, _ := s.mClient.GetTokenById(tokenId); tokenData != nil {
+			return tokenData, nil
+		}
 	}
 
 	return nil, map[string]interface{}{
