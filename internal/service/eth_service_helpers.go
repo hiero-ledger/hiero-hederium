@@ -1,13 +1,17 @@
 package service
 
 import (
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"strconv"
 	"strings"
 
 	"github.com/LimeChain/Hederium/internal/domain"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/rlp"
 	"go.uber.org/zap"
 )
 
@@ -852,4 +856,24 @@ func (s *EthService) getTransactionByBlockAndIndex(queryParamas map[string]inter
 func AddBuffer(weibars *big.Int) *big.Int {
 	buffer := new(big.Int).Div(weibars, big.NewInt(10))
 	return weibars.Add(weibars, buffer)
+}
+
+func ParseTransaction(rawTxHex string) (*types.Transaction, error) {
+	if rawTxHex == "" {
+		return nil, errors.New("transaction data is empty")
+	}
+
+	rawTxHex = strings.TrimPrefix(rawTxHex, "0x")
+
+	rawTx, err := hex.DecodeString(rawTxHex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode hex string: %w", err)
+	}
+
+	tx := new(types.Transaction)
+	if err := rlp.DecodeBytes(rawTx, tx); err != nil {
+		return nil, fmt.Errorf("failed to decode transaction: %w", err)
+	}
+
+	return tx, nil
 }
