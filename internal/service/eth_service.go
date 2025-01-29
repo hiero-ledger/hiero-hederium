@@ -774,6 +774,18 @@ func (s *EthService) SendRawTransaction(data string) (interface{}, map[string]in
 	return txHash, nil
 }
 
+func (s *EthService) GetCode(address string, blockNumberOrTag string) (interface{}, map[string]interface{}) {
+	s.logger.Info("Getting code", zap.String("address", address), zap.String("blockNumberOrTag", blockNumberOrTag))
+	blockNumber, errMap := s.getBlockNumberByHashOrTag(blockNumberOrTag)
+	if errMap != nil {
+		return "", errMap
+	}
+
+	blockNumberInt := blockNumber.(int64)
+
+	return blockNumberInt, nil
+}
+
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation
 func (s *EthService) GetAccounts() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting accounts")

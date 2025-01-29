@@ -643,6 +643,35 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		}
 
 		return ethService.SendRawTransaction(signedTx)
+	case "eth_getCode":
+		paramsArray, ok := params.([]interface{})
+		if !ok || len(paramsArray) < 1 || len(paramsArray) > 2 {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid params for eth_getCode: expected [address, blockNumber] or [address]",
+			}
+		}
+
+		address, ok := paramsArray[0].(string)
+		if !ok || IsValidAddress(address) {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid address: must be a 20-byte hex string starting with 0x",
+			}
+		}
+
+		var blockNumber string = "latest"
+		if len(paramsArray) == 2 {
+			blockNumber, ok = paramsArray[1].(string)
+			if !ok || !IsValidBlockNumberOrTag(blockNumber) {
+				return nil, map[string]interface{}{
+					"code":    -32602,
+					"message": "Invalid blockNumber: must be a hex string (e.g. '0x1') or tag (latest/pending/earliest)",
+				}
+			}
+		}
+
+		return ethService.GetCode(address, blockNumber)
 	case "eth_blockNumber":
 		return ethService.GetBlockNumber()
 	case "eth_gasPrice":
