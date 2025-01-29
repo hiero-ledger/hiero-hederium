@@ -29,6 +29,7 @@ type MirrorNodeClient interface {
 	GetContractResultWithRetry(queryParams map[string]interface{}) (*domain.ContractResults, error)
 	GetContractById(contractIdOrAddress string) (*domain.ContractResponse, error)
 	GetAccountById(idOrAliasOrEvmAddress string) (*domain.AccountResponse, error)
+	GetTokenById(tokenId string) (*domain.TokenResponse, error)
 }
 
 type MirrorClient struct {
@@ -663,6 +664,41 @@ func (m *MirrorClient) GetAccountById(idOrAliasOrEvmAddress string) (*domain.Acc
 	}
 
 	var result domain.AccountResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		m.logger.Error("Error decoding response", zap.Error(err))
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+func (m *MirrorClient) GetTokenById(tokenId string) (*domain.TokenResponse, error) {
+	url := fmt.Sprintf("%s/api/v1/tokens/%s", m.BaseURL, tokenId)
+
+	m.logger.Info("Getting token by id", zap.String("url", url))
+
+	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		m.logger.Error("Error creating request", zap.Error(err))
+		return nil, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		m.logger.Error("Error making request", zap.Error(err))
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
+		return nil, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
+	}
+
+	var result domain.TokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		m.logger.Error("Error decoding response", zap.Error(err))
 		return nil, err

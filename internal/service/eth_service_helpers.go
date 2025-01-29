@@ -785,12 +785,13 @@ func (s *EthService) resolveEvmAddress(address string) (*string, map[string]inte
 		return nil, errMap
 	}
 
-	if accountData, ok := result.(*domain.AccountResponse); ok {
-		return &accountData.EvmAddress, nil
-	}
-
-	if contractData, ok := result.(*domain.ContractResponse); ok {
-		return &contractData.EvmAddress, nil
+	switch data := result.(type) {
+	case *domain.AccountResponse:
+		return &data.EvmAddress, nil
+	case *domain.ContractResponse:
+		return &data.EvmAddress, nil
+	case *domain.TokenResponse:
+		return &address, nil
 	}
 
 	return nil, map[string]interface{}{
@@ -806,6 +807,10 @@ func (s *EthService) resolveAddressType(address string) (interface{}, map[string
 
 	if accountData, _ := s.mClient.GetAccountById(address); accountData != nil {
 		return accountData, nil
+	}
+
+	if tokenData, _ := s.mClient.GetTokenById(address); tokenData != nil {
+		return tokenData, nil
 	}
 
 	return nil, map[string]interface{}{
