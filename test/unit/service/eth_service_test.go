@@ -1940,3 +1940,176 @@ func TestGetBlockTransactionCountByNumber(t *testing.T) {
 		})
 	}
 }
+
+func TestGetTransactionByBlockHashAndIndex(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger, _ := zap.NewDevelopment()
+	mockClient := mocks.NewMockMirrorClient(ctrl)
+	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId)
+
+	testBlockHash := "0x" + strings.Repeat("1", 64)
+	baseContractResult := domain.ContractResults{
+		BlockNumber:        123,
+		BlockHash:          testBlockHash,
+		Hash:               "0x" + strings.Repeat("a", 64),
+		From:               "0x" + strings.Repeat("2", 40),
+		To:                 "0x" + strings.Repeat("3", 40),
+		GasUsed:            21000,
+		GasPrice:           "0x5678",
+		TransactionIndex:   1,
+		Amount:             1000000,
+		V:                  27,
+		R:                  "0x" + strings.Repeat("4", 64),
+		S:                  "0x" + strings.Repeat("5", 64),
+		Nonce:              5,
+		FunctionParameters: "0x",
+		ChainID:            defaultChainId,
+		Type:               0,
+	}
+
+	// Mock responses for contract and account lookups
+	mockContractResponse := &domain.ContractResponse{
+		EvmAddress: "0x" + strings.Repeat("3", 40),
+	}
+	mockAccountResponse := &domain.AccountResponse{
+		EvmAddress: "0x" + strings.Repeat("2", 40),
+	}
+
+	testCases := []struct {
+		name           string
+		blockHash      string
+		index          string
+		mockResult     *domain.ContractResults
+		expectedResult interface{}
+		expectedError  map[string]interface{}
+		setupMocks     func()
+		checkFields    func(t *testing.T, result interface{})
+	}{
+		{
+			name:       "Success - Legacy transaction (type 0)",
+			blockHash:  testBlockHash,
+			index:      "0x1",
+			mockResult: &baseContractResult,
+			setupMocks: func() {
+				// Mock contract result lookup
+				mockClient.EXPECT().
+					GetContractResultWithRetry(gomock.Any()).
+					Return(&baseContractResult, nil)
+
+				// Mock address resolution for 'to' address
+				mockClient.EXPECT().
+					GetContractById(baseContractResult.To).
+					Return(mockContractResponse, nil)
+
+				// Mock address resolution for 'from' address
+				mockClient.EXPECT().
+					GetContractById(baseContractResult.From).
+					Return(nil, nil)
+				mockClient.EXPECT().
+					GetAccountById(baseContractResult.From).
+					Return(mockAccountResponse, nil)
+			},
+			checkFields: func(t *testing.T, result interface{}) {
+				tx, ok := result.(domain.Transaction)
+				assert.True(t, ok)
+				assert.Equal(t, "0x0", tx.Type)
+				assert.Equal(t, baseContractResult.Hash, tx.Hash)
+				assert.Equal(t, "0x7b", *tx.BlockNumber) // 123 in hex
+				assert.Equal(t, defaultChainId, *tx.ChainId)
+				assert.Equal(t, "0x1", *tx.TransactionIndex)
+				assert.Equal(t, mockContractResponse.EvmAddress, *tx.To)
+				assert.Equal(t, mockAccountResponse.EvmAddress, tx.From)
+			},
+		},
+		{
+			name:           "Invalid transaction index",
+			blockHash:      testBlockHash,
+			index:          "0xinvalid",
+			mockResult:     nil,
+			expectedResult: nil,
+			expectedError: map[string]interface{}{
+				"code":    -32000,
+				"message": "Failed to parse hex value",
+			},
+		},
+		{
+			name:           "Transaction not found",
+			blockHash:      testBlockHash,
+			index:          "0x5",
+			mockResult:     nil,
+			expectedResult: nil,
+			expectedError:  nil,
+			setupMocks: func() {
+				mockClient.EXPECT().
+					GetContractResultWithRetry(gomock.Any()).
+					Return(nil, nil)
+			},
+		},
+		{
+			name:      "Different transaction type",
+			blockHash: testBlockHash,
+			index:     "0x1",
+			mockResult: func() *domain.ContractResults {
+				result := baseContractResult
+				result.Type = 2 // EIP-1559 transaction
+				return &result
+			}(),
+			setupMocks: func() {
+				// Mock contract result lookup
+				mockClient.EXPECT().
+					GetContractResultWithRetry(gomock.Any()).
+					Return(func() *domain.ContractResults {
+						result := baseContractResult
+						result.Type = 2
+						return &result
+					}(), nil)
+
+				// Mock address resolution for 'to' address
+				mockClient.EXPECT().
+					GetContractById(baseContractResult.To).
+					Return(mockContractResponse, nil)
+
+				// Mock address resolution for 'from' address
+				mockClient.EXPECT().
+					GetContractById(baseContractResult.From).
+					Return(nil, nil)
+				mockClient.EXPECT().
+					GetAccountById(baseContractResult.From).
+					Return(mockAccountResponse, nil)
+			},
+			checkFields: func(t *testing.T, result interface{}) {
+				tx, ok := result.(domain.Transaction1559)
+				assert.True(t, ok)
+				assert.Equal(t, "0x2", tx.Type)
+				assert.Equal(t, baseContractResult.Hash, tx.Hash)
+				assert.Equal(t, "0x7b", *tx.BlockNumber) // 123 in hex
+				assert.Equal(t, defaultChainId, *tx.ChainId)
+				assert.Equal(t, mockContractResponse.EvmAddress, *tx.To)
+				assert.Equal(t, mockAccountResponse.EvmAddress, tx.From)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.setupMocks != nil {
+				tc.setupMocks()
+			}
+
+			result, errMap := s.GetTransactionByBlockHashAndIndex(tc.blockHash, tc.index)
+
+			if tc.expectedError != nil {
+				assert.Equal(t, tc.expectedError, errMap)
+			} else {
+				assert.Nil(t, errMap)
+				if tc.checkFields != nil {
+					tc.checkFields(t, result)
+				} else {
+					assert.Equal(t, tc.expectedResult, result)
+				}
+			}
+		})
+	}
+}
