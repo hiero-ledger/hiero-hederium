@@ -836,3 +836,389 @@ func TestGetContractResultsLogsWithRetry(t *testing.T) {
 		})
 	}
 }
+
+func TestGetAccountById(t *testing.T) {
+	logger, _ := setupTest(t)
+
+	testCases := []struct {
+		name           string
+		accountId      string
+		mockResponse   interface{}
+		expectedResult *domain.AccountResponse
+		expectError    bool
+		statusCode     int
+	}{
+		{
+			name:      "Successful account fetch",
+			accountId: "0.0.123",
+			mockResponse: &domain.AccountResponse{
+				Account: "0.0.123",
+				Balance: struct {
+					Balance   int64         `json:"balance"`
+					Timestamp string        `json:"timestamp"`
+					Tokens    []interface{} `json:"tokens"`
+				}{
+					Balance:   1000000,
+					Timestamp: "1234567890.000000000",
+					Tokens:    []interface{}{},
+				},
+				EthereumNonce: 5,
+			},
+			expectedResult: &domain.AccountResponse{
+				Account: "0.0.123",
+				Balance: struct {
+					Balance   int64         `json:"balance"`
+					Timestamp string        `json:"timestamp"`
+					Tokens    []interface{} `json:"tokens"`
+				}{
+					Balance:   1000000,
+					Timestamp: "1234567890.000000000",
+					Tokens:    []interface{}{},
+				},
+				EthereumNonce: 5,
+			},
+			expectError: false,
+			statusCode:  http.StatusOK,
+		},
+		{
+			name:           "Server error",
+			accountId:      "0.0.123",
+			mockResponse:   map[string]interface{}{"error": "Internal server error"},
+			expectedResult: nil,
+			expectError:    true,
+			statusCode:     http.StatusInternalServerError,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/api/v1/accounts/"+tc.accountId+"?transactions=false", r.URL.String())
+				assert.Equal(t, http.MethodGet, r.Method)
+
+				w.WriteHeader(tc.statusCode)
+				if tc.mockResponse != nil {
+					json.NewEncoder(w).Encode(tc.mockResponse)
+				}
+			}))
+			defer server.Close()
+
+			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			result, err := client.GetAccountById(tc.accountId)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+				assert.Contains(t, err.Error(), "mirror node returned status 500")
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedResult.Account, result.Account)
+				assert.Equal(t, tc.expectedResult.EthereumNonce, result.EthereumNonce)
+				assert.Equal(t, tc.expectedResult.Balance.Balance, result.Balance.Balance)
+			}
+		})
+	}
+}
+
+func TestGetContractById(t *testing.T) {
+	logger, _ := setupTest(t)
+
+	testCases := []struct {
+		name           string
+		contractId     string
+		mockResponse   interface{}
+		expectedResult *domain.ContractResponse
+		expectError    bool
+		statusCode     int
+	}{
+		{
+			name:       "Successful contract fetch",
+			contractId: "0.0.123",
+			mockResponse: func() *domain.ContractResponse {
+				bytecode := "0x123456"
+				adminKey := "admin_key"
+				return &domain.ContractResponse{
+					ContractID: "0.0.123",
+					AdminKey:   &adminKey,
+					Bytecode:   &bytecode,
+					Timestamp:  domain.Timestamp{From: "1234567890.000000000", To: "1234567890.000000000"},
+					EvmAddress: "0x1234567890123456789012345678901234567890",
+					Nonce:      5,
+				}
+			}(),
+			expectedResult: func() *domain.ContractResponse {
+				bytecode := "0x123456"
+				adminKey := "admin_key"
+				return &domain.ContractResponse{
+					ContractID: "0.0.123",
+					AdminKey:   &adminKey,
+					Bytecode:   &bytecode,
+					Timestamp:  domain.Timestamp{From: "1234567890.000000000", To: "1234567890.000000000"},
+					EvmAddress: "0x1234567890123456789012345678901234567890",
+					Nonce:      5,
+				}
+			}(),
+			expectError: false,
+			statusCode:  http.StatusOK,
+		},
+		{
+			name:           "Server error",
+			contractId:     "0.0.123",
+			mockResponse:   map[string]interface{}{"error": "Internal server error"},
+			expectedResult: nil,
+			expectError:    true,
+			statusCode:     http.StatusInternalServerError,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/api/v1/contracts/"+tc.contractId, r.URL.String())
+				assert.Equal(t, http.MethodGet, r.Method)
+
+				w.WriteHeader(tc.statusCode)
+				if tc.mockResponse != nil {
+					json.NewEncoder(w).Encode(tc.mockResponse)
+				}
+			}))
+			defer server.Close()
+
+			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			result, err := client.GetContractById(tc.contractId)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+				assert.Contains(t, err.Error(), "mirror node returned status 500")
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedResult.ContractID, result.ContractID)
+				assert.Equal(t, tc.expectedResult.AdminKey, result.AdminKey)
+				assert.Equal(t, tc.expectedResult.Bytecode, result.Bytecode)
+				assert.Equal(t, tc.expectedResult.EvmAddress, result.EvmAddress)
+				assert.Equal(t, tc.expectedResult.Nonce, result.Nonce)
+			}
+		})
+	}
+}
+
+func TestGetContractResultWithRetry(t *testing.T) {
+	logger, _ := setupTest(t)
+
+	testCases := []struct {
+		name           string
+		queryParams    map[string]interface{}
+		mockResponses  []interface{}
+		expectedResult *domain.ContractResults
+		expectError    bool
+		statusCode     int
+		expectedCalls  int
+	}{
+		{
+			name: "Successful result fetch",
+			queryParams: map[string]interface{}{
+				"timestamp": "1234567890",
+			},
+			mockResponses: []interface{}{
+				struct {
+					Results []domain.ContractResults `json:"results"`
+					Links   struct {
+						Next *string `json:"next"`
+					} `json:"links"`
+				}{
+					Results: []domain.ContractResults{
+						{
+							Address:          "0x1234567890123456789012345678901234567890",
+							Hash:             "0xtx1",
+							Result:           "SUCCESS",
+							TransactionIndex: 1,
+							BlockNumber:      100,
+							BlockHash:        "0xblock1",
+						},
+					},
+				},
+			},
+			expectedResult: &domain.ContractResults{
+				Address:          "0x1234567890123456789012345678901234567890",
+				Hash:             "0xtx1",
+				Result:           "SUCCESS",
+				TransactionIndex: 1,
+				BlockNumber:      100,
+				BlockHash:        "0xblock1",
+			},
+			expectError:   false,
+			statusCode:    http.StatusOK,
+			expectedCalls: 1,
+		},
+		{
+			name: "Immature record with retry",
+			queryParams: map[string]interface{}{
+				"timestamp": "1234567890",
+			},
+			mockResponses: []interface{}{
+				struct {
+					Results []domain.ContractResults `json:"results"`
+					Links   struct {
+						Next *string `json:"next"`
+					} `json:"links"`
+				}{
+					Results: []domain.ContractResults{
+						{
+							Hash:             "0xtx1",
+							Result:           "SUCCESS",
+							TransactionIndex: 0,
+							BlockNumber:      0,
+							BlockHash:        "0x",
+						},
+					},
+				},
+				struct {
+					Results []domain.ContractResults `json:"results"`
+					Links   struct {
+						Next *string `json:"next"`
+					} `json:"links"`
+				}{
+					Results: []domain.ContractResults{
+						{
+							Hash:             "0xtx1",
+							Result:           "SUCCESS",
+							TransactionIndex: 0,
+							BlockNumber:      0,
+							BlockHash:        "0x",
+						},
+					},
+				},
+			},
+			expectedResult: nil,
+			expectError:    false,
+			statusCode:     http.StatusOK,
+			expectedCalls:  2,
+		},
+		{
+			name: "Server error",
+			queryParams: map[string]interface{}{
+				"timestamp": "1234567890",
+			},
+			mockResponses:  []interface{}{map[string]interface{}{"error": "Internal server error"}},
+			expectedResult: nil,
+			expectError:    true,
+			statusCode:     http.StatusInternalServerError,
+			expectedCalls:  1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			callCount := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/api/v1/contracts/results?timestamp=1234567890&order=desc", r.URL.String())
+				assert.Equal(t, http.MethodGet, r.Method)
+
+				w.WriteHeader(tc.statusCode)
+				if callCount < len(tc.mockResponses) {
+					json.NewEncoder(w).Encode(tc.mockResponses[callCount])
+				}
+				callCount++
+			}))
+			defer server.Close()
+
+			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			result, err := client.GetContractResultWithRetry(tc.queryParams)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+				assert.Contains(t, err.Error(), "mirror node returned status 500")
+			} else {
+				assert.NoError(t, err)
+				if tc.expectedResult != nil {
+					assert.Equal(t, tc.expectedResult.Hash, result.Hash)
+					assert.Equal(t, tc.expectedResult.Result, result.Result)
+					assert.Equal(t, tc.expectedResult.TransactionIndex, result.TransactionIndex)
+					assert.Equal(t, tc.expectedResult.BlockNumber, result.BlockNumber)
+					assert.Equal(t, tc.expectedResult.BlockHash, result.BlockHash)
+				} else {
+					assert.Nil(t, result)
+				}
+			}
+			assert.Equal(t, tc.expectedCalls, callCount)
+		})
+	}
+}
+
+func TestGetTokenById(t *testing.T) {
+	logger, _ := setupTest(t)
+
+	testCases := []struct {
+		name           string
+		tokenId        string
+		mockResponse   interface{}
+		expectedResult *domain.TokenResponse
+		expectError    bool
+		statusCode     int
+	}{
+		{
+			name:    "Successful token fetch",
+			tokenId: "0.0.123",
+			mockResponse: &domain.TokenResponse{
+				TokenId:     "0.0.123",
+				Name:        "Test Token",
+				Symbol:      "TST",
+				Decimals:    18,
+				TotalSupply: 1000000,
+				Type:        "FUNGIBLE_COMMON",
+			},
+			expectedResult: &domain.TokenResponse{
+				TokenId:     "0.0.123",
+				Name:        "Test Token",
+				Symbol:      "TST",
+				Decimals:    18,
+				TotalSupply: 1000000,
+				Type:        "FUNGIBLE_COMMON",
+			},
+			expectError: false,
+			statusCode:  http.StatusOK,
+		},
+		{
+			name:           "Server error",
+			tokenId:        "0.0.123",
+			mockResponse:   map[string]interface{}{"error": "Internal server error"},
+			expectedResult: nil,
+			expectError:    true,
+			statusCode:     http.StatusInternalServerError,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/api/v1/tokens/"+tc.tokenId, r.URL.String())
+				assert.Equal(t, http.MethodGet, r.Method)
+
+				w.WriteHeader(tc.statusCode)
+				if tc.mockResponse != nil {
+					json.NewEncoder(w).Encode(tc.mockResponse)
+				}
+			}))
+			defer server.Close()
+
+			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			result, err := client.GetTokenById(tc.tokenId)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+				assert.Contains(t, err.Error(), "mirror node returned status 500")
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedResult.TokenId, result.TokenId)
+				assert.Equal(t, tc.expectedResult.Name, result.Name)
+				assert.Equal(t, tc.expectedResult.Symbol, result.Symbol)
+				assert.Equal(t, tc.expectedResult.Decimals, result.Decimals)
+				assert.Equal(t, tc.expectedResult.TotalSupply, result.TotalSupply)
+				assert.Equal(t, tc.expectedResult.Type, result.Type)
+			}
+		})
+	}
+}

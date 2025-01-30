@@ -201,3 +201,84 @@ type ContractResultsLogResponse struct {
 		Next *string `json:"next"`
 	} `json:"links"`
 }
+
+type ContractResponse struct {
+	AdminKey                      *string   `json:"admin_key"`
+	AutoRenewAccount              *string   `json:"auto_renew_account"`
+	AutoRenewPeriod               int64     `json:"auto_renew_period"`
+	ContractID                    string    `json:"contract_id"`
+	CreatedTimestamp              string    `json:"created_timestamp"`
+	Deleted                       bool      `json:"deleted"`
+	EvmAddress                    string    `json:"evm_address"`
+	ExpirationTimestamp           string    `json:"expiration_timestamp"`
+	FileID                        *string   `json:"file_id"`
+	MaxAutomaticTokenAssociations int       `json:"max_automatic_token_associations"`
+	Memo                          string    `json:"memo"`
+	Nonce                         int64     `json:"nonce"`
+	ObtainerID                    *string   `json:"obtainer_id"`
+	PermanentRemoval              *string   `json:"permanent_removal"`
+	ProxyAccountID                *string   `json:"proxy_account_id"`
+	Timestamp                     Timestamp `json:"timestamp"`
+	Bytecode                      *string   `json:"bytecode"`
+	RuntimeBytecode               *string   `json:"runtime_bytecode"`
+}
+
+type TokenResponse struct {
+	AdminKey          ProtobufEncodedKey `json:"admin_key"`
+	AutoRenewAccount  string             `json:"auto_renew_account"`
+	AutoRenewPeriod   *string            `json:"auto_renew_period"`
+	CreatedTimestamp  string             `json:"created_timestamp"`
+	Deleted           bool               `json:"deleted"`
+	Decimals          int                `json:"decimals"`
+	ExpiryTimestamp   *string            `json:"expiry_timestamp"`
+	FreezeDefault     bool               `json:"freeze_default"`
+	FreezeKey         ProtobufEncodedKey `json:"freeze_key"`
+	InitialSupply     int                `json:"initial_supply"`
+	KycKey            ProtobufEncodedKey `json:"kyc_key"`
+	MaxSupply         int64              `json:"max_supply"`
+	Memo              string             `json:"memo"`
+	ModifiedTimestamp string             `json:"modified_timestamp"`
+	Name              string             `json:"name"`
+	PauseKey          ProtobufEncodedKey `json:"pause_key"`
+	PauseStatus       string             `json:"pause_status"`
+	SupplyKey         ProtobufEncodedKey `json:"supply_key"`
+	SupplyType        string             `json:"supply_type"`
+	Symbol            string             `json:"symbol"`
+	TokenId           string             `json:"token_id"`
+	TotalSupply       int                `json:"total_supply"`
+	TreasuryAccountId string             `json:"treasury_account_id"`
+	Type              string             `json:"type"`
+	WipeKey           ProtobufEncodedKey `json:"wipe_key"`
+	CustomFees        CustomFees         `json:"custom_fees"`
+}
+
+type ProtobufEncodedKey struct {
+	Type string `json:"_type"`
+	Key  int    `json:"key"`
+}
+
+type CustomFees struct {
+	CreatedTimestamp string          `json:"created_timestamp"`
+	FixedFees        []FixedFee      `json:"fixed_fees"`
+	FractionalFees   []FractionalFee `json:"fractional_fees"`
+}
+
+type FixedFee struct {
+	Amount              int    `json:"amount"`
+	CollectorAccountId  string `json:"collector_account_id"`
+	DenominatingTokenId string `json:"denominating_token_id"`
+}
+
+type FractionalFee struct {
+	Amount              `json:"amount"`
+	CollectorAccountId  string `json:"collector_account_id"`
+	DenominatingTokenId string `json:"denominating_token_id"`
+	Maximum             int    `json:"maximum"`
+	Minimum             int    `json:"minimum"`
+	NetOfTransfers      bool   `json:"net_of_transfers"`
+}
+
+type Amount struct {
+	Numerator   int `json:"numerator"`
+	Denominator int `json:"denominator"`
+}
