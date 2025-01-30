@@ -689,6 +689,35 @@ func (s *EthService) GetTransactionByBlockHashAndIndex(blockHash string, txIndex
 	return s.getTransactionByBlockAndIndex(queryParamas)
 }
 
+func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string, txIndex string) (interface{}, map[string]interface{}) {
+	s.logger.Info("Getting transaction by block number and index", zap.String("blockNumberOrTag", blockNumberOrTag), zap.String("txIndex", txIndex))
+
+	blockNumber, errMap := s.getBlockNumberByHashOrTag(blockNumberOrTag)
+	if errMap != nil {
+		return nil, errMap
+	}
+
+	blockNumberInt, ok := blockNumber.(int64)
+	if !ok {
+		return nil, map[string]interface{}{
+			"code":    -32000,
+			"message": "Invalid block number",
+		}
+	}
+
+	txIndexInt, errMap := HexToDec(txIndex)
+	if errMap != nil {
+		return nil, errMap
+	}
+
+	queryParamas := map[string]interface{}{
+		"block.number":      blockNumberInt,
+		"transaction.index": txIndexInt,
+	}
+
+	return s.getTransactionByBlockAndIndex(queryParamas)
+}
+
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation
 func (s *EthService) GetAccounts() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting accounts")

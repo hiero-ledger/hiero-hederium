@@ -568,7 +568,7 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		if !ok || !IsValidBlockNumberOrTag(blockNumber) {
 			return nil, map[string]interface{}{
 				"code":    -32602,
-				"message": "Invalid blockNumber: must be a hex string (e.g. '0x1')",
+				"message": "Invalid blockNumber: must be a hex string (e.g. '0x1') or tag (latest/pending/earliest)",
 			}
 		}
 
@@ -599,6 +599,32 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		}
 
 		return ethService.GetTransactionByBlockHashAndIndex(blockHash, txIndex)
+	case "eth_getTransactionByBlockNumberAndIndex":
+		paramsArray, ok := params.([]interface{})
+		if !ok || len(paramsArray) != 2 {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid params for eth_getTransactionByBlockHashAndIndex: expected [blockHash, transactionIndex]",
+			}
+		}
+
+		blockNumber, ok := paramsArray[0].(string)
+		if !ok || !IsValidBlockNumberOrTag(blockNumber) {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid blockNumber: must be a hex string (e.g. '0x1') or tag (latest/pending/earliest)",
+			}
+		}
+
+		txIndex, ok := paramsArray[1].(string)
+		if !ok || !IsValidHexNumber(txIndex) {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid transactionIndex: expected hex string with 0x prefix",
+			}
+		}
+
+		return ethService.GetTransactionByBlockNumberAndIndex(blockNumber, txIndex)
 	case "eth_blockNumber":
 		return ethService.GetBlockNumber()
 	case "eth_gasPrice":
