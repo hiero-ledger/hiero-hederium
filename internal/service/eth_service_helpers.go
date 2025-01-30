@@ -6,12 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/LimeChain/Hederium/internal/domain"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
 	"go.uber.org/zap"
@@ -957,4 +955,26 @@ func ConvertTransactionID(transactionID string) string {
 	parts[1] = strings.ReplaceAll(parts[1], ".", "-")
 
 	return parts[0] + "-" + parts[1]
+}
+
+// TODO: Move it to a separate file
+var prohibitedOpcodes = map[vm.OpCode]bool{
+	vm.CALLCODE:     true,
+	vm.DELEGATECALL: true,
+	vm.SELFDESTRUCT: true,
+}
+
+func hasProhibitedOpcodes(bytecode []byte) bool {
+	ops, err := asm.Disassemble(bytecode)
+	if err != nil {
+		log.Printf("Error disassembling bytecode: %v", err)
+		return false
+	}
+
+	for _, op := range ops {
+		if prohibitedOpcodes[vm.OpCode(vm.StringToOp(op))] {
+			return true
+		}
+	}
+	return false
 }

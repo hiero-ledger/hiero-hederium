@@ -9,14 +9,18 @@ import (
 	"github.com/LimeChain/Hederium/internal/domain"
 	infrahedera "github.com/LimeChain/Hederium/internal/infrastructure/hedera"
 	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"go.uber.org/zap"
 )
 
 const (
-	maxBlockCountForResult = 10
-	defaultUsedGasRatio    = 0.5
+	maxBlockCountForResult  = 10
+	defaultUsedGasRatio     = 0.5
 	zeroHex32Bytes         = "0x0000000000000000000000000000000000000000000000000000000000000000"
-	blockRangeLimit        = 1000
+	blockRangeLimit         = 1000
+	redirectBytecodePrefix  = "6080604052348015600f57600080fd5b506000610167905077618dc65e"
+	redirectBytecodePostfix = "600052366000602037600080366018016008845af43d806000803e8160008114605857816000f35b816000fdfea2646970667358221220d8378feed472ba49a0005514ef7087017f707b45fb9bf56bb81bb93ff19a238b64736f6c634300080b0033"
+	iHTSAddress             = "0x0000000000000000000000000000000000000167"
 )
 
 type EthService struct {
@@ -776,14 +780,47 @@ func (s *EthService) SendRawTransaction(data string) (interface{}, map[string]in
 
 func (s *EthService) GetCode(address string, blockNumberOrTag string) (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting code", zap.String("address", address), zap.String("blockNumberOrTag", blockNumberOrTag))
-	blockNumber, errMap := s.getBlockNumberByHashOrTag(blockNumberOrTag)
-	if errMap != nil {
-		return "", errMap
+
+	// Check for iHTS precompile address first
+	if address == iHTSAddress {
+		s.logger.Debug("Returning iHTS contract code")
+		return "0xfe", nil
 	}
 
-	blockNumberInt := blockNumber.(int64)
+	// Resolve the address type (contract or token)
+	result, errMap := s.resolveAddressType(address)
+	if errMap != nil {
+		return nil, errMap
+	}
 
-	return blockNumberInt, nil
+	switch result := result.(type) {
+	case *domain.ContractResponse:
+		contract := result
+		if contract.RuntimeBytecode != nil && *contract.RuntimeBytecode != zeroHex32Bytes {
+			bytecode, err := hexutil.Decode(*contract.RuntimeBytecode)
+			if err != nil {
+				s.logger.Error("Failed to decode bytecode", zap.Error(err))
+				return nil, map[string]interface{}{
+					"code":    -32000,
+					"message": "Failed to decode bytecode",
+				}
+			}
+
+			if !hasProhibitedOpcodes(bytecode) {
+				// We cache the bytecode for future use
+				return *contract.RuntimeBytecode, nil
+			}
+		}
+	case *domain.TokenResponse:
+		s.logger.Debug("Token redirect case, returning redirectBytecode")
+		redirectBytecode := redirectBytecodePrefix + address[2:] + redirectBytecodePostfix
+		return "0x" + redirectBytecode, nil
+	}
+
+	// Try to get bytecode using Hedera SDK
+
+	// For now return empty hex as fallback
+	return "0x", nil
 }
 
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation
