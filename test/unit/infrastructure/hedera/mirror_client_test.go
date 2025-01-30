@@ -136,11 +136,10 @@ func TestGetNetworkFees_Success(t *testing.T) {
 	defer server.Close()
 
 	client := hedera.NewMirrorClient(server.URL, 30, logger)
-	fees, err := client.GetNetworkFees("", "") // Should be handled better
-
+	fees, err := client.GetNetworkFees("", "")
 	assert.NoError(t, err)
-	// Here I am changing the expected value to with *100 so that the test dont fail!!!
-	assert.Equal(t, int64(10000000), fees) // Should return the EthereumTransaction fee
+
+	assert.Equal(t, int64(100000), fees) // Should return the EthereumTransaction fee
 }
 
 func TestGetContractResults_Success(t *testing.T) {

@@ -262,10 +262,9 @@ func TestGetGasPrice(t *testing.T) {
 	assert.Nil(t, errMap)
 
 	// Expected calculation:
-	// 100 tinybars * 10^8 (conversion to weibars) = 10000000000
-	// Add 10% buffer = 11000000000
+	// 100 tinybars * 10^10 (conversion to weibars) = 1000000000000
 	// Convert to hex = 0x28fa6ae00
-	assert.Equal(t, "0x28fa6ae00", result)
+	assert.Equal(t, "0xe8d4a51000", result)
 }
 
 func TestGetGasPrice_Error(t *testing.T) {
