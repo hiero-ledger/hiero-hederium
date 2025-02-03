@@ -157,10 +157,10 @@ func (m *MirrorClient) GetNetworkFees(timestampTo, order string) (int64, error) 
 	}
 
 	var gasTinybars int64
-	// Here there is a difference between the Nodejs and GO implementations so I will hardcode it for now
+
 	for _, fee := range feeResponse.Fees {
 		if fee.TransactionType == "EthereumTransaction" {
-			gasTinybars = fee.Gas * 100
+			gasTinybars = fee.Gas
 			break
 		}
 	}
