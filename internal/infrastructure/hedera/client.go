@@ -10,6 +10,7 @@ import (
 type HederaNodeClient interface {
 	GetNetworkFees() (int64, error)
 	SendRawTransaction(transactionData []byte, networkGasPriceInWeiBars int64, callerId *common.Address) (*TransactionResponse, error)
+	GetContractByteCode(shard, realm int64, address string) ([]byte, error)
 }
 
 type HederaClient struct {
@@ -190,4 +191,27 @@ func (h *HederaClient) deleteFile(fileID hedera.FileID) error {
 	}
 
 	return nil
+}
+
+func (h *HederaClient) GetContractByteCode(shard, realm int64, address string) ([]byte, error) {
+	contractID, err := hedera.ContractIDFromEvmAddress(uint64(shard), uint64(realm), address)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create contract ID from EVM address: %w", err)
+	}
+
+	query := hedera.NewContractBytecodeQuery().SetContractID(contractID)
+
+	cost, err := query.GetCost(h.Client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get query cost: %w", err)
+	}
+
+	query.SetQueryPayment(cost)
+
+	response, err := query.Execute(h.Client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute query: %w", err)
+	}
+
+	return response, nil
 }
