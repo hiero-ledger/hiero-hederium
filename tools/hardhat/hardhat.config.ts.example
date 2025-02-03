@@ -1,0 +1,21 @@
+import { HardhatUserConfig } from "hardhat/config";
+import "@nomicfoundation/hardhat-toolbox";
+
+const config: HardhatUserConfig = {
+  solidity: "0.8.19",
+  networks: {
+    hedera_testnet: {
+      url: "http://localhost:7546", // Default JSON-RPC Relay endpoint
+      accounts: [
+        // Add your private keys here
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", // Example private key - DO NOT USE IN PRODUCTION
+      ],
+      chainId: 296, // Hedera Testnet chain ID
+    }
+  },
+  mocha: {
+    timeout: 100000
+  }
+};
+
+export default config;
