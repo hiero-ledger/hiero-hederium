@@ -906,16 +906,11 @@ func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *typ
 	}
 
 	subbmitedTransactionId := response.TransactionID
-	fileId := response.FileID
 
 	transactionIDRegex := regexp.MustCompile(`\d{1}\.\d{1}\.\d{1,10}\@\d{1,10}\.\d{1,9}`)
 	if !transactionIDRegex.MatchString(subbmitedTransactionId) {
 		s.logger.Error("Invalid transaction ID format", zap.String("transactionID", subbmitedTransactionId))
 		return nil, fmt.Errorf("invalid transaction ID format: %s", subbmitedTransactionId)
-	}
-
-	if fileId != nil {
-		s.hClient.DeleteFile(*fileId)
 	}
 
 	if subbmitedTransactionId != "" {

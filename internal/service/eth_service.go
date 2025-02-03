@@ -100,7 +100,7 @@ func (s *EthService) GetGasPrice() (interface{}, map[string]interface{}) {
 			"message": errMsg,
 		}
 	}
-	
+
 	gasPrice := "0x" + strconv.FormatUint(weibars.Uint64(), 16)
 
 	s.logger.Info("Successfully returned gas price", zap.String("gasPrice", gasPrice))
@@ -721,7 +721,7 @@ func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string
 func (s *EthService) SendRawTransaction(data string) (interface{}, map[string]interface{}) {
 	s.logger.Info("Sending raw transaction", zap.String("data", data))
 
-	parsedTx, err := ParseTransaction(s.logger, data)
+	parsedTx, err := ParseTransaction(data)
 	if err != nil {
 		return nil, map[string]interface{}{
 			"code":    -32000,

@@ -52,7 +52,7 @@ func NewPrecheck(mClient infrahedera.MirrorNodeClient, logger *zap.Logger, chain
 
 func (p *precheck) ParseTxIfNeeded(transaction interface{}) *types.Transaction {
 	if txStr, ok := transaction.(string); ok {
-		tx, err := ParseTransaction(p.logger, txStr)
+		tx, err := ParseTransaction(txStr)
 		if err != nil {
 			return nil
 		}

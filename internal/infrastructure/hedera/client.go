@@ -10,7 +10,6 @@ import (
 type HederaNodeClient interface {
 	GetNetworkFees() (int64, error)
 	SendRawTransaction(transactionData []byte, networkGasPriceInWeiBars int64, callerId *common.Address) (*TransactionResponse, error)
-	DeleteFile(fileID hedera.FileID) error
 }
 
 type HederaClient struct {
@@ -118,7 +117,7 @@ func (h *HederaClient) SendRawTransaction(transactionData []byte, networkGasPric
 	response, err := ethereumTx.Execute(h.Client)
 	if err != nil {
 		if fileID != nil {
-			_ = h.DeleteFile(*fileID)
+			_ = h.deleteFile(*fileID)
 		}
 		return nil, fmt.Errorf("failed to execute transaction: %v", err)
 	}
@@ -169,7 +168,7 @@ func (h *HederaClient) createFileForCallData(data []byte) (*hedera.FileID, error
 
 			_, err = appendTx.Execute(h.Client)
 			if err != nil {
-				_ = h.DeleteFile(*fileID)
+				_ = h.deleteFile(*fileID)
 				return nil, fmt.Errorf("failed to append chunk %d: %v", i/fileAppendChunkSize+1, err)
 			}
 		}
@@ -178,7 +177,7 @@ func (h *HederaClient) createFileForCallData(data []byte) (*hedera.FileID, error
 	return fileID, nil
 }
 
-func (h *HederaClient) DeleteFile(fileID hedera.FileID) error {
+func (h *HederaClient) deleteFile(fileID hedera.FileID) error {
 	deleteTx, err := hedera.NewFileDeleteTransaction().
 		SetFileID(fileID).SetMaxTransactionFee(hedera.NewHbar(2)).FreezeWith(h.Client)
 	if err != nil {
