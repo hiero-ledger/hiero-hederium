@@ -1,0 +1,36 @@
+# Dependency directories
+node_modules/
+.npm
+
+# Hardhat files
+cache/
+artifacts/
+typechain-types/
+
+# TypeScript build files
+dist/
+build/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Coverage directory
+coverage/
+coverage.json
+
+# Debug logs
+logs/
+*.log
+npm-debug.log*
+
+# Hardhat configuration
+hardhat.config.ts
+!hardhat.config.ts.example
