@@ -2,7 +2,6 @@ package service
 
 import (
 	"fmt"
-	"math/big"
 	"strconv"
 	"strings"
 
@@ -98,9 +97,7 @@ func (s *EthService) GetGasPrice() (interface{}, map[string]interface{}) {
 			"message": errMsg,
 		}
 	}
-	// Add 10% buffer to the gas price
-	buffer := new(big.Int).Div(weibars, big.NewInt(10))
-	weibars.Add(weibars, buffer)
+	
 	gasPrice := "0x" + strconv.FormatUint(weibars.Uint64(), 16)
 
 	s.logger.Info("Successfully returned gas price", zap.String("gasPrice", gasPrice))

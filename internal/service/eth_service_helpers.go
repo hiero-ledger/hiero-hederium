@@ -12,7 +12,7 @@ import (
 )
 
 // GetFeeWeibars retrieves the current network fees in tinybars from the mirror client
-// and converts them to weibars (1 tinybar = 10^8 weibars).
+// and converts them to weibars (1 tinybar = 10^10 weibars).
 //
 // Parameters:
 //   - s: Pointer to EthService instance containing the mirror client
@@ -46,23 +46,11 @@ func GetFeeWeibars(s *EthService, params ...string) (*big.Int, map[string]interf
 
 	// Convert tinybars to weibars
 	weibars := big.NewInt(gasTinybars).
-		Mul(big.NewInt(gasTinybars), big.NewInt(100000000)) // 10^8 conversion factor
+		Mul(big.NewInt(gasTinybars), big.NewInt(10000000000)) // 10^10 conversion factor
 
 	return weibars, nil
 }
 
-// GetFeeWeibars retrieves the current network fees in tinybars from the mirror client
-// and converts them to weibars (1 tinybar = 10^8 weibars).
-//
-// Parameters:
-//   - s: Pointer to EthService instance containing the mirror client
-//
-// Returns:
-//   - *big.Int: The fee amount in weibars, or nil if there was an error
-//   - map[string]interface{}: Error details if any occurred, nil otherwise
-//     The error map contains:
-//   - "code": -32000 for failed requests
-//   - "message": Description of the error
 func ProcessBlock(s *EthService, block *domain.BlockResponse, showDetails bool) (*domain.Block, map[string]interface{}) {
 	// Create a new Block instance with default values
 	ethBlock := domain.NewBlock()
@@ -858,4 +846,10 @@ func (s *EthService) getTransactionByBlockAndIndex(queryParamas map[string]inter
 	transaction.From = *evmAddressFrom
 
 	return ProcessTransaction(*transaction), nil
+}
+
+// Add 10% buffer to the gas price
+func AddBuffer(weibars *big.Int) *big.Int {
+	buffer := new(big.Int).Div(weibars, big.NewInt(10))
+	return weibars.Add(weibars, buffer)
 }
