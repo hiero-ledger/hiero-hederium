@@ -2,6 +2,7 @@ package hedera
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/hashgraph/hedera-sdk-go/v2"
@@ -194,6 +195,7 @@ func (h *HederaClient) deleteFile(fileID hedera.FileID) error {
 }
 
 func (h *HederaClient) GetContractByteCode(shard, realm int64, address string) ([]byte, error) {
+	address = strings.TrimPrefix(address, "0x")
 	contractID, err := hedera.ContractIDFromEvmAddress(uint64(shard), uint64(realm), address)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create contract ID from EVM address: %w", err)
