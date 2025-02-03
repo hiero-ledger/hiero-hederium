@@ -207,6 +207,22 @@ func (m *MockMirrorClient) GetLatestBlock() (map[string]interface{}, error) {
 	return ret0, ret1
 }
 
+// RepeatGetContractResult mocks base method.
+func (m *MockMirrorClient) RepeatGetContractResult(transactionIdOrHash string, retries int) *domain.ContractResultResponse {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RepeatGetContractResult", transactionIdOrHash, retries)
+	ret0, _ := ret[0].(*domain.ContractResultResponse)
+	return ret0
+}
+
+// RepeatGetContractResult indicates an expected call of RepeatGetContractResult.
+func (mr *MockMirrorClientMockRecorder) RepeatGetContractResult(transactionIdOrHash, retries interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RepeatGetContractResult", reflect.TypeOf((*MockMirrorClient)(nil).RepeatGetContractResult), transactionIdOrHash, retries)
+}
+
+
+
 // GetLatestBlock indicates an expected call of GetLatestBlock.
 func (mr *MockMirrorClientMockRecorder) GetLatestBlock() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
@@ -253,3 +269,4 @@ func (mr *MockMirrorClientMockRecorder) GetContractResultsLogsWithRetry(queryPar
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetContractResultsLogsWithRetry", reflect.TypeOf((*MockMirrorClient)(nil).GetContractResultsLogsWithRetry), queryParams)
 }
+
