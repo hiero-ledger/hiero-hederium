@@ -790,7 +790,7 @@ func (s *EthService) GetCode(address string, blockNumberOrTag string) (interface
 	// Resolve the address type (contract or token)
 	result, errMap := s.resolveAddressType(address)
 	if errMap != nil {
-		return nil, errMap
+		s.logger.Debug("Failed to resolve address type from Mirror node", zap.Any("error", errMap))
 	}
 
 	switch result := result.(type) {
