@@ -16,7 +16,7 @@ import (
 const (
 	maxBlockCountForResult  = 10
 	defaultUsedGasRatio     = 0.5
-	zeroHex32Bytes         = "0x0000000000000000000000000000000000000000000000000000000000000000"
+	zeroHex32Bytes          = "0x0000000000000000000000000000000000000000000000000000000000000000"
 	blockRangeLimit         = 1000
 	redirectBytecodePrefix  = "6080604052348015600f57600080fd5b506000610167905077618dc65e"
 	redirectBytecodePostfix = "600052366000602037600080366018016008845af43d806000803e8160008114605857816000f35b816000fdfea2646970667358221220d8378feed472ba49a0005514ef7087017f707b45fb9bf56bb81bb93ff19a238b64736f6c634300080b0033"
@@ -817,10 +817,14 @@ func (s *EthService) GetCode(address string, blockNumberOrTag string) (interface
 		return "0x" + redirectBytecode, nil
 	}
 
-	// Try to get bytecode using Hedera SDK
+	result, err := s.hClient.GetContractByteCode(0, 0, address)
+	if err != nil {
+		// TODO: Handle error better
+		s.logger.Error("Failed to get contract bytecode", zap.Error(err))
+		return "0x", nil
+	}
 
-	// For now return empty hex as fallback
-	return "0x", nil
+	return fmt.Sprintf("0x%x", result), nil
 }
 
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation
