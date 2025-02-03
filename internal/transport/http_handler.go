@@ -536,7 +536,6 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 
 		}
 
-
 		return ethService.GetLogs(*logParams)
 	case "eth_getBlockTransactionCountByHash":
 		paramsArray, ok := params.([]interface{})
@@ -645,29 +644,26 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		return ethService.SendRawTransaction(signedTx)
 	case "eth_getCode":
 		paramsArray, ok := params.([]interface{})
-		if !ok || len(paramsArray) < 1 || len(paramsArray) > 2 {
+		if !ok || len(paramsArray) != 2 {
 			return nil, map[string]interface{}{
 				"code":    -32602,
-				"message": "Invalid params for eth_getCode: expected [address, blockNumber] or [address]",
+				"message": "Invalid params for eth_getCode: expected [address, blockNumber/blockHash/tag]",
 			}
 		}
 
 		address, ok := paramsArray[0].(string)
-		if !ok || IsValidAddress(address) {
+		if !ok || !IsValidAddress(address) {
 			return nil, map[string]interface{}{
 				"code":    -32602,
-				"message": "Invalid address: must be a 20-byte hex string starting with 0x",
+				"message": "Invalid address: must be a valid  hex string starting with 0x",
 			}
 		}
 
-		var blockNumber string = "latest"
-		if len(paramsArray) == 2 {
-			blockNumber, ok = paramsArray[1].(string)
-			if !ok || !IsValidBlockNumberOrTag(blockNumber) {
-				return nil, map[string]interface{}{
-					"code":    -32602,
-					"message": "Invalid blockNumber: must be a hex string (e.g. '0x1') or tag (latest/pending/earliest)",
-				}
+		blockNumber, ok := paramsArray[1].(string)
+		if !ok || !IsValidBlock(blockNumber) {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid blockNumber: must be a hex string (e.g. '0x1') or tag (latest/pending/earliest)",
 			}
 		}
 
