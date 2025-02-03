@@ -635,7 +635,7 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		}
 
 		signedTx, ok := paramsArray[0].(string)
-		if !ok || !strings.HasPrefix(signedTx, "0x") {
+		if !ok || !IsValidHexNumber(signedTx) {
 			return nil, map[string]interface{}{
 				"code":    -32602,
 				"message": "Invalid signedTransaction: expected data with 0x prefix",

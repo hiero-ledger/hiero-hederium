@@ -2,8 +2,6 @@ module github.com/LimeChain/Hederium
 
 go 1.22
 
-toolchain go1.23.3
-
 require (
 	github.com/ethereum/go-ethereum v1.14.12
 	github.com/gin-gonic/gin v1.10.0

@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/LimeChain/Hederium/internal/domain"
 	infrahedera "github.com/LimeChain/Hederium/internal/infrastructure/hedera"
@@ -51,7 +52,7 @@ func NewPrecheck(mClient infrahedera.MirrorNodeClient, logger *zap.Logger, chain
 
 func (p *precheck) ParseTxIfNeeded(transaction interface{}) *types.Transaction {
 	if txStr, ok := transaction.(string); ok {
-		tx, err := ParseTransaction(txStr)
+		tx, err := ParseTransaction(p.logger, txStr)
 		if err != nil {
 			return nil
 		}
@@ -113,54 +114,51 @@ func (p *precheck) VerifyAccount(tx *types.Transaction) (*domain.AccountResponse
 		return nil, err
 	}
 
-	accountInfo := p.mClient.GetAccount(from.Hex(), "")
+	accountInfo, err := p.mClient.GetAccountById(from.Hex())
+	if err != nil {
+		p.logger.Debug("Failed to retrieve address account details",
+			zap.String("address", from.Hex()),
+			zap.Error(err))
+		return nil, err
+	}
+
 	if accountInfo == nil {
 		p.logger.Debug("Failed to retrieve address account details",
 			zap.String("address", from.Hex()))
 		return nil, fmt.Errorf("resource not found: address '%s'", from.Hex())
 	}
 
-	if account, ok := accountInfo.(*domain.AccountResponse); ok {
-		return account, nil
-	}
-
-	return nil, fmt.Errorf("invalid account response type")
+	return accountInfo, nil
 }
 
 func (p *precheck) Nonce(tx *types.Transaction, accountInfoNonce int64) error {
-	if p.logger.Core().Enabled(zap.DebugLevel) {
-		p.logger.Debug("Nonce precheck",
-			zap.Uint64("tx.nonce", tx.Nonce()),
-			zap.Int64("accountInfoNonce", accountInfoNonce))
-	}
+
+	p.logger.Debug("Nonce precheck", zap.Uint64("tx.nonce", tx.Nonce()), zap.Int64("accountInfoNonce", accountInfoNonce))
 
 	if uint64(accountInfoNonce) > tx.Nonce() {
-		return fmt.Errorf("nonce too low: got %d, want %d", tx.Nonce(), accountInfoNonce)
+		return fmt.Errorf("nonce too low: provided nonce: %d, current nonce: %d", tx.Nonce(), accountInfoNonce)
 	}
 
 	return nil
 }
 
 func (p *precheck) isLegacyUnprotectedEtx(tx *types.Transaction) bool {
-	signer := types.NewEIP155Signer(tx.ChainId())
-	v, _, _, err := signer.SignatureValues(tx, nil)
-	if err != nil {
-		return false
-	}
-	return tx.ChainId().Cmp(big.NewInt(0)) == 0 && (v.Uint64() == 27 || v.Uint64() == 28)
+	v, _, _ := tx.RawSignatureValues()
+
+	return tx.ChainId().Int64() == 0 && (v.Int64() == 27 || v.Int64() == 28)
 }
 
 func (p *precheck) ChainID(tx *types.Transaction) error {
 	txChainID := fmt.Sprintf("0x%x", tx.ChainId())
-	passes := p.isLegacyUnprotectedEtx(tx) || txChainID == p.chainID
+
+	passes := p.isLegacyUnprotectedEtx(tx) || tx.ChainId().String() == p.chainID
 
 	if !passes {
-		if p.logger.Core().Enabled(zap.DebugLevel) {
-			p.logger.Debug("Failed chainId precheck",
-				zap.String("transaction", tx.Hash().Hex()),
-				zap.String("chainId", txChainID))
-		}
-		return fmt.Errorf("unsupported chain id: got %s, want %s", txChainID, p.chainID)
+		p.logger.Debug("Failed chainId precheck",
+			zap.String("transaction", tx.Hash().Hex()),
+			zap.String("chainId", txChainID))
+
+		return fmt.Errorf("unsupported chain id: got %s, want %s", tx.ChainId().String(), p.chainID)
 	}
 
 	return nil
@@ -169,6 +167,8 @@ func (p *precheck) ChainID(tx *types.Transaction) error {
 func (p *precheck) GasPrice(tx *types.Transaction, networkGasPriceInWeiBars int64) error {
 	networkGasPrice := big.NewInt(networkGasPriceInWeiBars)
 	var txGasPrice *big.Int
+
+	p.logger.Info("gasPrice precheck", zap.String("tx.gasPrice", tx.GasPrice().String()), zap.String("tx.gasFeeCap", tx.GasFeeCap().String()), zap.String("tx.gasTipCap", tx.GasTipCap().String()))
 
 	if tx.GasPrice() != nil {
 		txGasPrice = tx.GasPrice()
@@ -269,6 +269,8 @@ func (p *precheck) GasLimit(tx *types.Transaction) error {
 }
 
 func (p *precheck) CheckSize(transaction string) error {
+	transaction = strings.TrimPrefix(transaction, "0x")
+
 	transactionBytes, err := hex.DecodeString(transaction)
 	if err != nil {
 		return fmt.Errorf("invalid transaction hex: %v", err)

@@ -25,7 +25,7 @@ limiter:
     hbarLimit: 10000
 
 logging:
-  level: "info"
+  level: "debug"
   DisableCaller: true
 
 apiKeys:

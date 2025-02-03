@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -720,7 +721,7 @@ func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string
 func (s *EthService) SendRawTransaction(data string) (interface{}, map[string]interface{}) {
 	s.logger.Info("Sending raw transaction", zap.String("data", data))
 
-	parsedTx, err := ParseTransaction(data)
+	parsedTx, err := ParseTransaction(s.logger, data)
 	if err != nil {
 		return nil, map[string]interface{}{
 			"code":    -32000,
@@ -752,7 +753,25 @@ func (s *EthService) SendRawTransaction(data string) (interface{}, map[string]in
 		}
 	}
 
-	return parsedTx.Hash().Hex(), nil
+	rawTxHex := strings.TrimPrefix(data, "0x")
+
+	rawTx, err := hex.DecodeString(rawTxHex)
+	if err != nil {
+		return nil, map[string]interface{}{
+			"code":    -32000,
+			"message": fmt.Sprintf("Failed to decode raw transaction: %s", err.Error()),
+		}
+	}
+
+	txHash, err := s.SendRawTransactionProcessor(rawTx, parsedTx, gasPrice)
+	if err != nil {
+		return nil, map[string]interface{}{
+			"code":    -32000,
+			"message": fmt.Sprintf("Failed to process transaction: %s", err.Error()),
+		}
+	}
+
+	return txHash, nil
 }
 
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation

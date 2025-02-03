@@ -3,11 +3,14 @@ package hedera
 import (
 	"fmt"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/hashgraph/hedera-sdk-go/v2"
 )
 
 type HederaNodeClient interface {
 	GetNetworkFees() (int64, error)
+	SendRawTransaction(transactionData []byte, networkGasPriceInWeiBars int64, callerId *common.Address) (*TransactionResponse, error)
+	DeleteFile(fileID hedera.FileID) error
 }
 
 type HederaClient struct {
@@ -69,4 +72,123 @@ func (h *HederaClient) GetNetworkFees() (int64, error) {
 
 	// Hardcode for now, for simplicity
 	return 72, nil
+}
+
+const (
+	// Maximum gas that can be used per second
+	maxGasPerSec = 15000000
+	// Transaction size limit in bytes (128KB)
+	transactionSizeLimit = 128 * 1024
+	// Default file append chunk size
+	fileAppendChunkSize = 5120
+	// Maximum number of chunks for file append
+	maxChunks = 20
+)
+
+type TransactionResponse struct {
+	TransactionID string
+	FileID        *hedera.FileID
+}
+
+// SendRawTransaction submits an Ethereum transaction to the Hedera network.
+// It handles large call data by creating a file if needed and validates gas prices.
+func (h *HederaClient) SendRawTransaction(transactionData []byte, networkGasPriceInWeiBars int64, callerId *common.Address) (*TransactionResponse, error) {
+	ethereumTx := hedera.NewEthereumTransaction()
+
+	var fileID *hedera.FileID
+	var err error
+
+	if len(transactionData) <= fileAppendChunkSize {
+		ethereumTx.SetEthereumData(transactionData)
+	} else {
+		fileID, err = h.createFileForCallData(transactionData)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create file for call data: %v", err)
+		}
+
+		ethereumTx.SetEthereumData([]byte{})
+		ethereumTx.SetCallDataFileID(*fileID)
+	}
+
+	// TODO: Make this in separate function
+	networkGasPriceInTinyBars := networkGasPriceInWeiBars / 10000000000
+	maxFee := hedera.NewHbar(float64(networkGasPriceInTinyBars*maxGasPerSec) / 100000000.0)
+	ethereumTx.SetMaxTransactionFee(maxFee)
+
+	response, err := ethereumTx.Execute(h.Client)
+	if err != nil {
+		if fileID != nil {
+			_ = h.DeleteFile(*fileID)
+		}
+		return nil, fmt.Errorf("failed to execute transaction: %v", err)
+	}
+
+	return &TransactionResponse{
+		TransactionID: response.TransactionID.String(),
+		FileID:        fileID,
+	}, nil
+}
+
+// createFileForCallData creates a file to store large call data
+func (h *HederaClient) createFileForCallData(data []byte) (*hedera.FileID, error) {
+	// TODO: EstimateTxFee
+	// TODO: hbarLimitService - check if the limit is reached
+
+	// Create initial file with first chunk
+	fileCreateTx := hedera.NewFileCreateTransaction().
+		SetContents(data[:fileAppendChunkSize]).
+		SetKeys(h.Client.GetOperatorPublicKey())
+
+	resp, err := fileCreateTx.Execute(h.Client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create file: %v", err)
+	}
+
+	receipt, err := resp.GetReceipt(h.Client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file creation receipt: %v", err)
+	}
+
+	fileID := receipt.FileID
+	if fileID == nil {
+		return nil, fmt.Errorf("file creation did not return a file ID")
+	}
+
+	if len(data) > fileAppendChunkSize {
+		remaining := data[fileAppendChunkSize:]
+		for i := 0; i < len(remaining); i += fileAppendChunkSize {
+			end := i + fileAppendChunkSize
+			if end > len(remaining) {
+				end = len(remaining)
+			}
+
+			chunk := remaining[i:end]
+			appendTx := hedera.NewFileAppendTransaction().
+				SetFileID(*fileID).
+				SetContents(chunk)
+
+			_, err = appendTx.Execute(h.Client)
+			if err != nil {
+				_ = h.DeleteFile(*fileID)
+				return nil, fmt.Errorf("failed to append chunk %d: %v", i/fileAppendChunkSize+1, err)
+			}
+		}
+	}
+
+	return fileID, nil
+}
+
+func (h *HederaClient) DeleteFile(fileID hedera.FileID) error {
+	deleteTx, err := hedera.NewFileDeleteTransaction().
+		SetFileID(fileID).SetMaxTransactionFee(hedera.NewHbar(2)).FreezeWith(h.Client)
+	if err != nil {
+		return fmt.Errorf("failed to freeze delete transaction: %v", err)
+	}
+
+	_, err = deleteTx.Execute(h.Client)
+	if err != nil {
+		return fmt.Errorf("failed to delete file: %v", err)
+	}
+
+	return nil
 }
