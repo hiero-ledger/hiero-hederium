@@ -18,7 +18,7 @@ func main() {
 		fmt.Printf("Failed to load configuration: %v\n", err)
 		return
 	}
-	log := logger.InitLogger(viper.GetString("logging.level"))
+	log := logger.InitLogger("debug")
 	defer log.Sync()
 
 	hClient, err := hedera.NewHederaClient(

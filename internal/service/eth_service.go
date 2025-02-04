@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -24,6 +25,7 @@ type EthService struct {
 	logger        *zap.Logger
 	tieredLimiter *limiter.TieredLimiter
 	chainId       string
+	precheck      Precheck
 }
 
 func NewEthService(
@@ -39,6 +41,7 @@ func NewEthService(
 		logger:        log,
 		tieredLimiter: l,
 		chainId:       chainId,
+		precheck:      NewPrecheck(mClient, log, chainId),
 	}
 }
 
@@ -97,7 +100,7 @@ func (s *EthService) GetGasPrice() (interface{}, map[string]interface{}) {
 			"message": errMsg,
 		}
 	}
-	
+
 	gasPrice := "0x" + strconv.FormatUint(weibars.Uint64(), 16)
 
 	s.logger.Info("Successfully returned gas price", zap.String("gasPrice", gasPrice))
@@ -713,6 +716,62 @@ func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string
 	}
 
 	return s.getTransactionByBlockAndIndex(queryParamas)
+}
+
+func (s *EthService) SendRawTransaction(data string) (interface{}, map[string]interface{}) {
+	s.logger.Info("Sending raw transaction", zap.String("data", data))
+
+	parsedTx, err := ParseTransaction(data)
+	if err != nil {
+		return nil, map[string]interface{}{
+			"code":    -32000,
+			"message": fmt.Sprintf("Failed to parse transaction: %s", err.Error()),
+		}
+	}
+
+	if err = s.precheck.CheckSize(data); err != nil {
+		return nil, map[string]interface{}{
+			"code":    -32000,
+			"message": err.Error(),
+		}
+	}
+
+	gasPriceHex, errMap := s.GetGasPrice()
+	if errMap != nil {
+		return nil, errMap
+	}
+
+	gasPrice, errMap := HexToDec(gasPriceHex.(string))
+	if errMap != nil {
+		return nil, errMap
+	}
+
+	if err = s.precheck.SendRawTransactionCheck(parsedTx, gasPrice); err != nil {
+		return nil, map[string]interface{}{
+			"code":    -32000,
+			"message": fmt.Sprintf("Transaction rejected by precheck: %s", err.Error()),
+		}
+	}
+
+	rawTxHex := strings.TrimPrefix(data, "0x")
+
+	rawTx, err := hex.DecodeString(rawTxHex)
+	if err != nil {
+		return nil, map[string]interface{}{
+			"code":    -32000,
+			"message": fmt.Sprintf("Failed to decode raw transaction: %s", err.Error()),
+		}
+	}
+
+	txHash, err := s.SendRawTransactionProcessor(rawTx, parsedTx, gasPrice)
+	if err != nil {
+		return nil, map[string]interface{}{
+			"code":    -32000,
+			"message": fmt.Sprintf("Failed to process transaction: %s", err.Error()),
+		}
+	}
+
+	return txHash, nil
 }
 
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation

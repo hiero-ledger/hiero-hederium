@@ -625,6 +625,24 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		}
 
 		return ethService.GetTransactionByBlockNumberAndIndex(blockNumber, txIndex)
+	case "eth_sendRawTransaction":
+		paramsArray, ok := params.([]interface{})
+		if !ok || len(paramsArray) != 1 {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid params for eth_sendRawTransaction: expected [signedTransaction]",
+			}
+		}
+
+		signedTx, ok := paramsArray[0].(string)
+		if !ok || !IsValidHexNumber(signedTx) {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid signedTransaction: expected data with 0x prefix",
+			}
+		}
+
+		return ethService.SendRawTransaction(signedTx)
 	case "eth_blockNumber":
 		return ethService.GetBlockNumber()
 	case "eth_gasPrice":
