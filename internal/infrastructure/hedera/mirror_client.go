@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/LimeChain/Hederium/internal/domain"
+	"github.com/LimeChain/Hederium/internal/infrastructure/cache"
 	"go.uber.org/zap"
 )
 
@@ -34,16 +35,18 @@ type MirrorNodeClient interface {
 }
 
 type MirrorClient struct {
-	BaseURL string
-	Timeout time.Duration
-	logger  *zap.Logger
+	BaseURL      string
+	Timeout      time.Duration
+	logger       *zap.Logger
+	cacheService cache.CacheService
 }
 
-func NewMirrorClient(baseURL string, timeoutSeconds int, logger *zap.Logger) *MirrorClient {
+func NewMirrorClient(baseURL string, timeoutSeconds int, logger *zap.Logger, cacheService cache.CacheService) *MirrorClient {
 	return &MirrorClient{
-		BaseURL: baseURL,
-		Timeout: time.Duration(timeoutSeconds) * time.Second,
-		logger:  logger,
+		BaseURL:      baseURL,
+		Timeout:      time.Duration(timeoutSeconds) * time.Second,
+		logger:       logger,
+		cacheService: cacheService,
 	}
 }
 
