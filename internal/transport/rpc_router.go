@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	"github.com/LimeChain/Hederium/internal/infrastructure/cache"
 	"github.com/LimeChain/Hederium/internal/infrastructure/hedera"
 	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
 	"github.com/LimeChain/Hederium/internal/service"
@@ -23,9 +24,10 @@ func SetupRouter(
 	apiKeyStore *limiter.APIKeyStore,
 	tieredLimiter *limiter.TieredLimiter,
 	enforceAPIKey bool,
+	cacheService cache.CacheService,
 ) *gin.Engine {
 	logger = log
-	ethService = service.NewEthService(hClient, mClient, log, tieredLimiter, chainId)
+	ethService = service.NewEthService(hClient, mClient, log, tieredLimiter, chainId, cacheService)
 	web3Service = service.NewWeb3Service(log, applicationVersion)
 	netService = service.NewNetService(log, chainId)
 

@@ -1,12 +1,15 @@
 package service
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/LimeChain/Hederium/internal/domain"
+	"github.com/LimeChain/Hederium/internal/infrastructure/cache"
 	infrahedera "github.com/LimeChain/Hederium/internal/infrastructure/hedera"
 	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -30,6 +33,8 @@ type EthService struct {
 	tieredLimiter *limiter.TieredLimiter
 	chainId       string
 	precheck      Precheck
+	cacheService  cache.CacheService
+	ctx           context.Context
 }
 
 func NewEthService(
@@ -38,6 +43,7 @@ func NewEthService(
 	log *zap.Logger,
 	l *limiter.TieredLimiter,
 	chainId string,
+	cacheService cache.CacheService,
 ) *EthService {
 	return &EthService{
 		hClient:       hClient,
@@ -46,6 +52,8 @@ func NewEthService(
 		tieredLimiter: l,
 		chainId:       chainId,
 		precheck:      NewPrecheck(mClient, log, chainId),
+		cacheService:  cacheService,
+		ctx:           context.Background(),
 	}
 }
 

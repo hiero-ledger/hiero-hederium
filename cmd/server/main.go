@@ -42,7 +42,7 @@ func main() {
 
 	cacheService := cache.NewMemoryCache(viper.GetDuration("cache.defaultExpiration"), viper.GetDuration("cache.cleanupInterval"))
 
-	router := transport.SetupRouter(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey)
+	router := transport.SetupRouter(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, cacheService)
 	port := viper.GetString("server.port")
 	log.Info("Starting Hederium server", zap.String("port", port))
 	if err := router.Run(":" + port); err != nil {
