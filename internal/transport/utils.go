@@ -27,3 +27,7 @@ func IsValidHexHash(hexHash string) bool {
 func IsValidBlockHash(blockHash string) bool {
 	return regexp.MustCompile("^0x[a-fA-F0-9]{64}$").MatchString(blockHash)
 }
+
+func IsValidBlock(block string) bool {
+	return IsValidBlockNumberOrTag(block) || IsValidBlockHash(block)
+}
