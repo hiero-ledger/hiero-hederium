@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
+	"github.com/LimeChain/Hederium/internal/infrastructure/cache"
 	"github.com/LimeChain/Hederium/internal/infrastructure/config"
 	"github.com/LimeChain/Hederium/internal/infrastructure/hedera"
 	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
@@ -38,6 +39,8 @@ func main() {
 	mClient := hedera.NewMirrorClient(viper.GetString("mirrorNode.baseUrl"), viper.GetInt("mirrorNode.timeoutSeconds"), log)
 
 	enforceAPIKey := viper.GetBool("features.enforceApiKey")
+
+	cacheService := cache.NewMemoryCache(viper.GetDuration("cache.defaultExpiration"), viper.GetDuration("cache.cleanupInterval"))
 
 	router := transport.SetupRouter(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey)
 	port := viper.GetString("server.port")
