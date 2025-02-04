@@ -1257,20 +1257,10 @@ func TestFeeHistory(t *testing.T) {
 						"number": float64(100),
 					}, nil).Times(2)
 
-				// Mock GetBlockByHashOrNumber for each block in the range
-				for i := 96; i <= 100; i++ {
-					mockClient.EXPECT().
-						GetBlockByHashOrNumber(strconv.Itoa(i)).
-						Return(&domain.BlockResponse{
-							Number:  i,
-							GasUsed: 50000,
-						})
-				}
-
-				// Mock GetGasPrice via GetNetworkFees for each block
+				// Mock GetNetworkFees for gas price
 				mockClient.EXPECT().
-					GetNetworkFees("", "desc").
-					Return(int64(10000000), nil).Times(5)
+					GetNetworkFees("", "").
+					Return(int64(100000), nil)
 			},
 			validateResult: func(t *testing.T, result interface{}) {
 				feeHistory, ok := result.(*domain.FeeHistory)
@@ -1279,6 +1269,48 @@ func TestFeeHistory(t *testing.T) {
 				assert.Equal(t, 6, len(feeHistory.BaseFeePerGas)) // blockCount + 1
 				assert.Equal(t, 5, len(feeHistory.GasUsedRatio))
 				assert.Equal(t, 5, len(feeHistory.Reward))
+				// All base fees should be the same since we're using fixed fee
+				expectedFee := "0x38d7ea4c68000" // 100000 * 10^10 in hex
+				for _, fee := range feeHistory.BaseFeePerGas {
+					assert.Equal(t, expectedFee, fee)
+				}
+				// All gas used ratios should be 0.5
+				for _, ratio := range feeHistory.GasUsedRatio {
+					assert.Equal(t, 0.5, ratio)
+				}
+			},
+		},
+		{
+			name:              "Block count exceeds maximum",
+			blockCount:        "0x14", // 20 blocks, more than max (10)
+			newestBlock:       "latest",
+			rewardPercentiles: []string{},
+			mockLatestBlock: map[string]interface{}{
+				"number": float64(100),
+			},
+			expectNil:   false,
+			expectError: false,
+			setupMocks: func() {
+				mockClient.EXPECT().
+					GetLatestBlock().
+					Return(map[string]interface{}{
+						"number": float64(100),
+					}, nil).Times(2)
+
+				mockClient.EXPECT().
+					GetNetworkFees("", "").
+					Return(int64(100000), nil)
+			},
+			validateResult: func(t *testing.T, result interface{}) {
+				feeHistory, ok := result.(*domain.FeeHistory)
+				assert.True(t, ok)
+				assert.Equal(t, "0x5b", feeHistory.OldestBlock)    // 91 in hex (100-10+1)
+				assert.Equal(t, 11, len(feeHistory.BaseFeePerGas)) // maxBlockCountForResult + 1
+				assert.Equal(t, 10, len(feeHistory.GasUsedRatio))  // maxBlockCountForResult
+				expectedFee := "0x38d7ea4c68000"                   // 100000 * 10^10 in hex
+				for _, fee := range feeHistory.BaseFeePerGas {
+					assert.Equal(t, expectedFee, fee)
+				}
 			},
 		},
 		{
@@ -1319,9 +1351,34 @@ func TestFeeHistory(t *testing.T) {
 			},
 		},
 		{
-			name:              "Block count exceeds maximum",
-			blockCount:        "0x14", // 20 blocks, more than max (10)
+			name:              "GetGasPrice error",
+			blockCount:        "0x5",
 			newestBlock:       "latest",
+			rewardPercentiles: []string{},
+			mockLatestBlock: map[string]interface{}{
+				"number": float64(100),
+			},
+			expectNil:   true,
+			expectError: true,
+			setupMocks: func() {
+				mockClient.EXPECT().
+					GetLatestBlock().
+					Return(map[string]interface{}{
+						"number": float64(100),
+					}, nil).Times(2)
+
+				mockClient.EXPECT().
+					GetNetworkFees("", "").
+					Return(int64(0), fmt.Errorf("failed to get gas price"))
+			},
+			validateResult: func(t *testing.T, result interface{}) {
+				assert.Nil(t, result)
+			},
+		},
+		{
+			name:              "Negative oldest block",
+			blockCount:        "0x65", // 101 blocks
+			newestBlock:       "0x5",  // block 5
 			rewardPercentiles: []string{},
 			mockLatestBlock: map[string]interface{}{
 				"number": float64(100),
@@ -1333,29 +1390,22 @@ func TestFeeHistory(t *testing.T) {
 					GetLatestBlock().
 					Return(map[string]interface{}{
 						"number": float64(100),
-					}, nil).Times(2)
+					}, nil)
 
-				// Mock GetBlockByHashOrNumber for each block in the range
-				for i := 91; i <= 100; i++ {
-					mockClient.EXPECT().
-						GetBlockByHashOrNumber(strconv.Itoa(i)).
-						Return(&domain.BlockResponse{
-							Number:  i,
-							GasUsed: 50000,
-						})
-				}
-
-				// Mock GetGasPrice via GetNetworkFees for each block
 				mockClient.EXPECT().
-					GetNetworkFees("", "desc").
-					Return(int64(100000), nil).Times(10)
+					GetNetworkFees("", "").
+					Return(int64(100000), nil)
 			},
 			validateResult: func(t *testing.T, result interface{}) {
 				feeHistory, ok := result.(*domain.FeeHistory)
 				assert.True(t, ok)
-				assert.Equal(t, "0x5b", feeHistory.OldestBlock)    // 91 in hex (100-10+1)
-				assert.Equal(t, 11, len(feeHistory.BaseFeePerGas)) // maxBlockCountForResult + 1
-				assert.Equal(t, 10, len(feeHistory.GasUsedRatio))  // maxBlockCountForResult
+				assert.Equal(t, "0x1", feeHistory.OldestBlock)    // Should be set to 1 when negative
+				assert.Equal(t, 2, len(feeHistory.BaseFeePerGas)) // blockCount should be set to 1
+				assert.Equal(t, 1, len(feeHistory.GasUsedRatio))
+				expectedFee := "0x38d7ea4c68000" // 100000 * 10^10 in hex
+				for _, fee := range feeHistory.BaseFeePerGas {
+					assert.Equal(t, expectedFee, fee)
+				}
 			},
 		},
 	}

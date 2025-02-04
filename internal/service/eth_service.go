@@ -537,9 +537,9 @@ func (s *EthService) FeeHistory(blockCount string, newestBlock string, rewardPer
 
 	oldestBlockInt := newestBlockInt - blockCountInt + 1
 
-	fixed_Fee := false // TODO: see how to get this fixed_Fee
+	fixed_Fee := true // The nodejs implementation uses this flag to determine if the fee is fixed or not
 	if fixed_Fee {
-		if oldestBlockInt < 0 {
+		if oldestBlockInt <= 0 {
 			blockCountInt = 1
 			oldestBlockInt = 1
 		}
