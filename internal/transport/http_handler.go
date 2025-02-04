@@ -536,7 +536,6 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 
 		}
 
-
 		return ethService.GetLogs(*logParams)
 	case "eth_getBlockTransactionCountByHash":
 		paramsArray, ok := params.([]interface{})
@@ -643,6 +642,32 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		}
 
 		return ethService.SendRawTransaction(signedTx)
+	case "eth_getCode":
+		paramsArray, ok := params.([]interface{})
+		if !ok || len(paramsArray) != 2 {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid params for eth_getCode: expected [address, blockNumber/blockHash/tag]",
+			}
+		}
+
+		address, ok := paramsArray[0].(string)
+		if !ok || !IsValidAddress(address) {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid address: must be a valid  hex string starting with 0x",
+			}
+		}
+
+		blockNumber, ok := paramsArray[1].(string)
+		if !ok || !IsValidBlock(blockNumber) {
+			return nil, map[string]interface{}{
+				"code":    -32602,
+				"message": "Invalid blockNumber: must be a hex string (e.g. '0x1') or tag (latest/pending/earliest)",
+			}
+		}
+
+		return ethService.GetCode(address, blockNumber)
 	case "eth_blockNumber":
 		return ethService.GetBlockNumber()
 	case "eth_gasPrice":

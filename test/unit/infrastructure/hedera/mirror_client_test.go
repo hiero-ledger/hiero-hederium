@@ -935,10 +935,8 @@ func TestGetContractById(t *testing.T) {
 			contractId: "0.0.123",
 			mockResponse: func() *domain.ContractResponse {
 				bytecode := "0x123456"
-				adminKey := "admin_key"
 				return &domain.ContractResponse{
 					ContractID: "0.0.123",
-					AdminKey:   &adminKey,
 					Bytecode:   &bytecode,
 					Timestamp:  domain.Timestamp{From: "1234567890.000000000", To: "1234567890.000000000"},
 					EvmAddress: "0x1234567890123456789012345678901234567890",
@@ -947,10 +945,8 @@ func TestGetContractById(t *testing.T) {
 			}(),
 			expectedResult: func() *domain.ContractResponse {
 				bytecode := "0x123456"
-				adminKey := "admin_key"
 				return &domain.ContractResponse{
 					ContractID: "0.0.123",
-					AdminKey:   &adminKey,
 					Bytecode:   &bytecode,
 					Timestamp:  domain.Timestamp{From: "1234567890.000000000", To: "1234567890.000000000"},
 					EvmAddress: "0x1234567890123456789012345678901234567890",
