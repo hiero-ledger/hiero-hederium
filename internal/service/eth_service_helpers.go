@@ -1,13 +1,19 @@
 package service
 
 import (
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/LimeChain/Hederium/internal/domain"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/rlp"
 	"go.uber.org/zap"
 )
 
@@ -848,8 +854,107 @@ func (s *EthService) getTransactionByBlockAndIndex(queryParamas map[string]inter
 	return ProcessTransaction(*transaction), nil
 }
 
+func ParseTransaction(rawTxHex string) (*types.Transaction, error) {
+	if rawTxHex == "" {
+		return nil, errors.New("transaction data is empty")
+	}
+
+	rawTxHex = strings.TrimPrefix(rawTxHex, "0x")
+
+	rawTx, err := hex.DecodeString(rawTxHex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode hex string: %w", err)
+	}
+
+	tx := new(types.Transaction)
+	if err := rlp.DecodeBytes(rawTx, tx); err != nil {
+		return nil, fmt.Errorf("failed to decode transaction: %w", err)
+	}
+
+	return tx, nil
+}
+
 // Add 10% buffer to the gas price
 func AddBuffer(weibars *big.Int) *big.Int {
 	buffer := new(big.Int).Div(weibars, big.NewInt(10))
 	return weibars.Add(weibars, buffer)
+}
+
+// ProcessRawTransaction handles the processing of a raw Ethereum transaction for Hedera
+func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *types.Transaction, gasPrice int64) (*string, error) {
+	// Get the sender address for event tracking
+	fromAddress, err := GetFromAddress(tx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sender address: %w", err)
+	}
+
+	// Get the recipient address for event tracking
+	var toAddress string
+	if tx.To() != nil {
+		toAddress = tx.To().String()
+	}
+
+	// Send the raw transaction using the client's implementation
+	response, err := s.hClient.SendRawTransaction(transactionData, gasPrice, fromAddress)
+	if err != nil {
+		s.logger.Error("Failed to send raw transaction",
+			zap.Error(err),
+			zap.String("from", fromAddress.String()),
+			zap.String("to", toAddress),
+			zap.Int64("gasPrice", gasPrice))
+		return nil, fmt.Errorf("failed to send raw transaction: %w", err)
+	}
+
+	subbmitedTransactionId := response.TransactionID
+
+	transactionIDRegex := regexp.MustCompile(`\d{1}\.\d{1}\.\d{1,10}\@\d{1,10}\.\d{1,9}`)
+	if !transactionIDRegex.MatchString(subbmitedTransactionId) {
+		s.logger.Error("Invalid transaction ID format", zap.String("transactionID", subbmitedTransactionId))
+		return nil, fmt.Errorf("invalid transaction ID format: %s", subbmitedTransactionId)
+	}
+
+	if subbmitedTransactionId != "" {
+		transactionId := ConvertTransactionID(subbmitedTransactionId)
+		contractResult := s.mClient.RepeatGetContractResult(transactionId, 10)
+		if contractResult == nil {
+			s.logger.Error("Failed to get contract result",
+				zap.String("transactionID", transactionId))
+			return nil, fmt.Errorf("no matching transaction record retrieved: %s", transactionId)
+		}
+
+		hash := contractResult.Hash
+
+		if hash == "" {
+			s.logger.Error("Transaction returned a null transaction hash:",
+				zap.String("transactionID", subbmitedTransactionId))
+			return nil, fmt.Errorf("no matching transaction record retrieved: %s", subbmitedTransactionId)
+		}
+
+		s.logger.Info("Transaction sent successfully",
+			zap.String("transactionID", hash),
+			zap.String("from", fromAddress.String()),
+			zap.String("to", toAddress),
+			zap.Int64("gasPrice", gasPrice))
+
+		return &hash, nil
+	}
+
+	return nil, fmt.Errorf("failed to send transaction: %w", err)
+}
+
+func GetFromAddress(tx *types.Transaction) (*common.Address, error) {
+	signer := types.NewEIP155Signer(tx.ChainId())
+	from, err := types.Sender(signer, tx)
+	if err != nil {
+		return nil, err
+	}
+	return &from, nil
+}
+
+func ConvertTransactionID(transactionID string) string {
+	parts := strings.Split(transactionID, "@")
+
+	parts[1] = strings.ReplaceAll(parts[1], ".", "-")
+
+	return parts[0] + "-" + parts[1]
 }

@@ -30,6 +30,7 @@ type MirrorNodeClient interface {
 	GetContractById(contractIdOrAddress string) (*domain.ContractResponse, error)
 	GetAccountById(idOrAliasOrEvmAddress string) (*domain.AccountResponse, error)
 	GetTokenById(tokenId string) (*domain.TokenResponse, error)
+	RepeatGetContractResult(transactionIdOrHash string, retries int) *domain.ContractResultResponse
 }
 
 type MirrorClient struct {
@@ -307,7 +308,11 @@ func (m *MirrorClient) GetContractResult(transactionIdOrHash string) interface{}
 	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BaseURL+"/api/v1/contracts/results/"+transactionIdOrHash, nil)
+	url := fmt.Sprintf("%s/api/v1/contracts/results/%s", m.BaseURL, transactionIdOrHash)
+
+	m.logger.Info("Getting contract result", zap.String("url", url))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		m.logger.Error("Error creating request to get contract result", zap.Error(err))
 		return nil
@@ -331,7 +336,21 @@ func (m *MirrorClient) GetContractResult(transactionIdOrHash string) interface{}
 		return nil
 	}
 
+	m.logger.Info("Contract result", zap.Any("result", result))
+
 	return result
+}
+
+func (m *MirrorClient) RepeatGetContractResult(transactionIdOrHash string, retries int) *domain.ContractResultResponse {
+	for i := 0; i < retries; i++ {
+		result := m.GetContractResult(transactionIdOrHash)
+		if result, ok := result.(domain.ContractResultResponse); ok {
+			return &result
+		}
+
+		time.Sleep(1 * time.Second)
+	}
+	return nil
 }
 
 func (m *MirrorClient) PostCall(callObject map[string]interface{}) interface{} {
