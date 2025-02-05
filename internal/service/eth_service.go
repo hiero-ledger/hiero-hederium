@@ -186,45 +186,21 @@ func (s *EthService) GetBlockByHash(hash string, showDetails bool) (interface{},
 //   - map[string]interface{}: Error information if any occurred, nil otherwise
 func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting block by number", zap.String("numberOrTag", numberOrTag), zap.Bool("showDetails", showDetails))
-	var blockNumber string
-	switch numberOrTag {
-	case "latest", "pending":
-		latestBlock, errMap := s.GetBlockNumber()
-		if errMap != nil {
-			s.logger.Debug("Failed to get latest block number")
-			return nil, nil
-		}
+	
+	blockNumber, errMap := s.getBlockNumberByHashOrTag(numberOrTag)
+	if errMap != nil {
+		return nil, errMap
+	}
 
-		latestBlockStr, ok := latestBlock.(string)
-		if !ok {
-			s.logger.Debug("Invalid block number format")
-			return nil, nil
-		}
-
-		// Convert hex string to int, remove "0x" prefix
-		latestBlockNum, err := strconv.ParseInt(latestBlockStr[2:], 16, 64)
-		if err != nil {
-			s.logger.Debug("Failed to parse latest block number", zap.Error(err))
-			return nil, nil
-		}
-		blockNumber = strconv.FormatInt(latestBlockNum, 10)
-	case "earliest":
-		blockNumber = "0"
-	default:
-		// If it's a hex number, convert it to decimal
-		if strings.HasPrefix(numberOrTag, "0x") {
-			num, err := strconv.ParseInt(numberOrTag[2:], 16, 64)
-			if err != nil {
-				s.logger.Debug("Failed to parse block number", zap.Error(err))
-				return nil, nil
-			}
-			blockNumber = strconv.FormatInt(num, 10)
-		} else {
-			blockNumber = numberOrTag
+	blockNumberInt, ok := blockNumber.(int64)
+	if !ok {
+		return nil, map[string]interface{}{
+			"code":    -32602,
+			"message": "Invalid block number",
 		}
 	}
 
-	block := s.mClient.GetBlockByHashOrNumber(blockNumber)
+	block := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockNumberInt, 10))
 	if block == nil {
 		return nil, nil
 	}
