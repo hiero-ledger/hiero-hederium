@@ -99,10 +99,10 @@ func (s *EthService) GetBlockNumber() (interface{}, map[string]interface{}) {
 func (s *EthService) GetGasPrice() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting gas price")
 
-	cachedKey := GetGasPrice
+	cacheKey := GetGasPrice
 
 	var cachedPrice string
-	err := s.cacheService.Get(s.ctx, cachedKey, &cachedPrice)
+	err := s.cacheService.Get(s.ctx, cacheKey, &cachedPrice)
 	if err == nil && cachedPrice != "" {
 		s.logger.Info("Gas price fetched from cache", zap.Any("gasPrice", cachedPrice))
 		return cachedPrice, nil
@@ -123,7 +123,7 @@ func (s *EthService) GetGasPrice() (interface{}, map[string]interface{}) {
 
 	gasPrice := fmt.Sprintf("0x%x", weibars)
 
-	if err := s.cacheService.Set(s.ctx, cachedKey, gasPrice, DefaultExpiration); err != nil {
+	if err := s.cacheService.Set(s.ctx, cacheKey, gasPrice, DefaultExpiration); err != nil {
 		s.logger.Debug("Failed to cache gas price", zap.Error(err))
 	}
 
@@ -148,10 +148,10 @@ func (s *EthService) GetChainId() (interface{}, map[string]interface{}) {
 func (s *EthService) GetBlockByHash(hash string, showDetails bool) (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting block by hash", zap.String("hash", hash), zap.Bool("showDetails", showDetails))
 
-	cachedKey := fmt.Sprintf("%s_%s_%t", GetBlockByHash, hash, showDetails)
+	cacheKey := fmt.Sprintf("%s_%s_%t", GetBlockByHash, hash, showDetails)
 
 	var cachedBlock domain.Block
-	if err := s.cacheService.Get(s.ctx, cachedKey, &cachedBlock); err == nil && cachedBlock.Hash != nil {
+	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedBlock); err == nil && cachedBlock.Hash != nil {
 		s.logger.Info("Block fetched from cache", zap.Any("block", cachedBlock))
 		return cachedBlock, nil
 	}
@@ -166,7 +166,7 @@ func (s *EthService) GetBlockByHash(hash string, showDetails bool) (interface{},
 		return nil, errMap
 	}
 
-	if err := s.cacheService.Set(s.ctx, cachedKey, &processedBlock, DefaultExpiration); err != nil {
+	if err := s.cacheService.Set(s.ctx, cacheKey, &processedBlock, DefaultExpiration); err != nil {
 		s.logger.Debug("Failed to cache block", zap.Error(err))
 	}
 
@@ -449,10 +449,10 @@ func (s *EthService) Call(transaction interface{}, blockParam interface{}) (inte
 func (s *EthService) GetTransactionByHash(hash string) interface{} {
 	s.logger.Info("Getting transaction by hash", zap.String("hash", hash))
 
-	cachedKey := fmt.Sprintf("%s_%s", GetTransactionByHash, hash)
+	cacheKey := fmt.Sprintf("%s_%s", GetTransactionByHash, hash)
 
 	var cachedTx interface{}
-	if err := s.cacheService.Get(s.ctx, cachedKey, &cachedTx); err == nil && cachedTx != nil {
+	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedTx); err == nil && cachedTx != nil {
 		s.logger.Info("Transaction fetched from cache", zap.Any("transaction", cachedTx))
 		return cachedTx
 	}
@@ -467,7 +467,7 @@ func (s *EthService) GetTransactionByHash(hash string) interface{} {
 	// TODO: Resolve evm addresses
 	transaction := ProcessTransactionResponse(contractResultResponse)
 
-	if err := s.cacheService.Set(s.ctx, cachedKey, &transaction, DefaultExpiration); err != nil {
+	if err := s.cacheService.Set(s.ctx, cacheKey, &transaction, DefaultExpiration); err != nil {
 		s.logger.Debug("Failed to cache transaction", zap.Error(err))
 	}
 
@@ -477,10 +477,10 @@ func (s *EthService) GetTransactionByHash(hash string) interface{} {
 func (s *EthService) GetTransactionReceipt(hash string) interface{} {
 	s.logger.Info("Getting transaction receipt", zap.String("hash", hash))
 
-	cachedKey := fmt.Sprintf("%s_%s", GetTransactionReceipt, hash)
+	cacheKey := fmt.Sprintf("%s_%s", GetTransactionReceipt, hash)
 
 	var cachedReceipt interface{}
-	if err := s.cacheService.Get(s.ctx, cachedKey, &cachedReceipt); err == nil && cachedReceipt != nil {
+	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedReceipt); err == nil && cachedReceipt != nil {
 		s.logger.Info("Transaction receipt fetched from cache", zap.Any("receipt", cachedReceipt))
 		return cachedReceipt
 	}
@@ -547,7 +547,7 @@ func (s *EthService) GetTransactionReceipt(hash string) interface{} {
 		}(),
 	}
 
-	if err := s.cacheService.Set(s.ctx, cachedKey, &receipt, DefaultExpiration); err != nil {
+	if err := s.cacheService.Set(s.ctx, cacheKey, &receipt, DefaultExpiration); err != nil {
 		s.logger.Debug("Failed to cache transaction receipt", zap.Error(err))
 	}
 
@@ -708,11 +708,11 @@ func (s *EthService) GetLogs(logParams domain.LogParams) (interface{}, map[strin
 func (s *EthService) GetBlockTransactionCountByHash(blockHash string) (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting block transaction count by hash", zap.String("blockHash", blockHash))
 
-	cachedKey := fmt.Sprintf("%s_%s", GetBlockTransactionCountByHash, blockHash)
+	cacheKey := fmt.Sprintf("%s_%s", GetBlockTransactionCountByHash, blockHash)
 
 	var transactionCount string
 
-	if err := s.cacheService.Get(s.ctx, cachedKey, &transactionCount); err == nil && transactionCount != "" {
+	if err := s.cacheService.Get(s.ctx, cacheKey, &transactionCount); err == nil && transactionCount != "" {
 		s.logger.Info("Transaction count fetched from cache", zap.String("count", transactionCount))
 		return transactionCount, nil
 	}
@@ -725,7 +725,7 @@ func (s *EthService) GetBlockTransactionCountByHash(blockHash string) (interface
 
 	transactionCount = fmt.Sprintf("0x%x", block.Count)
 
-	if err := s.cacheService.Set(s.ctx, cachedKey, transactionCount, DefaultExpiration); err != nil {
+	if err := s.cacheService.Set(s.ctx, cacheKey, transactionCount, DefaultExpiration); err != nil {
 		s.logger.Debug("Failed to cache transaction count", zap.Error(err))
 	}
 
@@ -774,10 +774,10 @@ func (s *EthService) GetBlockTransactionCountByNumber(blockNumberOrTag string) (
 func (s *EthService) GetTransactionByBlockHashAndIndex(blockHash string, txIndex string) (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting transaction by block and index", zap.String("blockHash", blockHash), zap.String("txIndex", txIndex))
 
-	cachedKey := fmt.Sprintf("%s_%s_%s", GetTransactionByBlockHashAndIndex, blockHash, txIndex)
+	cacheKey := fmt.Sprintf("%s_%s_%s", GetTransactionByBlockHashAndIndex, blockHash, txIndex)
 
 	var cachedTx interface{}
-	if err := s.cacheService.Get(s.ctx, cachedKey, &cachedTx); err == nil && cachedTx != nil {
+	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedTx); err == nil && cachedTx != nil {
 		s.logger.Info("Transaction fetched from cache", zap.Any("transaction", cachedTx))
 		return cachedTx, nil
 	}
@@ -798,7 +798,7 @@ func (s *EthService) GetTransactionByBlockHashAndIndex(blockHash string, txIndex
 	}
 
 	if tx != nil {
-		if err := s.cacheService.Set(s.ctx, cachedKey, tx, DefaultExpiration); err != nil {
+		if err := s.cacheService.Set(s.ctx, cacheKey, tx, DefaultExpiration); err != nil {
 			s.logger.Debug("Failed to cache transaction", zap.Error(err))
 		}
 	}
@@ -809,10 +809,10 @@ func (s *EthService) GetTransactionByBlockHashAndIndex(blockHash string, txIndex
 func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string, txIndex string) (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting transaction by block number and index", zap.String("blockNumberOrTag", blockNumberOrTag), zap.String("txIndex", txIndex))
 
-	cachedKey := fmt.Sprintf("%s_%s_%s", GetTransactionByBlockNumberAndIndex, blockNumberOrTag, txIndex)
+	cacheKey := fmt.Sprintf("%s_%s_%s", GetTransactionByBlockNumberAndIndex, blockNumberOrTag, txIndex)
 
 	var cachedTx interface{}
-	if err := s.cacheService.Get(s.ctx, cachedKey, &cachedTx); err == nil && cachedTx != nil {
+	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedTx); err == nil && cachedTx != nil {
 		s.logger.Info("Transaction fetched from cache", zap.Any("transaction", cachedTx))
 		return cachedTx, nil
 	}
@@ -846,7 +846,7 @@ func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string
 	}
 
 	if tx != nil {
-		if err := s.cacheService.Set(s.ctx, cachedKey, tx, DefaultExpiration); err != nil {
+		if err := s.cacheService.Set(s.ctx, cacheKey, tx, DefaultExpiration); err != nil {
 			s.logger.Debug("Failed to cache transaction", zap.Error(err))
 		}
 	}
