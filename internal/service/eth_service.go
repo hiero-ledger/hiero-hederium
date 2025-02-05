@@ -186,7 +186,15 @@ func (s *EthService) GetBlockByHash(hash string, showDetails bool) (interface{},
 //   - map[string]interface{}: Error information if any occurred, nil otherwise
 func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting block by number", zap.String("numberOrTag", numberOrTag), zap.Bool("showDetails", showDetails))
-	
+
+	cachedKey := fmt.Sprintf("%s_%s_%t", GetBlockByNumber, numberOrTag, showDetails)
+
+	var cachedBlock domain.Block
+	if err := s.cacheService.Get(s.ctx, cachedKey, &cachedBlock); err == nil && cachedBlock.Hash != nil {
+		s.logger.Info("Block fetched from cache", zap.Any("block", cachedBlock))
+		return cachedBlock, nil
+	}
+
 	blockNumber, errMap := s.getBlockNumberByHashOrTag(numberOrTag)
 	if errMap != nil {
 		return nil, errMap
@@ -205,7 +213,16 @@ func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (int
 		return nil, nil
 	}
 
-	return ProcessBlock(s, block, showDetails)
+	processedBlock, errMap := ProcessBlock(s, block, showDetails)
+	if errMap != nil {
+		return nil, errMap
+	}
+
+	if err := s.cacheService.Set(s.ctx, cachedKey, &processedBlock, DefaultExpiration); err != nil {
+		s.logger.Debug("Failed to cache block", zap.Error(err))
+	}
+
+	return processedBlock, nil
 }
 
 func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) string {
