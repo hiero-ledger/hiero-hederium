@@ -116,7 +116,7 @@ func (m *MirrorClient) GetBlockByHashOrNumber(hashOrNumber string) *domain.Block
 		return nil
 	}
 
-	if err := m.cacheService.Set(ctx, cachedKey, result, DefaultExpiration); err != nil {
+	if err := m.cacheService.Set(ctx, cachedKey, &result, DefaultExpiration); err != nil {
 		m.logger.Error("Error caching block", zap.Error(err))
 	}
 
@@ -357,7 +357,7 @@ func (m *MirrorClient) GetContractResult(transactionIdOrHash string) interface{}
 		return nil
 	}
 
-	if err := m.cacheService.Set(ctx, cachedKey, result, DefaultExpiration); err != nil {
+	if err := m.cacheService.Set(ctx, cachedKey, &result, DefaultExpiration); err != nil {
 		m.logger.Error("Error caching contract result", zap.Error(err))
 	}
 
@@ -679,7 +679,7 @@ func (m *MirrorClient) GetContractById(contractIdOrAddress string) (*domain.Cont
 		return nil, err
 	}
 
-	if err := m.cacheService.Set(ctx, cachedKey, result, DefaultExpiration); err != nil {
+	if err := m.cacheService.Set(ctx, cachedKey, &result, DefaultExpiration); err != nil {
 		m.logger.Error("Error caching contract", zap.Error(err))
 	}
 
@@ -725,7 +725,7 @@ func (m *MirrorClient) GetAccountById(idOrAliasOrEvmAddress string) (*domain.Acc
 		return nil, err
 	}
 
-	if err := m.cacheService.Set(ctx, cachedKey, result, DefaultExpiration); err != nil {
+	if err := m.cacheService.Set(ctx, cachedKey, &result, DefaultExpiration); err != nil {
 		m.logger.Error("Error caching account", zap.Error(err))
 	}
 
@@ -771,7 +771,7 @@ func (m *MirrorClient) GetTokenById(tokenId string) (*domain.TokenResponse, erro
 		return nil, err
 	}
 
-	if err := m.cacheService.Set(ctx, cachedKey, result, DefaultExpiration); err != nil {
+	if err := m.cacheService.Set(ctx, cachedKey, &result, DefaultExpiration); err != nil {
 		m.logger.Error("Error caching token", zap.Error(err))
 	}
 
