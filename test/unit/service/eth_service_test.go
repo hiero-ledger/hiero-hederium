@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -520,49 +521,68 @@ func TestGetBlockByNumber(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name            string
-		numberOrTag     string
-		showDetails     bool
-		mockLatestBlock map[string]interface{}
-		mockResponse    *domain.BlockResponse
-		mockResults     []domain.ContractResults
-		expectNil       bool
-		setupMocks      func()
+		name         string
+		numberOrTag  string
+		showDetails  bool
+		mockResponse *domain.BlockResponse
+		mockResults  []domain.ContractResults
+		expectNil    bool
+		setupMocks   func()
 	}{
 		{
 			name:         "Success with specific number",
-			numberOrTag:  "0x7b", // 123 in hex
+			numberOrTag:  "0x7b",
 			showDetails:  false,
 			mockResponse: expectedBlock,
-			mockResults: []domain.ContractResults{
-				{Hash: "0xtx1", Result: "SUCCESS"},
-			},
-			expectNil: false,
+			mockResults:  []domain.ContractResults{{Hash: "0xtx1"}},
+			expectNil:    false,
 			setupMocks: func() {
+				cacheKey := fmt.Sprintf("%s_%s_%t", service.GetBlockByNumber, "0x7b", false)
+				cacheService.EXPECT().
+					Get(gomock.Any(), cacheKey, gomock.Any()).
+					Return(errors.New("not found"))
+
 				mockClient.EXPECT().
 					GetBlockByHashOrNumber("123").
 					Return(expectedBlock)
+
+				mockClient.EXPECT().
+					GetContractResults(expectedBlock.Timestamp).
+					Return([]domain.ContractResults{{Hash: "0xtx1"}})
+
+				cacheService.EXPECT().
+					Set(gomock.Any(), cacheKey, gomock.Any(), service.DefaultExpiration).
+					Return(nil)
 			},
 		},
 		{
-			name:            "Success with latest tag",
-			numberOrTag:     "latest",
-			showDetails:     false,
-			mockLatestBlock: map[string]interface{}{"number": float64(123)},
-			mockResponse:    expectedBlock,
-			mockResults: []domain.ContractResults{
-				{Hash: "0xtx1", Result: "SUCCESS"},
-			},
-			expectNil: false,
+			name:         "Success with latest tag",
+			numberOrTag:  "latest",
+			showDetails:  false,
+			mockResponse: expectedBlock,
+			mockResults:  []domain.ContractResults{{Hash: "0xtx1"}},
+			expectNil:    false,
 			setupMocks: func() {
+				cacheKey := fmt.Sprintf("%s_%s_%t", service.GetBlockByNumber, "latest", false)
+				cacheService.EXPECT().
+					Get(gomock.Any(), cacheKey, gomock.Any()).
+					Return(errors.New("not found"))
+
 				mockClient.EXPECT().
 					GetLatestBlock().
-					Return(map[string]interface{}{
-						"number": float64(123),
-					}, nil)
+					Return(map[string]interface{}{"number": float64(123)}, nil)
+
 				mockClient.EXPECT().
 					GetBlockByHashOrNumber("123").
 					Return(expectedBlock)
+
+				mockClient.EXPECT().
+					GetContractResults(expectedBlock.Timestamp).
+					Return([]domain.ContractResults{{Hash: "0xtx1"}})
+
+				cacheService.EXPECT().
+					Set(gomock.Any(), cacheKey, gomock.Any(), service.DefaultExpiration).
+					Return(nil)
 			},
 		},
 		{
@@ -570,14 +590,25 @@ func TestGetBlockByNumber(t *testing.T) {
 			numberOrTag:  "earliest",
 			showDetails:  false,
 			mockResponse: expectedBlock,
-			mockResults: []domain.ContractResults{
-				{Hash: "0xtx1", Result: "SUCCESS"},
-			},
-			expectNil: false,
+			mockResults:  []domain.ContractResults{{Hash: "0xtx1"}},
+			expectNil:    false,
 			setupMocks: func() {
+				cacheKey := fmt.Sprintf("%s_%s_%t", service.GetBlockByNumber, "earliest", false)
+				cacheService.EXPECT().
+					Get(gomock.Any(), cacheKey, gomock.Any()).
+					Return(errors.New("not found"))
+
 				mockClient.EXPECT().
 					GetBlockByHashOrNumber("0").
 					Return(expectedBlock)
+
+				mockClient.EXPECT().
+					GetContractResults(expectedBlock.Timestamp).
+					Return([]domain.ContractResults{{Hash: "0xtx1"}})
+
+				cacheService.EXPECT().
+					Set(gomock.Any(), cacheKey, gomock.Any(), service.DefaultExpiration).
+					Return(nil)
 			},
 		},
 		{
@@ -587,8 +618,13 @@ func TestGetBlockByNumber(t *testing.T) {
 			mockResponse: nil,
 			expectNil:    true,
 			setupMocks: func() {
+				cacheKey := fmt.Sprintf("%s_%s_%t", service.GetBlockByNumber, "0x999", false)
+				cacheService.EXPECT().
+					Get(gomock.Any(), cacheKey, gomock.Any()).
+					Return(errors.New("not found"))
+
 				mockClient.EXPECT().
-					GetBlockByHashOrNumber("2457"). // 0x999 in decimal
+					GetBlockByHashOrNumber("2457").
 					Return(nil)
 			},
 		},
@@ -596,8 +632,49 @@ func TestGetBlockByNumber(t *testing.T) {
 			name:        "Invalid hex number",
 			numberOrTag: "0xinvalid",
 			showDetails: false,
-			expectNil:   true,
-			setupMocks:  func() {},
+			expectNil:   false,
+			setupMocks: func() {
+				cacheKey := fmt.Sprintf("%s_%s_%t", service.GetBlockByNumber, "0xinvalid", false)
+				cacheService.EXPECT().
+					Get(gomock.Any(), cacheKey, gomock.Any()).
+					Return(errors.New("not found"))
+			},
+		},
+		{
+			name:         "Success with cached block",
+			numberOrTag:  "0x7b",
+			showDetails:  false,
+			mockResponse: expectedBlock,
+			expectNil:    false,
+			setupMocks: func() {
+				cacheKey := fmt.Sprintf("%s_%s_%t", service.GetBlockByNumber, "0x7b", false)
+				cacheService.EXPECT().
+					Get(gomock.Any(), cacheKey, gomock.Any()).
+					DoAndReturn(func(_ context.Context, _ string, block interface{}) error {
+						b := block.(*domain.Block)
+						hexNum := "0x7b"
+						hexHash := expectedBlock.Hash
+						b.Number = &hexNum
+						b.Hash = &hexHash
+						b.ParentHash = expectedBlock.PreviousHash
+						b.LogsBloom = expectedBlock.LogsBloom
+						b.TransactionsRoot = &hexHash
+						b.GasUsed = "0x3e8"     // 1000 in hex
+						b.Size = "0x7d0"        // 2000 in hex
+						b.GasLimit = "0xe4e1c0" // Default gas limit
+						b.Nonce = "0x0000000000000000"
+						b.Sha3Uncles = "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+						b.StateRoot = "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+						b.ReceiptsRoot = "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+						b.Miner = "0x0000000000000000000000000000000000000000"
+						b.Difficulty = "0x0"
+						b.ExtraData = "0x"
+						b.Timestamp = "0x61cf9980"       // Adding timestamp field
+						b.Transactions = []interface{}{} // Empty transactions array
+						b.Uncles = []string{}            // Empty uncles array
+						return nil
+					})
+			},
 		},
 	}
 
@@ -605,14 +682,15 @@ func TestGetBlockByNumber(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.setupMocks()
 
-			if tc.mockResponse != nil {
-				mockClient.EXPECT().
-					GetContractResults(tc.mockResponse.Timestamp).
-					Return(tc.mockResults)
-			}
-
 			s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId, cacheService)
 			result, errMap := s.GetBlockByNumber(tc.numberOrTag, tc.showDetails)
+
+			if tc.name == "Invalid hex number" {
+				assert.NotNil(t, errMap)
+				assert.Equal(t, -32000, errMap["code"])
+				assert.Equal(t, "Failed to parse hex value", errMap["message"])
+				return
+			}
 
 			if tc.expectNil {
 				assert.Nil(t, result)
@@ -621,12 +699,16 @@ func TestGetBlockByNumber(t *testing.T) {
 				assert.NotNil(t, result)
 				assert.Nil(t, errMap)
 
-				ethBlock, ok := result.(*domain.Block)
+				block, ok := result.(*domain.Block)
 				assert.True(t, ok)
-				assert.Equal(t, "0x7b", *ethBlock.Number) // 123 in hex
-				assert.Equal(t, expectedBlock.Hash, *ethBlock.Hash)
-				assert.Equal(t, expectedBlock.PreviousHash, ethBlock.ParentHash)
-				assert.Equal(t, len(tc.mockResults), len(ethBlock.Transactions))
+				if ok {
+					assert.Equal(t, "0x7b", *block.Number)
+					assert.Equal(t, expectedBlock.Hash, *block.Hash)
+					assert.Equal(t, expectedBlock.PreviousHash, block.ParentHash)
+					if !strings.Contains(tc.name, "cached") {
+						assert.Equal(t, len(tc.mockResults), len(block.Transactions))
+					}
+				}
 			}
 		})
 	}
