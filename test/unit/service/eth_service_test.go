@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/LimeChain/Hederium/internal/domain"
 	"github.com/LimeChain/Hederium/internal/service"
@@ -19,6 +20,8 @@ import (
 
 const defaultChainId = "0x127" // Default chain ID for tests
 const GetGasPrice = "eth_gasPrice"
+const GetCode = "eth_getCode"
+const DefaultExpiration = time.Hour // 1 hour expiration
 
 func TestGetBlockNumber(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -2719,4 +2722,173 @@ func TestGetTransactionByBlockNumberAndIndex(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetCode(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Create a logger for testing
+	cfg := zap.NewDevelopmentConfig()
+	cfg.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+	logger, _ := cfg.Build()
+
+	// Create a cache service for testing
+	cacheService := mocks.NewMockCacheService(ctrl)
+
+	// Create mock client from the interface
+	mockClient := mocks.NewMockMirrorClient(ctrl)
+	mockHederaClient := mocks.NewMockHederaNodeClient(ctrl)
+
+	s := service.NewEthService(
+		mockHederaClient,
+		mockClient,
+		logger,
+		nil,
+		defaultChainId,
+		cacheService,
+	)
+
+	t.Run("iHTS precompile address", func(t *testing.T) {
+		address := "0x0000000000000000000000000000000000000167"
+		blockNumber := "latest"
+
+		result, errMap := s.GetCode(address, blockNumber)
+
+		assert.Equal(t, "0xfe", result)
+		assert.Nil(t, errMap)
+	})
+
+	t.Run("Contract with runtime bytecode", func(t *testing.T) {
+		address := "0x123"
+		blockNumber := "latest"
+		runtimeBytecode := "0x606060"
+
+		cacheKey := fmt.Sprintf("%s_%s_%s", GetCode, address, blockNumber)
+		cacheService.EXPECT().
+			Get(gomock.Any(), cacheKey, gomock.Any()).
+			Return(errors.New("not found"))
+
+		mockClient.EXPECT().
+			GetContractById(address).
+			Return(&domain.ContractResponse{
+				RuntimeBytecode: &runtimeBytecode,
+			}, nil)
+
+		cacheService.EXPECT().
+			Set(gomock.Any(), cacheKey, runtimeBytecode, DefaultExpiration).
+			Return(nil)
+
+		result, errMap := s.GetCode(address, blockNumber)
+
+		assert.Equal(t, runtimeBytecode, result)
+		assert.Nil(t, errMap)
+	})
+
+	t.Run("Token redirect case", func(t *testing.T) {
+		address := "0x000000000000123"
+		blockNumber := "latest"
+
+		cacheKey := fmt.Sprintf("%s_%s_%s", GetCode, address, blockNumber)
+		cacheService.EXPECT().
+			Get(gomock.Any(), cacheKey, gomock.Any()).
+			Return(errors.New("not found"))
+
+		mockClient.EXPECT().
+			GetContractById(address).
+			Return(nil, nil)
+
+		mockClient.EXPECT().
+			GetAccountById(address).
+			Return(nil, nil)
+
+		mockClient.EXPECT().
+			GetTokenById("0.0.291").
+			Return(&domain.TokenResponse{
+				TokenId: "0.0.291",
+			}, nil)
+
+		result, errMap := s.GetCode(address, blockNumber)
+
+		expectedBytecode := "0x" + "6080604052348015600f57600080fd5b506000610167905077618dc65e" + address[2:] + "600052366000602037600080366018016008845af43d806000803e8160008114605857816000f35b816000fdfea2646970667358221220d8378feed472ba49a0005514ef7087017f707b45fb9bf56bb81bb93ff19a238b64736f6c634300080b0033"
+		assert.Equal(t, expectedBytecode, result)
+		assert.Nil(t, errMap)
+	})
+
+	t.Run("Fallback to Hedera client", func(t *testing.T) {
+		address := "0x456"
+		blockNumber := "latest"
+		bytecode := []byte{1, 2, 3}
+
+		cacheKey := fmt.Sprintf("%s_%s_%s", GetCode, address, blockNumber)
+		cacheService.EXPECT().
+			Get(gomock.Any(), cacheKey, gomock.Any()).
+			Return(errors.New("not found"))
+
+		mockClient.EXPECT().
+			GetContractById(address).
+			Return(nil, nil)
+
+		mockClient.EXPECT().
+			GetAccountById(address).
+			Return(nil, nil)
+
+		mockHederaClient.EXPECT().
+			GetContractByteCode(gomock.Any(), gomock.Any(), address).
+			Return(bytecode, nil)
+
+		expectedResponse := fmt.Sprintf("0x%x", bytecode)
+		cacheService.EXPECT().
+			Set(gomock.Any(), cacheKey, expectedResponse, DefaultExpiration).
+			Return(nil)
+
+		result, errMap := s.GetCode(address, blockNumber)
+
+		assert.Equal(t, expectedResponse, result)
+		assert.Nil(t, errMap)
+	})
+
+	t.Run("Cache hit", func(t *testing.T) {
+		address := "0x789"
+		blockNumber := "latest"
+		cachedBytecode := "0xabcdef"
+
+		cacheKey := fmt.Sprintf("%s_%s_%s", GetCode, address, blockNumber)
+		cacheService.EXPECT().
+			Get(gomock.Any(), cacheKey, gomock.Any()).
+			SetArg(2, cachedBytecode).
+			Return(nil)
+
+		result, errMap := s.GetCode(address, blockNumber)
+
+		assert.Equal(t, cachedBytecode, result)
+		assert.Nil(t, errMap)
+	})
+
+	t.Run("Hedera client error", func(t *testing.T) {
+		address := "0x999"
+		blockNumber := "latest"
+
+		cacheKey := fmt.Sprintf("%s_%s_%s", GetCode, address, blockNumber)
+		cacheService.EXPECT().
+			Get(gomock.Any(), cacheKey, gomock.Any()).
+			Return(errors.New("not found"))
+
+		mockClient.EXPECT().
+			GetContractById(address).
+			Return(nil, nil)
+
+		mockClient.EXPECT().
+			GetAccountById(address).
+			Return(nil, nil)
+
+		mockHederaClient.EXPECT().
+			GetContractByteCode(gomock.Any(), gomock.Any(), address).
+			Return(nil, errors.New("hedera error"))
+
+		result, errMap := s.GetCode(address, blockNumber)
+
+		assert.Equal(t, "0x", result)
+		assert.Nil(t, errMap)
+	})
 }
