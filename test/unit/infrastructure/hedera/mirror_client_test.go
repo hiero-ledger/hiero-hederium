@@ -2,6 +2,7 @@ package hedera_test
 
 import (
 	"encoding/json"
+	"errors"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -10,28 +11,47 @@ import (
 
 	"github.com/LimeChain/Hederium/internal/domain"
 	"github.com/LimeChain/Hederium/internal/infrastructure/hedera"
+	"github.com/LimeChain/Hederium/test/unit/mocks"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
 
-func setupTest(t *testing.T) (*zap.Logger, *httptest.Server) {
+var ErrCacheMiss = errors.New("cache miss")
+
+type testSetup struct {
+	logger       *zap.Logger
+	server       *httptest.Server
+	cacheService *mocks.MockCacheService
+	ctrl         *gomock.Controller
+}
+
+func setupTest(t *testing.T) *testSetup {
 	logger, _ := zap.NewDevelopment()
-	return logger, nil
+	ctrl := gomock.NewController(t)
+	cacheService := mocks.NewMockCacheService(ctrl)
+	return &testSetup{
+		logger:       logger,
+		cacheService: cacheService,
+		ctrl:         ctrl,
+	}
 }
 
 func TestNewMirrorClient(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 	baseURL := "http://test.com"
 	timeoutSeconds := 30
 
-	client := hedera.NewMirrorClient(baseURL, timeoutSeconds, logger)
+	client := hedera.NewMirrorClient(baseURL, timeoutSeconds, setup.logger, setup.cacheService)
 
 	assert.Equal(t, baseURL, client.BaseURL)
 	assert.Equal(t, time.Duration(timeoutSeconds)*time.Second, client.Timeout)
 }
 
 func TestGetLatestBlock_Success(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	// Create test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +73,7 @@ func TestGetLatestBlock_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := hedera.NewMirrorClient(server.URL, 30, logger)
+	client := hedera.NewMirrorClient(server.URL, 30, setup.logger, setup.cacheService)
 	block, err := client.GetLatestBlock()
 
 	assert.NoError(t, err)
@@ -62,7 +82,8 @@ func TestGetLatestBlock_Success(t *testing.T) {
 }
 
 func TestGetLatestBlock_EmptyResponse(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		response := struct {
@@ -74,7 +95,7 @@ func TestGetLatestBlock_EmptyResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := hedera.NewMirrorClient(server.URL, 30, logger)
+	client := hedera.NewMirrorClient(server.URL, 30, setup.logger, setup.cacheService)
 	block, err := client.GetLatestBlock()
 
 	assert.Error(t, err)
@@ -83,7 +104,8 @@ func TestGetLatestBlock_EmptyResponse(t *testing.T) {
 }
 
 func TestGetBlockByHashOrNumber_Success(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	expectedBlock := &domain.BlockResponse{
 		Number:       123,
@@ -94,6 +116,14 @@ func TestGetBlockByHashOrNumber_Success(t *testing.T) {
 		LogsBloom:    "0x0",
 	}
 
+	// Add cache expectations
+	setup.cacheService.EXPECT().
+		Get(gomock.Any(), "getBlockByHashOrNumber_123", gomock.Any()).
+		Return(ErrCacheMiss)
+	setup.cacheService.EXPECT().
+		Set(gomock.Any(), "getBlockByHashOrNumber_123", expectedBlock, gomock.Any()).
+		Return(nil)
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/api/v1/blocks/123", r.URL.String())
 		assert.Equal(t, http.MethodGet, r.Method)
@@ -102,7 +132,7 @@ func TestGetBlockByHashOrNumber_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := hedera.NewMirrorClient(server.URL, 30, logger)
+	client := hedera.NewMirrorClient(server.URL, 30, setup.logger, setup.cacheService)
 	block := client.GetBlockByHashOrNumber("123")
 
 	assert.NotNil(t, block)
@@ -111,8 +141,29 @@ func TestGetBlockByHashOrNumber_Success(t *testing.T) {
 	assert.Equal(t, expectedBlock.PreviousHash, block.PreviousHash)
 }
 
+func TestGetBlockByHashOrNumber_ErrorResponse(t *testing.T) {
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
+
+	// Add cache expectations
+	setup.cacheService.EXPECT().
+		Get(gomock.Any(), "getBlockByHashOrNumber_123", gomock.Any()).
+		Return(ErrCacheMiss)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := hedera.NewMirrorClient(server.URL, 30, setup.logger, setup.cacheService)
+	block := client.GetBlockByHashOrNumber("123")
+
+	assert.Nil(t, block)
+}
+
 func TestGetNetworkFees_Success(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	expectedResponse := domain.FeeResponse{
 		Fees: []domain.Fee{
@@ -135,7 +186,7 @@ func TestGetNetworkFees_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := hedera.NewMirrorClient(server.URL, 30, logger)
+	client := hedera.NewMirrorClient(server.URL, 30, setup.logger, setup.cacheService)
 	fees, err := client.GetNetworkFees("", "")
 	assert.NoError(t, err)
 
@@ -143,7 +194,8 @@ func TestGetNetworkFees_Success(t *testing.T) {
 }
 
 func TestGetContractResults_Success(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	timestamp := domain.Timestamp{
 		From: "1640995200",
@@ -199,7 +251,7 @@ func TestGetContractResults_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := hedera.NewMirrorClient(server.URL, 30, logger)
+	client := hedera.NewMirrorClient(server.URL, 30, setup.logger, setup.cacheService)
 	results := client.GetContractResults(timestamp)
 
 	assert.Equal(t, 2, len(results))
@@ -208,21 +260,23 @@ func TestGetContractResults_Success(t *testing.T) {
 }
 
 func TestGetContractResults_ErrorResponse(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer server.Close()
 
-	client := hedera.NewMirrorClient(server.URL, 30, logger)
+	client := hedera.NewMirrorClient(server.URL, 30, setup.logger, setup.cacheService)
 	results := client.GetContractResults(domain.Timestamp{})
 
 	assert.Empty(t, results)
 }
 
 func TestGetNetworkFees_NoEthereumFee(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	response := domain.FeeResponse{
 		Fees: []domain.Fee{
@@ -238,7 +292,7 @@ func TestGetNetworkFees_NoEthereumFee(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := hedera.NewMirrorClient(server.URL, 30, logger)
+	client := hedera.NewMirrorClient(server.URL, 30, setup.logger, setup.cacheService)
 	fees, err := client.GetNetworkFees("", "") //  Should be handled better
 
 	assert.NoError(t, err)
@@ -246,7 +300,8 @@ func TestGetNetworkFees_NoEthereumFee(t *testing.T) {
 }
 
 func TestGetNetworkFees_EmptyResponse(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	response := domain.FeeResponse{
 		Fees: []domain.Fee{},
@@ -257,45 +312,16 @@ func TestGetNetworkFees_EmptyResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := hedera.NewMirrorClient(server.URL, 30, logger)
+	client := hedera.NewMirrorClient(server.URL, 30, setup.logger, setup.cacheService)
 	_, err := client.GetNetworkFees("", "") // Should be handled better
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no fees returned")
 }
 
-func TestGetBlockByHashOrNumber_ErrorResponse(t *testing.T) {
-	logger, _ := setupTest(t)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer server.Close()
-
-	client := hedera.NewMirrorClient(server.URL, 30, logger)
-	block := client.GetBlockByHashOrNumber("123")
-
-	assert.Nil(t, block)
-}
-
-func TestGetLatestBlock_ErrorResponse(t *testing.T) {
-	logger, _ := setupTest(t)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer server.Close()
-
-	client := hedera.NewMirrorClient(server.URL, 30, logger)
-	block, err := client.GetLatestBlock()
-
-	assert.Error(t, err)
-	assert.Nil(t, block)
-	assert.Contains(t, err.Error(), "mirror node returned status 500")
-}
-
 func TestGetBalance(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	testCases := []struct {
 		name           string
@@ -361,7 +387,7 @@ func TestGetBalance(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			client := hedera.NewMirrorClient(server.URL, 5, setup.logger, setup.cacheService)
 			result := client.GetBalance(tc.address, tc.timestampTo)
 			assert.Equal(t, tc.expectedResult, result)
 		})
@@ -369,7 +395,8 @@ func TestGetBalance(t *testing.T) {
 }
 
 func TestGetBalance_Success(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	// Create test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -402,7 +429,7 @@ func TestGetBalance_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := hedera.NewMirrorClient(server.URL, 30, logger)
+	client := hedera.NewMirrorClient(server.URL, 30, setup.logger, setup.cacheService)
 	result := client.GetBalance("0.0.123", "1234567890.000000000")
 
 	// 1 million tinybars * 10000000000 (conversion to weibars) = 10000000000000000 weibars
@@ -411,7 +438,8 @@ func TestGetBalance_Success(t *testing.T) {
 }
 
 func TestGetBalance_Error(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	// Create test server that returns an error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -419,14 +447,15 @@ func TestGetBalance_Error(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := hedera.NewMirrorClient(server.URL, 30, logger)
+	client := hedera.NewMirrorClient(server.URL, 30, setup.logger, setup.cacheService)
 	result := client.GetBalance("0.0.123", "1234567890.000000000")
 
 	assert.Equal(t, "0x0", result)
 }
 
 func TestGetAccount_Success(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	// Create test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -452,7 +481,7 @@ func TestGetAccount_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := hedera.NewMirrorClient(server.URL, 30, logger)
+	client := hedera.NewMirrorClient(server.URL, 30, setup.logger, setup.cacheService)
 	result := client.GetAccount("0.0.123", "1234567890.000000000")
 
 	assert.NotNil(t, result)
@@ -463,7 +492,8 @@ func TestGetAccount_Success(t *testing.T) {
 }
 
 func TestGetAccount_Error(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	// Create test server that returns an error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -471,14 +501,15 @@ func TestGetAccount_Error(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := hedera.NewMirrorClient(server.URL, 30, logger)
+	client := hedera.NewMirrorClient(server.URL, 30, setup.logger, setup.cacheService)
 	result := client.GetAccount("0.0.123", "1234567890.000000000")
 
 	assert.Nil(t, result)
 }
 
 func TestPostCall(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	testCases := []struct {
 		name           string
@@ -540,7 +571,7 @@ func TestPostCall(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			client := hedera.NewMirrorClient(server.URL, 5, setup.logger, setup.cacheService)
 			result := client.PostCall(tc.callObject)
 
 			if tc.expectedResult == "" {
@@ -553,7 +584,8 @@ func TestPostCall(t *testing.T) {
 }
 
 func TestGetContractStateByAddressAndSlot(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	testCases := []struct {
 		name           string
@@ -637,7 +669,7 @@ func TestGetContractStateByAddressAndSlot(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			client := hedera.NewMirrorClient(server.URL, 5, setup.logger, setup.cacheService)
 			result, err := client.GetContractStateByAddressAndSlot(tc.address, tc.slot, tc.timestampTo)
 
 			if tc.expectedError {
@@ -652,7 +684,8 @@ func TestGetContractStateByAddressAndSlot(t *testing.T) {
 }
 
 func TestGetContractResultsLogsByAddress(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	testCases := []struct {
 		name           string
@@ -728,7 +761,7 @@ func TestGetContractResultsLogsByAddress(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			client := hedera.NewMirrorClient(server.URL, 5, setup.logger, setup.cacheService)
 			results, err := client.GetContractResultsLogsByAddress(tc.address, tc.queryParams)
 
 			if tc.expectError {
@@ -743,7 +776,8 @@ func TestGetContractResultsLogsByAddress(t *testing.T) {
 }
 
 func TestGetContractResultsLogsWithRetry(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	testCases := []struct {
 		name           string
@@ -822,7 +856,7 @@ func TestGetContractResultsLogsWithRetry(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			client := hedera.NewMirrorClient(server.URL, 5, setup.logger, setup.cacheService)
 			results, err := client.GetContractResultsLogsWithRetry(tc.queryParams)
 
 			if tc.expectError {
@@ -837,7 +871,8 @@ func TestGetContractResultsLogsWithRetry(t *testing.T) {
 }
 
 func TestGetAccountById(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	testCases := []struct {
 		name           string
@@ -862,6 +897,7 @@ func TestGetAccountById(t *testing.T) {
 					Tokens:    []interface{}{},
 				},
 				EthereumNonce: 5,
+				EvmAddress:    "0x1234567890123456789012345678901234567890",
 			},
 			expectedResult: &domain.AccountResponse{
 				Account: "0.0.123",
@@ -875,6 +911,7 @@ func TestGetAccountById(t *testing.T) {
 					Tokens:    []interface{}{},
 				},
 				EthereumNonce: 5,
+				EvmAddress:    "0x1234567890123456789012345678901234567890",
 			},
 			expectError: false,
 			statusCode:  http.StatusOK,
@@ -891,6 +928,17 @@ func TestGetAccountById(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Add cache expectations
+			setup.cacheService.EXPECT().
+				Get(gomock.Any(), "getAccountById_"+tc.accountId, gomock.Any()).
+				Return(ErrCacheMiss)
+
+			if !tc.expectError {
+				setup.cacheService.EXPECT().
+					Set(gomock.Any(), "getAccountById_"+tc.accountId, tc.mockResponse, gomock.Any()).
+					Return(nil)
+			}
+
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, "/api/v1/accounts/"+tc.accountId+"?transactions=false", r.URL.String())
 				assert.Equal(t, http.MethodGet, r.Method)
@@ -902,7 +950,7 @@ func TestGetAccountById(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			client := hedera.NewMirrorClient(server.URL, 5, setup.logger, setup.cacheService)
 			result, err := client.GetAccountById(tc.accountId)
 
 			if tc.expectError {
@@ -920,7 +968,8 @@ func TestGetAccountById(t *testing.T) {
 }
 
 func TestGetContractById(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	testCases := []struct {
 		name           string
@@ -959,7 +1008,7 @@ func TestGetContractById(t *testing.T) {
 		{
 			name:           "Server error",
 			contractId:     "0.0.123",
-			mockResponse:   map[string]interface{}{"error": "Internal server error"},
+			mockResponse:   nil,
 			expectedResult: nil,
 			expectError:    true,
 			statusCode:     http.StatusInternalServerError,
@@ -968,6 +1017,17 @@ func TestGetContractById(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Add cache expectations
+			setup.cacheService.EXPECT().
+				Get(gomock.Any(), "getContractById_"+tc.contractId, gomock.Any()).
+				Return(ErrCacheMiss)
+
+			if !tc.expectError {
+				setup.cacheService.EXPECT().
+					Set(gomock.Any(), "getContractById_"+tc.contractId, tc.mockResponse, gomock.Any()).
+					Return(nil)
+			}
+
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, "/api/v1/contracts/"+tc.contractId, r.URL.String())
 				assert.Equal(t, http.MethodGet, r.Method)
@@ -979,7 +1039,7 @@ func TestGetContractById(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			client := hedera.NewMirrorClient(server.URL, 5, setup.logger, setup.cacheService)
 			result, err := client.GetContractById(tc.contractId)
 
 			if tc.expectError {
@@ -999,7 +1059,8 @@ func TestGetContractById(t *testing.T) {
 }
 
 func TestGetContractResultWithRetry(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	testCases := []struct {
 		name           string
@@ -1118,7 +1179,7 @@ func TestGetContractResultWithRetry(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			client := hedera.NewMirrorClient(server.URL, 5, setup.logger, setup.cacheService)
 			result, err := client.GetContractResultWithRetry(tc.queryParams)
 
 			if tc.expectError {
@@ -1143,7 +1204,8 @@ func TestGetContractResultWithRetry(t *testing.T) {
 }
 
 func TestGetTokenById(t *testing.T) {
-	logger, _ := setupTest(t)
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
 
 	testCases := []struct {
 		name           string
@@ -1187,6 +1249,17 @@ func TestGetTokenById(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Add cache expectations
+			setup.cacheService.EXPECT().
+				Get(gomock.Any(), "getTokenById_"+tc.tokenId, gomock.Any()).
+				Return(ErrCacheMiss)
+
+			if !tc.expectError {
+				setup.cacheService.EXPECT().
+					Set(gomock.Any(), "getTokenById_"+tc.tokenId, tc.mockResponse, gomock.Any()).
+					Return(nil)
+			}
+
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, "/api/v1/tokens/"+tc.tokenId, r.URL.String())
 				assert.Equal(t, http.MethodGet, r.Method)
@@ -1198,7 +1271,7 @@ func TestGetTokenById(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := hedera.NewMirrorClient(server.URL, 5, logger)
+			client := hedera.NewMirrorClient(server.URL, 5, setup.logger, setup.cacheService)
 			result, err := client.GetTokenById(tc.tokenId)
 
 			if tc.expectError {

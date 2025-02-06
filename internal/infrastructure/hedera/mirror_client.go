@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/LimeChain/Hederium/internal/domain"
+	"github.com/LimeChain/Hederium/internal/infrastructure/cache"
 	"go.uber.org/zap"
 )
 
@@ -34,16 +35,18 @@ type MirrorNodeClient interface {
 }
 
 type MirrorClient struct {
-	BaseURL string
-	Timeout time.Duration
-	logger  *zap.Logger
+	BaseURL      string
+	Timeout      time.Duration
+	logger       *zap.Logger
+	cacheService cache.CacheService
 }
 
-func NewMirrorClient(baseURL string, timeoutSeconds int, logger *zap.Logger) *MirrorClient {
+func NewMirrorClient(baseURL string, timeoutSeconds int, logger *zap.Logger, cacheService cache.CacheService) *MirrorClient {
 	return &MirrorClient{
-		BaseURL: baseURL,
-		Timeout: time.Duration(timeoutSeconds) * time.Second,
-		logger:  logger,
+		BaseURL:      baseURL,
+		Timeout:      time.Duration(timeoutSeconds) * time.Second,
+		logger:       logger,
+		cacheService: cacheService,
 	}
 }
 
@@ -83,6 +86,13 @@ func (m *MirrorClient) GetBlockByHashOrNumber(hashOrNumber string) *domain.Block
 	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
 	defer cancel()
 
+	cachedKey := fmt.Sprintf("%s_%s", GetBlockByHashOrNumber, hashOrNumber)
+
+	var cachedBlock domain.BlockResponse
+	if err := m.cacheService.Get(ctx, cachedKey, &cachedBlock); err == nil && cachedBlock.Hash != "" {
+		return &cachedBlock
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BaseURL+"/api/v1/blocks/"+hashOrNumber, nil)
 	if err != nil {
 		m.logger.Error("Error creating request to get block by hash or number", zap.Error(err))
@@ -104,6 +114,10 @@ func (m *MirrorClient) GetBlockByHashOrNumber(hashOrNumber string) *domain.Block
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		m.logger.Error("Error decoding response body", zap.Error(err))
 		return nil
+	}
+
+	if err := m.cacheService.Set(ctx, cachedKey, &result, DefaultExpiration); err != nil {
+		m.logger.Error("Error caching block", zap.Error(err))
 	}
 
 	m.logger.Debug("Block", zap.Any("block", result))
@@ -308,6 +322,13 @@ func (m *MirrorClient) GetContractResult(transactionIdOrHash string) interface{}
 	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
 	defer cancel()
 
+	cachedKey := fmt.Sprintf("%s_%s", GetContractResult, transactionIdOrHash)
+
+	var cachedResult domain.ContractResultResponse
+	if err := m.cacheService.Get(ctx, cachedKey, &cachedResult); err == nil && cachedResult.BlockHash != "" {
+		return cachedResult
+	}
+
 	url := fmt.Sprintf("%s/api/v1/contracts/results/%s", m.BaseURL, transactionIdOrHash)
 
 	m.logger.Info("Getting contract result", zap.String("url", url))
@@ -334,6 +355,10 @@ func (m *MirrorClient) GetContractResult(transactionIdOrHash string) interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		m.logger.Error("Error decoding response body", zap.Error(err))
 		return nil
+	}
+
+	if err := m.cacheService.Set(ctx, cachedKey, &result, DefaultExpiration); err != nil {
+		m.logger.Error("Error caching contract result", zap.Error(err))
 	}
 
 	m.logger.Info("Contract result", zap.Any("result", result))
@@ -439,12 +464,6 @@ func (m *MirrorClient) GetContractStateByAddressAndSlot(address string, slot str
 
 	return &result, nil
 }
-
-// Hardcoded for now
-const (
-	maxRetries = 2
-	retryDelay = 1 * time.Second
-)
 
 func (m *MirrorClient) GetContractResultsLogsWithRetry(queryParams map[string]interface{}) ([]domain.ContractResults, error) {
 	queryParamsStr := formatQueryParams(queryParams)
@@ -629,6 +648,13 @@ func (m *MirrorClient) GetContractById(contractIdOrAddress string) (*domain.Cont
 	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
 	defer cancel()
 
+	cachedKey := fmt.Sprintf("%s_%s", GetContractById, contractIdOrAddress)
+
+	var cachedContract domain.ContractResponse
+	if err := m.cacheService.Get(ctx, cachedKey, &cachedContract); err == nil && cachedContract.EvmAddress != "" {
+		return &cachedContract, nil
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		m.logger.Error("Error creating request", zap.Error(err))
@@ -653,6 +679,10 @@ func (m *MirrorClient) GetContractById(contractIdOrAddress string) (*domain.Cont
 		return nil, err
 	}
 
+	if err := m.cacheService.Set(ctx, cachedKey, &result, DefaultExpiration); err != nil {
+		m.logger.Error("Error caching contract", zap.Error(err))
+	}
+
 	return &result, nil
 }
 
@@ -663,6 +693,13 @@ func (m *MirrorClient) GetAccountById(idOrAliasOrEvmAddress string) (*domain.Acc
 
 	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
 	defer cancel()
+
+	cachedKey := fmt.Sprintf("%s_%s", GetAccountById, idOrAliasOrEvmAddress)
+
+	var cachedAccount domain.AccountResponse
+	if err := m.cacheService.Get(ctx, cachedKey, &cachedAccount); err == nil && cachedAccount.EvmAddress != "" {
+		return &cachedAccount, nil
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -688,6 +725,10 @@ func (m *MirrorClient) GetAccountById(idOrAliasOrEvmAddress string) (*domain.Acc
 		return nil, err
 	}
 
+	if err := m.cacheService.Set(ctx, cachedKey, &result, DefaultExpiration); err != nil {
+		m.logger.Error("Error caching account", zap.Error(err))
+	}
+
 	return &result, nil
 }
 
@@ -698,6 +739,13 @@ func (m *MirrorClient) GetTokenById(tokenId string) (*domain.TokenResponse, erro
 
 	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
 	defer cancel()
+
+	cachedKey := fmt.Sprintf("%s_%s", GetTokenById, tokenId)
+
+	var cachedToken domain.TokenResponse
+	if err := m.cacheService.Get(ctx, cachedKey, &cachedToken); err == nil && cachedToken.TokenId != "" {
+		return &cachedToken, nil
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -721,6 +769,10 @@ func (m *MirrorClient) GetTokenById(tokenId string) (*domain.TokenResponse, erro
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		m.logger.Error("Error decoding response", zap.Error(err))
 		return nil, err
+	}
+
+	if err := m.cacheService.Set(ctx, cachedKey, &result, DefaultExpiration); err != nil {
+		m.logger.Error("Error caching token", zap.Error(err))
 	}
 
 	return &result, nil
