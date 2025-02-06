@@ -150,13 +150,13 @@ func (p *precheck) isLegacyUnprotectedEtx(tx *types.Transaction) bool {
 
 func (p *precheck) ChainID(tx *types.Transaction) error {
 	txChainID := fmt.Sprintf("0x%x", tx.ChainId())
-
-	passes := p.isLegacyUnprotectedEtx(tx) || tx.ChainId().String() == p.chainID
+	passes := p.isLegacyUnprotectedEtx(tx) || txChainID == p.chainID
 
 	if !passes {
 		p.logger.Debug("Failed chainId precheck",
 			zap.String("transaction", tx.Hash().Hex()),
-			zap.String("chainId", txChainID))
+			zap.String("chainId", txChainID),
+			zap.String("expectedChainId", p.chainID))
 
 		return fmt.Errorf("unsupported chain id: got %s, want %s", tx.ChainId().String(), p.chainID)
 	}
