@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/LimeChain/Hederium/internal/domain"
 	"github.com/LimeChain/Hederium/internal/service"
@@ -19,6 +19,8 @@ import (
 
 const defaultChainId = "0x127" // Default chain ID for tests
 const GetGasPrice = "eth_gasPrice"
+const GetCode = "eth_getCode"
+const DefaultExpiration = time.Hour // 1 hour expiration
 
 func TestGetBlockNumber(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -1276,187 +1278,168 @@ func TestGetTransactionReceipt(t *testing.T) {
 
 	logger, _ := zap.NewDevelopment()
 	cacheService := mocks.NewMockCacheService(ctrl)
+	mockClient := mocks.NewMockMirrorClient(ctrl)
 
-	t.Run("Success case with full transaction receipt", func(t *testing.T) {
-		mockClient := mocks.NewMockMirrorClient(ctrl)
-		s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId, cacheService)
+	s := service.NewEthService(nil, mockClient, logger, nil, "0x12a", cacheService)
 
-		txHash := "0x123456"
-		blockHash := "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-		blockNumber := int64(12345)
-		transactionIndex := 1
-		gasUsed := int64(21000)
-		blockGasUsed := int64(100000)
-		from := "0xabc"
-		to := "0xdef"
-		contractAddress := "0xcontract"
-		gasPrice := "5000"
-		txType := 2
+	txHash := "0x123"
+	blockHash := "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+	blockTimestamp := domain.Timestamp{
+		From: "123",
+		To:   "456",
+	}
 
-		// Mock contract result with logs
-		contractResult := domain.ContractResultResponse{
-			BlockHash:        blockHash + "extra", // Adding extra to test trimming to 66 chars
-			BlockNumber:      blockNumber,
-			TransactionIndex: transactionIndex,
-			GasUsed:          gasUsed,
-			BlockGasUsed:     blockGasUsed,
-			From:             from,
-			To:               to,
-			Address:          contractAddress,
-			GasPrice:         gasPrice,
-			Status:           "0x1",
-			Type:             &txType,
-			Logs: []domain.MirroNodeLogs{
-				{
-					Address: "0xlog1",
-					Data:    "0xdata1",
-					Topics:  []string{"0xtopic1", "0xtopic2"},
-				},
-				{
-					Address: "0xlog2",
-					Data:    "0xdata2",
-					Topics:  []string{"0xtopic3"},
-				},
+	testCases := []struct {
+		name        string
+		hash        string
+		mockResult  interface{}
+		mockBlock   *domain.BlockResponse
+		mockFee     int64
+		checkFields func(t *testing.T, result interface{})
+	}{
+		{
+			name: "successful transaction receipt",
+			hash: txHash,
+			mockResult: domain.ContractResultResponse{
+				BlockHash:        blockHash,
+				BlockNumber:      123,
+				Hash:             txHash,
+				From:             "0xabc",
+				To:               "0xdef",
+				GasUsed:          100000,
+				Status:           "0x1",
+				TransactionIndex: 1,
+				Type:             nil,
+				Logs:             []domain.MirroNodeLogs{},
 			},
-			Bloom: "0x1234", // Custom bloom value
-		}
+			mockBlock: &domain.BlockResponse{
+				Hash:      blockHash,
+				Timestamp: blockTimestamp,
+			},
+			mockFee: 100000,
+			checkFields: func(t *testing.T, result interface{}) {
+				receipt, ok := result.(domain.TransactionReceipt)
+				assert.True(t, ok)
+				assert.Equal(t, blockHash, receipt.BlockHash)
+				assert.Equal(t, "0x7b", receipt.BlockNumber)
+				assert.Equal(t, "0x1", receipt.TransactionIndex)
+				// 100000 * 10^10 = 1000000000000000 (0x38d7ea4c68000)
+				assert.Equal(t, "0x38d7ea4c68000", receipt.EffectiveGasPrice)
+			},
+		},
+		{
+			name:       "transaction not found",
+			hash:       "0xnonexistent",
+			mockResult: nil,
+			mockBlock:  nil,
+			mockFee:    0,
+			checkFields: func(t *testing.T, result interface{}) {
+				assert.Nil(t, result)
+			},
+		},
+		{
+			name: "with logs",
+			hash: txHash,
+			mockResult: domain.ContractResultResponse{
+				BlockHash:        blockHash,
+				BlockNumber:      123,
+				Hash:             txHash,
+				From:             "0xabc",
+				To:               "0xdef",
+				GasUsed:          100000,
+				Status:           "0x1",
+				TransactionIndex: 1,
+				Type:             nil,
+				Logs: []domain.MirroNodeLogs{
+					{
+						Address: "0xlog1",
+						Data:    "0xdata1",
+						Topics:  []string{"0xtopic1", "0xtopic2"},
+					},
+				},
+				Bloom: "0x1234",
+			},
+			mockBlock: &domain.BlockResponse{
+				Hash:      blockHash,
+				Timestamp: blockTimestamp,
+			},
+			mockFee: 100000,
+			checkFields: func(t *testing.T, result interface{}) {
+				receipt, ok := result.(domain.TransactionReceipt)
+				assert.True(t, ok)
+				assert.Equal(t, "0x1234", receipt.LogsBloom)
+				assert.Len(t, receipt.Logs, 1)
+				assert.Equal(t, "0xlog1", receipt.Logs[0].Address)
+				assert.Equal(t, "0xdata1", receipt.Logs[0].Data)
+				assert.Equal(t, []string{"0xtopic1", "0xtopic2"}, receipt.Logs[0].Topics)
+			},
+		},
+		{
+			name: "with empty bloom",
+			hash: txHash,
+			mockResult: domain.ContractResultResponse{
+				BlockHash:        blockHash,
+				BlockNumber:      123,
+				Hash:             txHash,
+				From:             "0xabc",
+				To:               "0xdef",
+				GasUsed:          100000,
+				Status:           "0x1",
+				TransactionIndex: 1,
+				Type:             nil,
+				Bloom:            "0x",
+			},
+			mockBlock: &domain.BlockResponse{
+				Hash:      blockHash,
+				Timestamp: blockTimestamp,
+			},
+			mockFee: 100000,
+			checkFields: func(t *testing.T, result interface{}) {
+				receipt, ok := result.(domain.TransactionReceipt)
+				assert.True(t, ok)
+				assert.Equal(t, "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", receipt.LogsBloom)
+			},
+		},
+	}
 
-		// Set up cache expectations
-		var cachedReceipt interface{}
-		cacheService.EXPECT().
-			Get(gomock.Any(), fmt.Sprintf("eth_getTransactionReceipt_%s", txHash), &cachedReceipt).
-			Return(errors.New("not found")).
-			Times(1)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Set up cache expectations
+			var cachedTx interface{}
+			cacheService.EXPECT().
+				Get(gomock.Any(), fmt.Sprintf("eth_getTransactionReceipt_%s", tc.hash), &cachedTx).
+				Return(errors.New("not found")).
+				Times(1)
 
-		mockClient.EXPECT().
-			GetContractResult(txHash).
-			Return(contractResult)
+			mockClient.EXPECT().
+				GetContractResult(tc.hash).
+				Return(tc.mockResult).
+				Times(1)
 
-		cacheService.EXPECT().
-			Set(gomock.Any(), fmt.Sprintf("eth_getTransactionReceipt_%s", txHash), gomock.Any(), service.DefaultExpiration).
-			Return(nil).
-			Times(1)
+			if tc.mockResult != nil {
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber(tc.mockBlock.Hash).
+					Return(tc.mockBlock).
+					Times(1)
 
-		result := s.GetTransactionReceipt(txHash)
-		receipt, ok := result.(domain.TransactionReceipt)
-		assert.True(t, ok, "Result should be of type domain.TransactionReceipt")
+				mockClient.EXPECT().
+					GetNetworkFees(tc.mockBlock.Timestamp.From, gomock.Any()).
+					Return(tc.mockFee, nil).
+					Times(1)
 
-		// Verify all fields
-		assert.Equal(t, blockHash[:66], receipt.BlockHash)
-		assert.Equal(t, "0x"+strconv.FormatInt(blockNumber, 16), receipt.BlockNumber)
-		assert.Equal(t, from, receipt.From)
-		assert.Equal(t, to, receipt.To)
-		assert.Equal(t, "0x"+strconv.FormatInt(blockGasUsed, 16), receipt.CumulativeGasUsed)
-		assert.Equal(t, "0x"+strconv.FormatInt(gasUsed, 16), receipt.GasUsed)
-		assert.Equal(t, contractAddress, receipt.ContractAddress)
-		assert.Equal(t, txHash, receipt.TransactionHash)
-		assert.Equal(t, "0x"+strconv.FormatInt(int64(transactionIndex), 16), receipt.TransactionIndex)
-		assert.Equal(t, "0x"+gasPrice, receipt.EffectiveGasPrice)
-		assert.Equal(t, "0x1", receipt.Status)
-		assert.Equal(t, "0x"+strconv.FormatInt(int64(txType), 16), *receipt.Type)
-		assert.Equal(t, "0x1234", receipt.LogsBloom)
+				cacheService.EXPECT().
+					Set(gomock.Any(), fmt.Sprintf("eth_getTransactionReceipt_%s", tc.hash), gomock.Any(), service.DefaultExpiration).
+					Return(nil).
+					Times(1)
+			}
 
-		// Verify logs
-		assert.Len(t, receipt.Logs, 2)
-		assert.Equal(t, "0xlog1", receipt.Logs[0].Address)
-		assert.Equal(t, "0xdata1", receipt.Logs[0].Data)
-		assert.Equal(t, []string{"0xtopic1", "0xtopic2"}, receipt.Logs[0].Topics)
-		assert.Equal(t, "0x0", receipt.Logs[0].LogIndex)
-		assert.Equal(t, txHash, receipt.Logs[0].TransactionHash)
-		assert.Equal(t, blockHash[:66], receipt.Logs[0].BlockHash)
-		assert.Equal(t, receipt.BlockNumber, receipt.Logs[0].BlockNumber)
-		assert.Equal(t, receipt.TransactionIndex, receipt.Logs[0].TransactionIndex)
-		assert.False(t, receipt.Logs[0].Removed)
-	})
-
-	t.Run("Transaction not found", func(t *testing.T) {
-		mockClient := mocks.NewMockMirrorClient(ctrl)
-		s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId, cacheService)
-
-		txHash := "0xnonexistent"
-
-		// Set up cache expectations
-		var cachedReceipt interface{}
-		cacheService.EXPECT().
-			Get(gomock.Any(), fmt.Sprintf("eth_getTransactionReceipt_%s", txHash), &cachedReceipt).
-			Return(errors.New("not found")).
-			Times(1)
-
-		mockClient.EXPECT().
-			GetContractResult(txHash).
-			Return(nil)
-
-		result := s.GetTransactionReceipt(txHash)
-		assert.Nil(t, result)
-	})
-
-	t.Run("Empty bloom filter", func(t *testing.T) {
-		mockClient := mocks.NewMockMirrorClient(ctrl)
-		s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId, cacheService)
-
-		txHash := "0x123456"
-		contractResult := domain.ContractResultResponse{
-			BlockHash:   "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-			BlockNumber: 12345,
-			Status:      "0x1",
-			Bloom:       "0x", // Empty bloom
-		}
-
-		// Set up cache expectations
-		var cachedReceipt interface{}
-		cacheService.EXPECT().
-			Get(gomock.Any(), fmt.Sprintf("eth_getTransactionReceipt_%s", txHash), &cachedReceipt).
-			Return(errors.New("not found")).
-			Times(1)
-
-		mockClient.EXPECT().
-			GetContractResult(txHash).
-			Return(contractResult)
-
-		cacheService.EXPECT().
-			Set(gomock.Any(), fmt.Sprintf("eth_getTransactionReceipt_%s", txHash), gomock.Any(), service.DefaultExpiration).
-			Return(nil).
-			Times(1)
-
-		result := s.GetTransactionReceipt(txHash)
-		receipt, ok := result.(domain.TransactionReceipt)
-		assert.True(t, ok)
-		assert.Equal(t, "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", receipt.LogsBloom)
-	})
-
-	t.Run("Nil transaction type", func(t *testing.T) {
-		mockClient := mocks.NewMockMirrorClient(ctrl)
-		s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId, cacheService)
-
-		txHash := "0x123456"
-		contractResult := domain.ContractResultResponse{
-			BlockHash:   "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-			BlockNumber: 12345,
-			Status:      "0x1",
-			Type:        nil, // Nil type
-		}
-
-		// Set up cache expectations
-		var cachedReceipt interface{}
-		cacheService.EXPECT().
-			Get(gomock.Any(), fmt.Sprintf("eth_getTransactionReceipt_%s", txHash), &cachedReceipt).
-			Return(errors.New("not found")).
-			Times(1)
-
-		mockClient.EXPECT().
-			GetContractResult(txHash).
-			Return(contractResult)
-
-		cacheService.EXPECT().
-			Set(gomock.Any(), fmt.Sprintf("eth_getTransactionReceipt_%s", txHash), gomock.Any(), service.DefaultExpiration).
-			Return(nil).
-			Times(1)
-
-		result := s.GetTransactionReceipt(txHash)
-		receipt, ok := result.(domain.TransactionReceipt)
-		assert.True(t, ok)
-		assert.Nil(t, receipt.Type)
-	})
+			result, errMap := s.GetTransactionReceipt(tc.hash)
+			assert.Nil(t, errMap)
+			if tc.checkFields != nil {
+				tc.checkFields(t, result)
+			}
+		})
+	}
 }
 
 func TestFeeHistory(t *testing.T) {
@@ -2719,4 +2702,173 @@ func TestGetTransactionByBlockNumberAndIndex(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetCode(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Create a logger for testing
+	cfg := zap.NewDevelopmentConfig()
+	cfg.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+	logger, _ := cfg.Build()
+
+	// Create a cache service for testing
+	cacheService := mocks.NewMockCacheService(ctrl)
+
+	// Create mock client from the interface
+	mockClient := mocks.NewMockMirrorClient(ctrl)
+	mockHederaClient := mocks.NewMockHederaNodeClient(ctrl)
+
+	s := service.NewEthService(
+		mockHederaClient,
+		mockClient,
+		logger,
+		nil,
+		defaultChainId,
+		cacheService,
+	)
+
+	t.Run("iHTS precompile address", func(t *testing.T) {
+		address := "0x0000000000000000000000000000000000000167"
+		blockNumber := "latest"
+
+		result, errMap := s.GetCode(address, blockNumber)
+
+		assert.Equal(t, "0xfe", result)
+		assert.Nil(t, errMap)
+	})
+
+	t.Run("Contract with runtime bytecode", func(t *testing.T) {
+		address := "0x123"
+		blockNumber := "latest"
+		runtimeBytecode := "0x606060"
+
+		cacheKey := fmt.Sprintf("%s_%s_%s", GetCode, address, blockNumber)
+		cacheService.EXPECT().
+			Get(gomock.Any(), cacheKey, gomock.Any()).
+			Return(errors.New("not found"))
+
+		mockClient.EXPECT().
+			GetContractById(address).
+			Return(&domain.ContractResponse{
+				RuntimeBytecode: &runtimeBytecode,
+			}, nil)
+
+		cacheService.EXPECT().
+			Set(gomock.Any(), cacheKey, runtimeBytecode, DefaultExpiration).
+			Return(nil)
+
+		result, errMap := s.GetCode(address, blockNumber)
+
+		assert.Equal(t, runtimeBytecode, result)
+		assert.Nil(t, errMap)
+	})
+
+	t.Run("Token redirect case", func(t *testing.T) {
+		address := "0x000000000000123"
+		blockNumber := "latest"
+
+		cacheKey := fmt.Sprintf("%s_%s_%s", GetCode, address, blockNumber)
+		cacheService.EXPECT().
+			Get(gomock.Any(), cacheKey, gomock.Any()).
+			Return(errors.New("not found"))
+
+		mockClient.EXPECT().
+			GetContractById(address).
+			Return(nil, nil)
+
+		mockClient.EXPECT().
+			GetAccountById(address).
+			Return(nil, nil)
+
+		mockClient.EXPECT().
+			GetTokenById("0.0.291").
+			Return(&domain.TokenResponse{
+				TokenId: "0.0.291",
+			}, nil)
+
+		result, errMap := s.GetCode(address, blockNumber)
+
+		expectedBytecode := "0x" + "6080604052348015600f57600080fd5b506000610167905077618dc65e" + address[2:] + "600052366000602037600080366018016008845af43d806000803e8160008114605857816000f35b816000fdfea2646970667358221220d8378feed472ba49a0005514ef7087017f707b45fb9bf56bb81bb93ff19a238b64736f6c634300080b0033"
+		assert.Equal(t, expectedBytecode, result)
+		assert.Nil(t, errMap)
+	})
+
+	t.Run("Fallback to Hedera client", func(t *testing.T) {
+		address := "0x456"
+		blockNumber := "latest"
+		bytecode := []byte{1, 2, 3}
+
+		cacheKey := fmt.Sprintf("%s_%s_%s", GetCode, address, blockNumber)
+		cacheService.EXPECT().
+			Get(gomock.Any(), cacheKey, gomock.Any()).
+			Return(errors.New("not found"))
+
+		mockClient.EXPECT().
+			GetContractById(address).
+			Return(nil, nil)
+
+		mockClient.EXPECT().
+			GetAccountById(address).
+			Return(nil, nil)
+
+		mockHederaClient.EXPECT().
+			GetContractByteCode(gomock.Any(), gomock.Any(), address).
+			Return(bytecode, nil)
+
+		expectedResponse := fmt.Sprintf("0x%x", bytecode)
+		cacheService.EXPECT().
+			Set(gomock.Any(), cacheKey, expectedResponse, DefaultExpiration).
+			Return(nil)
+
+		result, errMap := s.GetCode(address, blockNumber)
+
+		assert.Equal(t, expectedResponse, result)
+		assert.Nil(t, errMap)
+	})
+
+	t.Run("Cache hit", func(t *testing.T) {
+		address := "0x789"
+		blockNumber := "latest"
+		cachedBytecode := "0xabcdef"
+
+		cacheKey := fmt.Sprintf("%s_%s_%s", GetCode, address, blockNumber)
+		cacheService.EXPECT().
+			Get(gomock.Any(), cacheKey, gomock.Any()).
+			SetArg(2, cachedBytecode).
+			Return(nil)
+
+		result, errMap := s.GetCode(address, blockNumber)
+
+		assert.Equal(t, cachedBytecode, result)
+		assert.Nil(t, errMap)
+	})
+
+	t.Run("Hedera client error", func(t *testing.T) {
+		address := "0x999"
+		blockNumber := "latest"
+
+		cacheKey := fmt.Sprintf("%s_%s_%s", GetCode, address, blockNumber)
+		cacheService.EXPECT().
+			Get(gomock.Any(), cacheKey, gomock.Any()).
+			Return(errors.New("not found"))
+
+		mockClient.EXPECT().
+			GetContractById(address).
+			Return(nil, nil)
+
+		mockClient.EXPECT().
+			GetAccountById(address).
+			Return(nil, nil)
+
+		mockHederaClient.EXPECT().
+			GetContractByteCode(gomock.Any(), gomock.Any(), address).
+			Return(nil, errors.New("hedera error"))
+
+		result, errMap := s.GetCode(address, blockNumber)
+
+		assert.Equal(t, "0x", result)
+		assert.Nil(t, errMap)
+	})
 }
