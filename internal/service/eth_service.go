@@ -1,12 +1,14 @@
 package service
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/LimeChain/Hederium/internal/domain"
+	"github.com/LimeChain/Hederium/internal/infrastructure/cache"
 	infrahedera "github.com/LimeChain/Hederium/internal/infrastructure/hedera"
 	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -30,6 +32,8 @@ type EthService struct {
 	tieredLimiter *limiter.TieredLimiter
 	chainId       string
 	precheck      Precheck
+	cacheService  cache.CacheService
+	ctx           context.Context
 }
 
 func NewEthService(
@@ -38,6 +42,7 @@ func NewEthService(
 	log *zap.Logger,
 	l *limiter.TieredLimiter,
 	chainId string,
+	cacheService cache.CacheService,
 ) *EthService {
 	return &EthService{
 		hClient:       hClient,
@@ -46,6 +51,8 @@ func NewEthService(
 		tieredLimiter: l,
 		chainId:       chainId,
 		precheck:      NewPrecheck(mClient, log, chainId),
+		cacheService:  cacheService,
+		ctx:           context.Background(),
 	}
 }
 
@@ -92,11 +99,20 @@ func (s *EthService) GetBlockNumber() (interface{}, map[string]interface{}) {
 func (s *EthService) GetGasPrice() (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting gas price")
 
+	cacheKey := GetGasPrice
+
+	var cachedPrice string
+	err := s.cacheService.Get(s.ctx, cacheKey, &cachedPrice)
+	if err == nil && cachedPrice != "" {
+		s.logger.Info("Gas price fetched from cache", zap.Any("gasPrice", cachedPrice))
+		return cachedPrice, nil
+	}
+
 	timestampTo := "" // We pass empty, because we want gas from latest block
 	order := ""
 
-	weibars, err := GetFeeWeibars(s, timestampTo, order)
-	if err != nil {
+	weibars, errMap := GetFeeWeibars(s, timestampTo, order)
+	if errMap != nil {
 		errMsg := "Failed to fetch gas price"
 		s.logger.Error(errMsg)
 		return nil, map[string]interface{}{
@@ -105,7 +121,11 @@ func (s *EthService) GetGasPrice() (interface{}, map[string]interface{}) {
 		}
 	}
 
-	gasPrice := "0x" + strconv.FormatUint(weibars.Uint64(), 16)
+	gasPrice := fmt.Sprintf("0x%x", weibars)
+
+	if err := s.cacheService.Set(s.ctx, cacheKey, gasPrice, DefaultExpiration); err != nil {
+		s.logger.Debug("Failed to cache gas price", zap.Error(err))
+	}
 
 	s.logger.Info("Successfully returned gas price", zap.String("gasPrice", gasPrice))
 	return gasPrice, nil
@@ -127,11 +147,30 @@ func (s *EthService) GetChainId() (interface{}, map[string]interface{}) {
 // Returns nil for both return values if the block is not found.
 func (s *EthService) GetBlockByHash(hash string, showDetails bool) (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting block by hash", zap.String("hash", hash), zap.Bool("showDetails", showDetails))
+
+	cacheKey := fmt.Sprintf("%s_%s_%t", GetBlockByHash, hash, showDetails)
+
+	var cachedBlock domain.Block
+	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedBlock); err == nil && cachedBlock.Hash != nil {
+		s.logger.Info("Block fetched from cache", zap.Any("block", cachedBlock))
+		return cachedBlock, nil
+	}
+
 	block := s.mClient.GetBlockByHashOrNumber(hash)
 	if block == nil {
 		return nil, nil
 	}
-	return ProcessBlock(s, block, showDetails)
+
+	processedBlock, errMap := ProcessBlock(s, block, showDetails)
+	if errMap != nil {
+		return nil, errMap
+	}
+
+	if err := s.cacheService.Set(s.ctx, cacheKey, &processedBlock, DefaultExpiration); err != nil {
+		s.logger.Debug("Failed to cache block", zap.Error(err))
+	}
+
+	return processedBlock, nil
 }
 
 // GetBlockByHash retrieves a block by its hash from the Hedera network and returns it
@@ -409,7 +448,16 @@ func (s *EthService) Call(transaction interface{}, blockParam interface{}) (inte
 
 func (s *EthService) GetTransactionByHash(hash string) interface{} {
 	s.logger.Info("Getting transaction by hash", zap.String("hash", hash))
+
+	cacheKey := fmt.Sprintf("%s_%s", GetTransactionByHash, hash)
+
+	var cachedTx interface{}
+	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedTx); err == nil && cachedTx != nil {
+		s.logger.Info("Transaction fetched from cache", zap.Any("transaction", cachedTx))
+		return cachedTx
+	}
 	contractResult := s.mClient.GetContractResult(hash)
+
 	if contractResult == nil {
 		// TODO: Here we should handle synthetic transactions
 		return nil
@@ -419,11 +467,23 @@ func (s *EthService) GetTransactionByHash(hash string) interface{} {
 	// TODO: Resolve evm addresses
 	transaction := ProcessTransactionResponse(contractResultResponse)
 
+	if err := s.cacheService.Set(s.ctx, cacheKey, &transaction, DefaultExpiration); err != nil {
+		s.logger.Debug("Failed to cache transaction", zap.Error(err))
+	}
+
 	return transaction
 }
 
 func (s *EthService) GetTransactionReceipt(hash string) interface{} {
 	s.logger.Info("Getting transaction receipt", zap.String("hash", hash))
+
+	cacheKey := fmt.Sprintf("%s_%s", GetTransactionReceipt, hash)
+
+	var cachedReceipt interface{}
+	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedReceipt); err == nil && cachedReceipt != nil {
+		s.logger.Info("Transaction receipt fetched from cache", zap.Any("receipt", cachedReceipt))
+		return cachedReceipt
+	}
 
 	contractResult := s.mClient.GetContractResult(hash)
 	if contractResult == nil {
@@ -485,6 +545,10 @@ func (s *EthService) GetTransactionReceipt(hash string) interface{} {
 			hexType := "0x" + strconv.FormatInt(int64(*contractResultResponse.Type), 16)
 			return &hexType
 		}(),
+	}
+
+	if err := s.cacheService.Set(s.ctx, cacheKey, &receipt, DefaultExpiration); err != nil {
+		s.logger.Debug("Failed to cache transaction receipt", zap.Error(err))
 	}
 
 	s.logger.Info("Returning transaction receipt", zap.Any("receipt", receipt))
@@ -644,13 +708,28 @@ func (s *EthService) GetLogs(logParams domain.LogParams) (interface{}, map[strin
 func (s *EthService) GetBlockTransactionCountByHash(blockHash string) (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting block transaction count by hash", zap.String("blockHash", blockHash))
 
+	cacheKey := fmt.Sprintf("%s_%s", GetBlockTransactionCountByHash, blockHash)
+
+	var transactionCount string
+
+	if err := s.cacheService.Get(s.ctx, cacheKey, &transactionCount); err == nil && transactionCount != "" {
+		s.logger.Info("Transaction count fetched from cache", zap.String("count", transactionCount))
+		return transactionCount, nil
+	}
+
 	block := s.mClient.GetBlockByHashOrNumber(blockHash)
 
 	if block == nil {
 		return nil, nil
 	}
 
-	return "0x" + strconv.FormatInt(int64(block.Count), 16), nil
+	transactionCount = fmt.Sprintf("0x%x", block.Count)
+
+	if err := s.cacheService.Set(s.ctx, cacheKey, transactionCount, DefaultExpiration); err != nil {
+		s.logger.Debug("Failed to cache transaction count", zap.Error(err))
+	}
+
+	return transactionCount, nil
 }
 
 func (s *EthService) GetBlockTransactionCountByNumber(blockNumberOrTag string) (interface{}, map[string]interface{}) {
@@ -668,17 +747,40 @@ func (s *EthService) GetBlockTransactionCountByNumber(blockNumberOrTag string) (
 		}
 	}
 
+	cachedKey := fmt.Sprintf("%s_%d", GetBlockTransactionCountByNumber, blockNumberInt)
+
+	var transactionCount string
+
+	if err := s.cacheService.Get(s.ctx, cachedKey, &transactionCount); err == nil && transactionCount != "" {
+		s.logger.Info("Transaction count fetched from cache", zap.String("count", transactionCount))
+		return transactionCount, nil
+	}
+
 	block := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockNumberInt, 10))
 
 	if block == nil {
 		return nil, nil
 	}
 
-	return "0x" + strconv.FormatInt(int64(block.Count), 16), nil
+	transactionCount = fmt.Sprintf("0x%x", block.Count)
+
+	if err := s.cacheService.Set(s.ctx, cachedKey, transactionCount, DefaultExpiration); err != nil {
+		s.logger.Debug("Failed to cache transaction count", zap.Error(err))
+	}
+
+	return transactionCount, nil
 }
 
 func (s *EthService) GetTransactionByBlockHashAndIndex(blockHash string, txIndex string) (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting transaction by block and index", zap.String("blockHash", blockHash), zap.String("txIndex", txIndex))
+
+	cacheKey := fmt.Sprintf("%s_%s_%s", GetTransactionByBlockHashAndIndex, blockHash, txIndex)
+
+	var cachedTx interface{}
+	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedTx); err == nil && cachedTx != nil {
+		s.logger.Info("Transaction fetched from cache", zap.Any("transaction", cachedTx))
+		return cachedTx, nil
+	}
 
 	txIndexInt, errMap := HexToDec(txIndex)
 	if errMap != nil {
@@ -690,11 +792,30 @@ func (s *EthService) GetTransactionByBlockHashAndIndex(blockHash string, txIndex
 		"transaction.index": txIndexInt,
 	}
 
-	return s.getTransactionByBlockAndIndex(queryParamas)
+	tx, errMap := s.getTransactionByBlockAndIndex(queryParamas)
+	if errMap != nil {
+		return nil, errMap
+	}
+
+	if tx != nil {
+		if err := s.cacheService.Set(s.ctx, cacheKey, tx, DefaultExpiration); err != nil {
+			s.logger.Debug("Failed to cache transaction", zap.Error(err))
+		}
+	}
+
+	return tx, nil
 }
 
 func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string, txIndex string) (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting transaction by block number and index", zap.String("blockNumberOrTag", blockNumberOrTag), zap.String("txIndex", txIndex))
+
+	cacheKey := fmt.Sprintf("%s_%s_%s", GetTransactionByBlockNumberAndIndex, blockNumberOrTag, txIndex)
+
+	var cachedTx interface{}
+	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedTx); err == nil && cachedTx != nil {
+		s.logger.Info("Transaction fetched from cache", zap.Any("transaction", cachedTx))
+		return cachedTx, nil
+	}
 
 	blockNumber, errMap := s.getBlockNumberByHashOrTag(blockNumberOrTag)
 	if errMap != nil {
@@ -719,7 +840,18 @@ func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string
 		"transaction.index": txIndexInt,
 	}
 
-	return s.getTransactionByBlockAndIndex(queryParamas)
+	tx, errMap := s.getTransactionByBlockAndIndex(queryParamas)
+	if errMap != nil {
+		return nil, errMap
+	}
+
+	if tx != nil {
+		if err := s.cacheService.Set(s.ctx, cacheKey, tx, DefaultExpiration); err != nil {
+			s.logger.Debug("Failed to cache transaction", zap.Error(err))
+		}
+	}
+
+	return tx, nil
 }
 
 func (s *EthService) SendRawTransaction(data string) (interface{}, map[string]interface{}) {
@@ -787,6 +919,14 @@ func (s *EthService) GetCode(address string, blockNumberOrTag string) (interface
 		return "0xfe", nil
 	}
 
+	cachedKey := fmt.Sprintf("%s_%s_%s", GetCode, address, blockNumberOrTag)
+
+	var cachedCode string
+	if err := s.cacheService.Get(s.ctx, cachedKey, &cachedCode); err == nil && cachedCode != "" {
+		s.logger.Info("Code fetched from cache", zap.String("code", cachedCode))
+		return cachedCode, nil
+	}
+
 	// Resolve the address type (contract or token)
 	result, errMap := s.resolveAddressType(address)
 	if errMap != nil {
@@ -807,7 +947,10 @@ func (s *EthService) GetCode(address string, blockNumberOrTag string) (interface
 			}
 
 			if !hasProhibitedOpcodes(bytecode) {
-				// We cache the bytecode for future use
+				if err = s.cacheService.Set(s.ctx, cachedKey, *contract.RuntimeBytecode, DefaultExpiration); err != nil {
+					s.logger.Debug("Failed to cache contract bytecode", zap.Error(err))
+				}
+
 				return *contract.RuntimeBytecode, nil
 			}
 		}
@@ -824,7 +967,13 @@ func (s *EthService) GetCode(address string, blockNumberOrTag string) (interface
 		return "0x", nil
 	}
 
-	return fmt.Sprintf("0x%x", result), nil
+	response := fmt.Sprintf("0x%x", result)
+
+	if err := s.cacheService.Set(s.ctx, cachedKey, response, DefaultExpiration); err != nil {
+		s.logger.Debug("Failed to cache contract bytecode", zap.Error(err))
+	}
+
+	return response, nil
 }
 
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation

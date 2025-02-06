@@ -36,3 +36,7 @@ apiKeys:
 
 features:
   enforceApiKey: false
+
+cache:
+  defaultExpiration: "1h"
+  cleanupInterval: "30m"
