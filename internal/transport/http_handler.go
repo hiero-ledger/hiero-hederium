@@ -425,7 +425,7 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		return ethService.GetStorageAt(address, slot, blockNumberOrTag)
 	case "eth_getLogs":
 		paramsArray, ok := params.([]interface{})
-		if !ok {
+		if !ok || len(paramsArray) != 1 {
 			return nil, map[string]interface{}{
 				"code":    -32602,
 				"message": "Invalid params for eth_getLogs: expected object",
