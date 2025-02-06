@@ -322,7 +322,7 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 			}
 		}
 
-		return ethService.GetTransactionReceipt(txHash), nil
+		return ethService.GetTransactionReceipt(txHash)
 	case "eth_feeHistory":
 		paramsArray, ok := params.([]interface{})
 		if !ok || (len(paramsArray) != 2 && len(paramsArray) != 3) {
