@@ -2884,7 +2884,7 @@ func TestSendRawTransactionEndpoint(t *testing.T) {
 	mockCacheService := mocks.NewMockCacheService(ctrl)
 
 	logger := zap.NewNop()
-	ethService := service.NewEthService(mockHederaClient, mockMirrorClient, logger, nil, "296", mockCacheService)
+	ethService := service.NewEthService(mockHederaClient, mockMirrorClient, logger, nil, "0x128", mockCacheService)
 
 	// Test case 1: Successful transaction
 	t.Run("Successful transaction", func(t *testing.T) {
