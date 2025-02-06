@@ -945,6 +945,15 @@ func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *typ
 	return nil, fmt.Errorf("failed to send transaction: %w", err)
 }
 
+func (s *EthService) getCurrentGasPriceForBlock(blockHash string) (string, map[string]interface{}) {
+	block := s.mClient.GetBlockByHashOrNumber(blockHash)
+	gasPriceForTimestamp, errMap := GetFeeWeibars(s, block.Timestamp.From)
+	if errMap != nil {
+		return "", errMap
+	}
+
+	return fmt.Sprintf("0x%x", gasPriceForTimestamp), nil
+}
 func GetFromAddress(tx *types.Transaction) (*common.Address, error) {
 	signer := types.NewEIP155Signer(tx.ChainId())
 	from, err := types.Sender(signer, tx)

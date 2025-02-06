@@ -467,7 +467,7 @@ func (s *EthService) GetTransactionByHash(hash string) interface{} {
 	return transaction
 }
 
-func (s *EthService) GetTransactionReceipt(hash string) interface{} {
+func (s *EthService) GetTransactionReceipt(hash string) (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting transaction receipt", zap.String("hash", hash))
 
 	cacheKey := fmt.Sprintf("%s_%s", GetTransactionReceipt, hash)
@@ -475,13 +475,13 @@ func (s *EthService) GetTransactionReceipt(hash string) interface{} {
 	var cachedReceipt interface{}
 	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedReceipt); err == nil && cachedReceipt != nil {
 		s.logger.Info("Transaction receipt fetched from cache", zap.Any("receipt", cachedReceipt))
-		return cachedReceipt
+		return cachedReceipt, nil
 	}
 
 	contractResult := s.mClient.GetContractResult(hash)
 	if contractResult == nil {
 		// TODO: Here we should handle synthetic transactions
-		return nil
+		return nil, nil
 	}
 	contractResultResponse := contractResult.(domain.ContractResultResponse)
 
@@ -508,6 +508,10 @@ func (s *EthService) GetTransactionReceipt(hash string) interface{} {
 	const defaultRootHash = "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
 	// TODO: Check revert reason, if matches error_message, return it, else it's ASCII so make it hex and return then
 	// TODO: Implement resolveEvmAddress for from/to addresses
+	effectiveGasPrice, errMap := s.getCurrentGasPriceForBlock(contractResultResponse.BlockHash[:66])
+	if errMap != nil {
+		s.logger.Error("Failed to get gas price for block")
+	}
 
 	// Create receipt
 	// TODO: add utility function to convert to hex
@@ -528,7 +532,7 @@ func (s *EthService) GetTransactionReceipt(hash string) interface{} {
 		}(),
 		TransactionHash:   hash,
 		TransactionIndex:  "0x" + strconv.FormatInt(int64(contractResultResponse.TransactionIndex), 16),
-		EffectiveGasPrice: "0x" + contractResultResponse.GasPrice, // TODO: Calculate effective gas price if needed
+		EffectiveGasPrice: effectiveGasPrice,
 		Root:              defaultRootHash,
 		Status:            contractResultResponse.Status,
 		Type: func() *string {
@@ -545,7 +549,7 @@ func (s *EthService) GetTransactionReceipt(hash string) interface{} {
 	}
 
 	s.logger.Info("Returning transaction receipt", zap.Any("receipt", receipt))
-	return receipt
+	return receipt, nil
 }
 
 func (s *EthService) FeeHistory(blockCount string, newestBlock string, rewardPercentiles []string) (interface{}, map[string]interface{}) {
