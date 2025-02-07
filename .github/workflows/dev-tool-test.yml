@@ -1,0 +1,22 @@
+name: CI - Dev Tool Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: pr-checks-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  actions: read
+jobs:
+  hardhat:
+    name: Hardhat
+    uses: ./.github/workflows/dev-tool-workflow.yml
+    with:
+      command: cd ./tools/hardhat/ &&cp hardhat.config.ts.example hardhat.config.ts && npx hardhat test --network testnet
+      directory: ./tools/hardhat

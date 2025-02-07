@@ -9,6 +9,7 @@ describe("Hedera JSON RPC Integration Tests", function () {
   let addr1: SignerWithAddress;
 
   beforeEach(async function () {
+    console.log("🔄 Setting up test environment...");
     // Get signers
     [owner, addr1] = await ethers.getSigners();
     
@@ -16,10 +17,12 @@ describe("Hedera JSON RPC Integration Tests", function () {
     const SimpleStorageFactory = await ethers.getContractFactory("SimpleStorage");
     simpleStorage = await SimpleStorageFactory.deploy(42);
     await simpleStorage.waitForDeployment();
+    console.log("✨ Test contract deployed successfully");
   });
 
   describe("Basic Operations", function () {
     it("Should execute a native token transfer", async function () {
+      console.log("💸 Testing native token transfer...");
       // Get initial balances
       const initialBalance = await ethers.provider.getBalance(addr1.address);
       
@@ -36,11 +39,13 @@ describe("Hedera JSON RPC Integration Tests", function () {
     });
 
     it("Should deploy contract and verify initial value", async function () {
+      console.log("🔍 Verifying initial contract value...");
       const value = await simpleStorage.getValue();
       expect(value).to.equal(42n);
     });
 
     it("Should make contract calls and emit events", async function () {
+      console.log("📡 Testing contract calls and events...");
       // Test setting a new value
       const tx = await simpleStorage.setValue(100);
       await tx.wait();
@@ -56,6 +61,7 @@ describe("Hedera JSON RPC Integration Tests", function () {
     });
 
     it("Should estimate gas for contract calls", async function () {
+      console.log("⛽ Estimating gas for operations...");
       // Estimate gas for a simple operation
       const gasEstimateSimple = await simpleStorage.setValue.estimateGas(200);
       expect(gasEstimateSimple).to.be.gt(0);
@@ -66,6 +72,7 @@ describe("Hedera JSON RPC Integration Tests", function () {
     });
 
     it("Should get transaction details and receipt", async function () {
+      console.log("📝 Getting transaction details...");
       // Make a contract call
       const tx = await simpleStorage.setValue(150);
       const receipt = await tx.wait();
