@@ -208,7 +208,7 @@ func ProcessTransaction(contractResult domain.ContractResults) interface{} {
 	}
 }
 
-func ProcessTransactionResponse(contractResult domain.ContractResultResponse) interface{} {
+func (s *EthService) ProcessTransactionResponse(contractResult domain.ContractResultResponse) interface{} {
 	hexBlockNumber := hexify(contractResult.BlockNumber)
 	hexGasUsed := hexify(contractResult.GasUsed)
 	hexTransactionIndex := hexify(int64(contractResult.TransactionIndex))
@@ -228,19 +228,29 @@ func ProcessTransactionResponse(contractResult domain.ContractResultResponse) in
 
 	hexNonce := hexify(contractResult.Nonce)
 
-	hexTo := contractResult.To
-	if len(contractResult.To) > 42 {
-		hexTo = contractResult.To[:42]
-	}
-
 	trimmedBlockHash := contractResult.BlockHash
 	if len(contractResult.BlockHash) > 66 {
 		trimmedBlockHash = contractResult.BlockHash[:66]
 	}
 
+	hexTo := contractResult.To
+	if len(contractResult.To) > 42 {
+		hexTo = contractResult.To[:42]
+	}
+
+	evmAddressTo, errMap := s.resolveEvmAddress(hexTo)
+	if errMap != nil {
+		return hexTo
+	}
+
 	trimmedFrom := contractResult.From
 	if len(contractResult.From) > 42 {
 		trimmedFrom = contractResult.From[:42]
+	}
+
+	evmAddressFrom, errMap := s.resolveEvmAddress(trimmedFrom)
+	if errMap != nil {
+		return trimmedFrom
 	}
 
 	trimmedHash := contractResult.Hash
@@ -262,13 +272,13 @@ func ProcessTransactionResponse(contractResult domain.ContractResultResponse) in
 	commonFields := domain.Transaction{
 		BlockHash:        &trimmedBlockHash,
 		BlockNumber:      &hexBlockNumber,
-		From:             trimmedFrom,
+		From:             *evmAddressFrom,
 		Gas:              hexGasUsed,
 		GasPrice:         contractResult.GasPrice,
 		Hash:             trimmedHash,
 		Input:            contractResult.FunctionParameters,
 		Nonce:            hexNonce,
-		To:               &hexTo,
+		To:               evmAddressTo,
 		TransactionIndex: &hexTransactionIndex,
 		Value:            hexValue,
 		V:                hexV,

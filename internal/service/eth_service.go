@@ -458,7 +458,7 @@ func (s *EthService) GetTransactionByHash(hash string) interface{} {
 	contractResultResponse := contractResult.(domain.ContractResultResponse)
 
 	// TODO: Resolve evm addresses
-	transaction := ProcessTransactionResponse(contractResultResponse)
+	transaction := s.ProcessTransactionResponse(contractResultResponse)
 
 	if err := s.cacheService.Set(s.ctx, cacheKey, &transaction, DefaultExpiration); err != nil {
 		s.logger.Debug("Failed to cache transaction", zap.Error(err))
@@ -508,6 +508,17 @@ func (s *EthService) GetTransactionReceipt(hash string) (interface{}, map[string
 	const defaultRootHash = "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
 	// TODO: Check revert reason, if matches error_message, return it, else it's ASCII so make it hex and return then
 	// TODO: Implement resolveEvmAddress for from/to addresses
+
+	evmAddressFrom, errMap := s.resolveEvmAddress(contractResultResponse.From)
+	if errMap != nil {
+		s.logger.Error("Failed to resolve EVM address for from", zap.Any("error", errMap))
+	}
+
+	evmAddressTo, errMap := s.resolveEvmAddress(contractResultResponse.To)
+	if errMap != nil {
+		s.logger.Error("Failed to resolve EVM address for to", zap.Any("error", errMap))
+	}
+
 	effectiveGasPrice, errMap := s.getCurrentGasPriceForBlock(contractResultResponse.BlockHash[:66])
 	if errMap != nil {
 		s.logger.Error("Failed to get gas price for block")
@@ -518,8 +529,8 @@ func (s *EthService) GetTransactionReceipt(hash string) (interface{}, map[string
 	receipt := domain.TransactionReceipt{
 		BlockHash:         contractResultResponse.BlockHash[:66],
 		BlockNumber:       "0x" + strconv.FormatInt(contractResultResponse.BlockNumber, 16),
-		From:              contractResultResponse.From, // TODO: resolve EVM address
-		To:                contractResultResponse.To,   // TODO: resolve EVM address
+		From:              *evmAddressFrom, // TODO: resolve EVM address
+		To:                *evmAddressTo,   // TODO: resolve EVM address
 		CumulativeGasUsed: "0x" + strconv.FormatInt(contractResultResponse.BlockGasUsed, 16),
 		GasUsed:           "0x" + strconv.FormatInt(contractResultResponse.GasUsed, 16),
 		ContractAddress:   contractResultResponse.Address, // TODO: Set if contract creation

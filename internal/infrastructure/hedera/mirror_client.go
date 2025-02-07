@@ -326,6 +326,7 @@ func (m *MirrorClient) GetContractResult(transactionIdOrHash string) interface{}
 
 	var cachedResult domain.ContractResultResponse
 	if err := m.cacheService.Get(ctx, cachedKey, &cachedResult); err == nil && cachedResult.BlockHash != "" {
+		m.logger.Info("Contract result found in cache", zap.Any("result", cachedResult))
 		return cachedResult
 	}
 
@@ -358,6 +359,11 @@ func (m *MirrorClient) GetContractResult(transactionIdOrHash string) interface{}
 	}
 
 	if err := m.cacheService.Set(ctx, cachedKey, &result, DefaultExpiration); err != nil {
+		m.logger.Error("Error caching contract result", zap.Error(err))
+	}
+
+	cachedKeyHash := fmt.Sprintf("%s_%s", GetContractResult, result.Hash[:66])
+	if err := m.cacheService.Set(ctx, cachedKeyHash, &result, DefaultExpiration); err != nil {
 		m.logger.Error("Error caching contract result", zap.Error(err))
 	}
 
