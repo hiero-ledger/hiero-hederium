@@ -133,36 +133,46 @@ func ProcessTransaction(contractResult domain.ContractResults) interface{} {
 	hexV := hexify(int64(contractResult.V))
 
 	// Safe string slicing with length checks
-	hexR := contractResult.R
-	if len(contractResult.R) > 66 {
-		hexR = contractResult.R[:66]
+	hexR := "0x0"
+	if contractResult.R != "" {
+		hexR = truncateString(contractResult.R, 66)
 	}
 
-	hexS := contractResult.S
-	if len(contractResult.S) > 66 {
-		hexS = contractResult.S[:66]
+	hexS := "0x0"
+	if contractResult.S != "" {
+		hexS = truncateString(contractResult.S, 66)
 	}
 
 	hexNonce := hexify(contractResult.Nonce)
 
-	hexTo := contractResult.To
-	if len(contractResult.To) > 42 {
-		hexTo = contractResult.To[:42]
+	hexTo := "0x0"
+	if contractResult.To != "" {
+		hexTo = truncateString(contractResult.To, 42)
 	}
 
-	trimmedBlockHash := contractResult.BlockHash
-	if len(contractResult.BlockHash) > 66 {
-		trimmedBlockHash = contractResult.BlockHash[:66]
+	trimmedBlockHash := "0x0"
+	if contractResult.BlockHash != "" {
+		trimmedBlockHash = truncateString(contractResult.BlockHash, 66)
 	}
 
-	trimmedFrom := contractResult.From
-	if len(contractResult.From) > 42 {
-		trimmedFrom = contractResult.From[:42]
+	trimmedFrom := "0x0"
+	if contractResult.From != "" {
+		trimmedFrom = truncateString(contractResult.From, 42)
 	}
 
-	trimmedHash := contractResult.Hash
-	if len(contractResult.Hash) > 66 {
-		trimmedHash = contractResult.Hash[:66]
+	trimmedHash := "0x0"
+	if contractResult.Hash != "" {
+		trimmedHash = truncateString(contractResult.Hash, 66)
+	}
+
+	gasPrice := "0x0"
+	if contractResult.GasPrice != "" && contractResult.GasPrice != "0x" {
+		gasTinybars, err := HexToDec(contractResult.GasPrice)
+		if err == nil {
+			gasPriceInt := big.NewInt(gasTinybars).
+				Mul(big.NewInt(gasTinybars), big.NewInt(10000000000)) // 10^10 conversion factor
+			gasPrice = hexify(gasPriceInt.Int64())
+		}
 	}
 
 	commonFields := domain.Transaction{
@@ -170,7 +180,7 @@ func ProcessTransaction(contractResult domain.ContractResults) interface{} {
 		BlockNumber:      &hexBlockNumber,
 		From:             trimmedFrom,
 		Gas:              hexGasUsed,
-		GasPrice:         contractResult.GasPrice,
+		GasPrice:         gasPrice,
 		Hash:             trimmedHash,
 		Input:            contractResult.FunctionParameters,
 		Nonce:            hexNonce,
@@ -991,4 +1001,11 @@ func hasProhibitedOpcodes(bytecode []byte) bool {
 		}
 	}
 	return false
+}
+
+func truncateString(s string, maxLength int) string {
+	if len(s) > maxLength {
+		return s[:maxLength]
+	}
+	return s
 }
