@@ -9,6 +9,7 @@ const config: HardhatUserConfig = {
       accounts: [
         // Add your private keys here
         "0xb46751179bc8aa9e129d34463e46cd924055112eb30b31637b5081b56ad96129", // Example private key - DO NOT USE IN PRODUCTION
+        "0x484961ec6c67c270dc5659ea8bb61489967c6acc574d81b1e046e072d5d2436d" // Example private key - DO NOT USE IN PRODUCTION
       ],
       chainId: 296, // Hedera Testnet chain ID
     }

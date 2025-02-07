@@ -5,6 +5,7 @@
 </p>
 
 [![CI - Unit Tests](https://github.com/LimeChain/Hederium/actions/workflows/unit-test.yml/badge.svg)](https://github.com/LimeChain/Hederium/actions/workflows/unit-test.yml)
+[![CI - Dev Tool Tests](https://github.com/LimeChain/Hederium/actions/workflows/dev-tool-test.yml/badge.svg?branch=main)](https://github.com/LimeChain/Hederium/actions/workflows/dev-tool-test.yml)
 [![License](https://img.shields.io/badge/license-apache2-blue.svg)](LICENSE)
 [![Made With](https://img.shields.io/badge/made_with-go-blue)](https://golang.org/)
 
@@ -15,6 +16,12 @@ Hederium is designed to implement the Hashio protocol in Go, offering high perfo
 - Go 1.20 or higher
 - Docker (for containerized deployment)
 - Git
+
+## Documentation
+
+- [Configuration](docs/configuration.md)
+- [RPC API](docs/rpc-api.md)
+- [Benchmark](docs/benchmark.md)
 
 ## Installation
 
@@ -59,6 +66,7 @@ go test ./... -v
 - `/internal` - Private application and library code
 - `/configs` - Configuration files
 - `/test` - Additional external test applications and test data
+- `/tools` - Example tools for testing and development
 - `/docs` - Design and user documents
 
 ## Contributing
