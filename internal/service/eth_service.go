@@ -433,10 +433,8 @@ func (s *EthService) Call(transaction interface{}, blockParam interface{}) (inte
 		return "0x0", errorObject
 	}
 
-	normalizedResult := NormalizeHexString(callResult.(string))
-
-	s.logger.Info("Returning formatted transaction call result", zap.Any("result", normalizedResult))
-	return normalizedResult, nil
+	s.logger.Info("Returning transaction call result", zap.Any("result", callResult))
+	return callResult, nil
 }
 
 func (s *EthService) GetTransactionByHash(hash string) interface{} {
