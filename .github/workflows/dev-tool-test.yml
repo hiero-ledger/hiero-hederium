@@ -18,5 +18,5 @@ jobs:
     name: Hardhat
     uses: ./.github/workflows/dev-tool-workflow.yml
     with:
-      command: cd ./tools/hardhat/ &&cp hardhat.config.ts.example hardhat.config.ts && npx hardhat test --network testnet
+      command: cd ./tools/hardhat/ && cp hardhat.config.ts.example hardhat.config.ts && npx hardhat test --network hedera_testnet
       directory: ./tools/hardhat

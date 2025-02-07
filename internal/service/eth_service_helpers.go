@@ -238,9 +238,12 @@ func (s *EthService) ProcessTransactionResponse(contractResult domain.ContractRe
 		hexTo = contractResult.To[:42]
 	}
 
+	var toAddress string
 	evmAddressTo, errMap := s.resolveEvmAddress(hexTo)
 	if errMap != nil {
-		return hexTo
+		toAddress = hexTo
+	} else {
+		toAddress = *evmAddressTo
 	}
 
 	trimmedFrom := contractResult.From
@@ -248,9 +251,12 @@ func (s *EthService) ProcessTransactionResponse(contractResult domain.ContractRe
 		trimmedFrom = contractResult.From[:42]
 	}
 
+	var fromAddress string
 	evmAddressFrom, errMap := s.resolveEvmAddress(trimmedFrom)
 	if errMap != nil {
-		return trimmedFrom
+		fromAddress = trimmedFrom
+	} else {
+		fromAddress = *evmAddressFrom
 	}
 
 	trimmedHash := contractResult.Hash
@@ -272,13 +278,13 @@ func (s *EthService) ProcessTransactionResponse(contractResult domain.ContractRe
 	commonFields := domain.Transaction{
 		BlockHash:        &trimmedBlockHash,
 		BlockNumber:      &hexBlockNumber,
-		From:             *evmAddressFrom,
+		From:             fromAddress,
 		Gas:              hexGasUsed,
 		GasPrice:         contractResult.GasPrice,
 		Hash:             trimmedHash,
 		Input:            contractResult.FunctionParameters,
 		Nonce:            hexNonce,
-		To:               evmAddressTo,
+		To:               &toAddress,
 		TransactionIndex: &hexTransactionIndex,
 		Value:            hexValue,
 		V:                hexV,

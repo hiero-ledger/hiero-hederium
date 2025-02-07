@@ -5,9 +5,11 @@ import (
 	"math/big"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/LimeChain/Hederium/internal/domain"
 	"github.com/LimeChain/Hederium/internal/infrastructure/cache"
+	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
 	"github.com/LimeChain/Hederium/internal/service"
 	"github.com/LimeChain/Hederium/test/unit/mocks"
 	"github.com/golang/mock/gomock"
@@ -644,7 +646,30 @@ func TestProcessTransactionResponse(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := service.ProcessTransactionResponse(tc.input)
+			ctrl := gomock.NewController(t)
+			mockHederaClient := mocks.NewMockHederaNodeClient(ctrl)
+			mockMirrorClient := mocks.NewMockMirrorClient(ctrl)
+			logger := zap.NewNop()
+			cacheService := cache.NewMemoryCache(time.Hour, time.Hour)
+			cfg := map[string]interface{}{
+				"tiers": map[string]interface{}{
+					"free": map[string]interface{}{
+						"rateLimit": 100,
+					},
+				},
+			}
+			tieredLimiter := limiter.NewTieredLimiter(cfg, 1000)
+			chainId := "0x12a"
+
+			// Set up mock expectations for GetContractById
+			mockMirrorClient.EXPECT().GetContractById(tc.input.To).Return(nil, nil).AnyTimes()
+			mockMirrorClient.EXPECT().GetContractById(tc.input.From).Return(nil, nil).AnyTimes()
+			mockMirrorClient.EXPECT().GetAccountById(tc.input.To).Return(nil, nil).AnyTimes()
+			mockMirrorClient.EXPECT().GetAccountById(tc.input.From).Return(nil, nil).AnyTimes()
+			mockMirrorClient.EXPECT().GetTokenById(gomock.Any()).Return(nil, nil).AnyTimes()
+
+			s := service.NewEthService(mockHederaClient, mockMirrorClient, logger, tieredLimiter, chainId, cacheService)
+			result := s.ProcessTransactionResponse(tc.input)
 
 			// Type-specific assertions
 			switch expected := tc.expected.(type) {

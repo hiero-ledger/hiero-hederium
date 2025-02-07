@@ -1259,6 +1259,12 @@ func TestGetTransactionByHash(t *testing.T) {
 				Times(1)
 
 			if tc.mockResult != nil {
+				result := tc.mockResult.(domain.ContractResultResponse)
+				mockClient.EXPECT().GetContractById(result.To).Return(nil, nil).AnyTimes()
+				mockClient.EXPECT().GetContractById(result.From).Return(nil, nil).AnyTimes()
+				mockClient.EXPECT().GetAccountById(result.To).Return(nil, nil).AnyTimes()
+				mockClient.EXPECT().GetAccountById(result.From).Return(nil, nil).AnyTimes()
+
 				cacheService.EXPECT().
 					Set(gomock.Any(), fmt.Sprintf("eth_getTransactionByHash_%s", tc.hash), gomock.Any(), service.DefaultExpiration).
 					Return(nil).
@@ -1418,6 +1424,12 @@ func TestGetTransactionReceipt(t *testing.T) {
 				Times(1)
 
 			if tc.mockResult != nil {
+				result := tc.mockResult.(domain.ContractResultResponse)
+				mockClient.EXPECT().GetContractById(result.To).Return(nil, nil).AnyTimes()
+				mockClient.EXPECT().GetContractById(result.From).Return(nil, nil).AnyTimes()
+				mockClient.EXPECT().GetAccountById(result.To).Return(nil, nil).AnyTimes()
+				mockClient.EXPECT().GetAccountById(result.From).Return(nil, nil).AnyTimes()
+
 				mockClient.EXPECT().
 					GetBlockByHashOrNumber(tc.mockBlock.Hash).
 					Return(tc.mockBlock).

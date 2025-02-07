@@ -527,10 +527,20 @@ func (s *EthService) GetTransactionReceipt(hash string) (interface{}, map[string
 	// Create receipt
 	// TODO: add utility function to convert to hex
 	receipt := domain.TransactionReceipt{
-		BlockHash:         contractResultResponse.BlockHash[:66],
-		BlockNumber:       "0x" + strconv.FormatInt(contractResultResponse.BlockNumber, 16),
-		From:              *evmAddressFrom, // TODO: resolve EVM address
-		To:                *evmAddressTo,   // TODO: resolve EVM address
+		BlockHash:   contractResultResponse.BlockHash[:66],
+		BlockNumber: "0x" + strconv.FormatInt(contractResultResponse.BlockNumber, 16),
+		From: func() string {
+			if evmAddressFrom != nil {
+				return *evmAddressFrom
+			}
+			return contractResultResponse.From
+		}(),
+		To: func() string {
+			if evmAddressTo != nil {
+				return *evmAddressTo
+			}
+			return contractResultResponse.To
+		}(),
 		CumulativeGasUsed: "0x" + strconv.FormatInt(contractResultResponse.BlockGasUsed, 16),
 		GasUsed:           "0x" + strconv.FormatInt(contractResultResponse.GasUsed, 16),
 		ContractAddress:   contractResultResponse.Address, // TODO: Set if contract creation
