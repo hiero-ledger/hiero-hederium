@@ -203,7 +203,28 @@ func TestProcessTransaction_LegacyTransaction(t *testing.T) {
 	tx, ok := result.(domain.Transaction)
 	assert.True(t, ok)
 
-	// Verify field conversions
+	// Test empty/missing values default to "0x0"
+	emptyResult := domain.ContractResults{
+		BlockNumber: 123,
+		GasUsed:     1000,
+	}
+	emptyTx := service.ProcessTransaction(emptyResult).(domain.Transaction)
+	assert.Equal(t, "0x0", emptyTx.R)
+	assert.Equal(t, "0x0", emptyTx.S)
+	assert.Equal(t, "0x0", emptyTx.Hash)
+	assert.Equal(t, "0x0", emptyTx.From)
+	assert.Equal(t, "0x0", *emptyTx.To)
+	assert.Equal(t, "0x0", *emptyTx.BlockHash)
+	assert.Equal(t, "0x0", emptyTx.GasPrice)
+
+	// Test gas price conversion
+	gasPriceResult := domain.ContractResults{
+		GasPrice: "0x64", // 100 in hex
+	}
+	gasPriceTx := service.ProcessTransaction(gasPriceResult).(domain.Transaction)
+	assert.Equal(t, "0xe8d4a51000", gasPriceTx.GasPrice) // 100 * 10^10 in hex
+
+	// Verify field conversions for the main test case
 	assert.Equal(t, "0x7b", *tx.BlockNumber) // 123 in hex
 	assert.Equal(t, "0xblockHash123", *tx.BlockHash)
 	assert.Equal(t, "0xtxHash123", tx.Hash[:11]) // Verify hash is trimmed
@@ -212,13 +233,13 @@ func TestProcessTransaction_LegacyTransaction(t *testing.T) {
 	assert.Equal(t, toAddress, *tx.To)           // Verify complete to address
 	assert.Equal(t, "0x3e8", tx.Gas)             // 1000 in hex
 	assert.Equal(t, "0x5", *tx.TransactionIndex)
-	assert.Equal(t, "0x64", tx.Value) // 100 in hex
-	assert.Equal(t, "0x1b", tx.V)     // 27 in hex
-	assert.Equal(t, 66, len(tx.R))    // Verify R length
-	assert.Equal(t, 66, len(tx.S))    // Verify S length
-	assert.Equal(t, "0xa", tx.Nonce)  // 10 in hex
-	assert.Equal(t, "0x0", tx.Type)   // Type 0
-	assert.Equal(t, "0x100", tx.GasPrice)
+	assert.Equal(t, "0x64", tx.Value)             // 100 in hex
+	assert.Equal(t, "0x1b", tx.V)                 // 27 in hex
+	assert.Equal(t, 66, len(tx.R))                // Verify R length
+	assert.Equal(t, 66, len(tx.S))                // Verify S length
+	assert.Equal(t, "0xa", tx.Nonce)              // 10 in hex
+	assert.Equal(t, "0x0", tx.Type)               // Type 0
+	assert.Equal(t, "0x2540be40000", tx.GasPrice) // 256 * 10^10 in hex (0x100 = 256)
 	assert.Equal(t, "0xabcd", tx.Input)
 	assert.Equal(t, "0x1", *tx.ChainId)
 }
