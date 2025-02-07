@@ -218,7 +218,7 @@ func ProcessTransaction(contractResult domain.ContractResults) interface{} {
 	}
 }
 
-func ProcessTransactionResponse(contractResult domain.ContractResultResponse) interface{} {
+func (s *EthService) ProcessTransactionResponse(contractResult domain.ContractResultResponse) interface{} {
 	hexBlockNumber := hexify(contractResult.BlockNumber)
 	hexGasUsed := hexify(contractResult.GasUsed)
 	hexTransactionIndex := hexify(int64(contractResult.TransactionIndex))
@@ -238,19 +238,35 @@ func ProcessTransactionResponse(contractResult domain.ContractResultResponse) in
 
 	hexNonce := hexify(contractResult.Nonce)
 
-	hexTo := contractResult.To
-	if len(contractResult.To) > 42 {
-		hexTo = contractResult.To[:42]
-	}
-
 	trimmedBlockHash := contractResult.BlockHash
 	if len(contractResult.BlockHash) > 66 {
 		trimmedBlockHash = contractResult.BlockHash[:66]
 	}
 
+	hexTo := contractResult.To
+	if len(contractResult.To) > 42 {
+		hexTo = contractResult.To[:42]
+	}
+
+	var toAddress string
+	evmAddressTo, errMap := s.resolveEvmAddress(hexTo)
+	if errMap != nil {
+		toAddress = hexTo
+	} else {
+		toAddress = *evmAddressTo
+	}
+
 	trimmedFrom := contractResult.From
 	if len(contractResult.From) > 42 {
 		trimmedFrom = contractResult.From[:42]
+	}
+
+	var fromAddress string
+	evmAddressFrom, errMap := s.resolveEvmAddress(trimmedFrom)
+	if errMap != nil {
+		fromAddress = trimmedFrom
+	} else {
+		fromAddress = *evmAddressFrom
 	}
 
 	trimmedHash := contractResult.Hash
@@ -272,13 +288,13 @@ func ProcessTransactionResponse(contractResult domain.ContractResultResponse) in
 	commonFields := domain.Transaction{
 		BlockHash:        &trimmedBlockHash,
 		BlockNumber:      &hexBlockNumber,
-		From:             trimmedFrom,
+		From:             fromAddress,
 		Gas:              hexGasUsed,
 		GasPrice:         contractResult.GasPrice,
 		Hash:             trimmedHash,
 		Input:            contractResult.FunctionParameters,
 		Nonce:            hexNonce,
-		To:               &hexTo,
+		To:               &toAddress,
 		TransactionIndex: &hexTransactionIndex,
 		Value:            hexValue,
 		V:                hexV,
