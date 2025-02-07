@@ -9,8 +9,7 @@
     "deploy": "hardhat run scripts/deploy.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts",
-    "format": "prettier --write \"**/*.{ts,sol}\"",
-    "setup": "cp .env.example .env"
+    "format": "prettier --write \"**/*.{ts,sol}\""
   },
   "dependencies": {
     "hardhat": "^2.19.4",

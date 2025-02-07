@@ -8,7 +8,7 @@ const config: HardhatUserConfig = {
       url: "http://localhost:7546", // Default JSON-RPC Relay endpoint
       accounts: [
         // Add your private keys here
-        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", // Example private key - DO NOT USE IN PRODUCTION
+        "0xb46751179bc8aa9e129d34463e46cd924055112eb30b31637b5081b56ad96129", // Example private key - DO NOT USE IN PRODUCTION
       ],
       chainId: 296, // Hedera Testnet chain ID
     }
