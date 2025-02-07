@@ -12,18 +12,18 @@ describe("Contract Deployment", function () {
     [deployer] = await ethers.getSigners();
 
     // Log deployment details
-    console.log("Deploying contracts with the account:", deployer.address);
+    console.log("🚀 Deploying contracts with the account:", deployer.address);
     const initialBalance = await ethers.provider.getBalance(deployer.address);
-    console.log("Account balance:", initialBalance.toString());
+    console.log("💰 Account balance:", initialBalance.toString());
 
-    // Deploy the contract
+    // // Deploy the contract
     const SimpleStorageFactory = await ethers.getContractFactory("SimpleStorage");
     simpleStorage = await SimpleStorageFactory.deploy(42);
     await simpleStorage.waitForDeployment();
 
     // Get the deployed contract address
     const deployedAddress = await simpleStorage.getAddress();
-    console.log("SimpleStorage deployed to:", deployedAddress);
+    console.log("📄 SimpleStorage deployed to:", deployedAddress);
 
     // Add some assertions to verify the deployment
     expect(deployedAddress).to.be.properAddress;
