@@ -994,7 +994,7 @@ func TestCall(t *testing.T) {
 			},
 			blockParam:     "latest",
 			mockResponse:   "0x0000000000000000000000000000000000000000000000000000000000000064",
-			expectedResult: "0x64",
+			expectedResult: "0x0000000000000000000000000000000000000000000000000000000000000064",
 			expectError:    false,
 			setupMock:      true,
 		},
