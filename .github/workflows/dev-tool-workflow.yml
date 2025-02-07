@@ -40,7 +40,7 @@ jobs:
         run: go mod tidy
 
       - name: Start the local relay
-        run: go run cmd/server/main.go &
+        run: go run cmd/server/main.go
 
       - name: Install dependencies
         run: cd ${{ inputs.directory }}/ && npm ci
