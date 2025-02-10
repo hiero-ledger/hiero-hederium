@@ -241,7 +241,14 @@ func (m *MirrorClient) GetBalance(address string, timestampTo string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BaseURL+"/api/v1/balances?account.id="+address+"&timestamp=lte:"+timestampTo, nil)
+	var reqUrl string
+	if timestampTo == "0" {
+		reqUrl = m.BaseURL + "/api/v1/balances?account.id=" + address
+	} else {
+		reqUrl = m.BaseURL + "/api/v1/balances?account.id=" + address + "&timestamp=lte:" + timestampTo
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqUrl, nil)
 	if err != nil {
 		m.logger.Error("Error creating request to get balance", zap.Error(err))
 		return "0x0"

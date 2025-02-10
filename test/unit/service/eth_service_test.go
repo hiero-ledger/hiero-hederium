@@ -721,11 +721,22 @@ func TestGetBalance(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	logger, _ := zap.NewDevelopment()
+	cfg := zap.NewDevelopmentConfig()
+	cfg.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+	logger, _ := cfg.Build()
+
 	cacheService := mocks.NewMockCacheService(ctrl)
+
 	mockClient := mocks.NewMockMirrorClient(ctrl)
 
-	s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId, cacheService)
+	s := service.NewEthService(
+		nil,
+		mockClient,
+		logger,
+		nil,
+		defaultChainId,
+		cacheService,
+	)
 
 	testCases := []struct {
 		name           string
@@ -740,17 +751,7 @@ func TestGetBalance(t *testing.T) {
 			blockParam: "latest",
 			setupMock: func() {
 				mockClient.EXPECT().
-					GetLatestBlock().
-					Return(map[string]interface{}{"number": float64(100)}, nil)
-				mockClient.EXPECT().
-					GetBlockByHashOrNumber("100").
-					Return(&domain.BlockResponse{
-						Timestamp: domain.Timestamp{
-							To: "2023-12-09T12:00:00.000Z",
-						},
-					})
-				mockClient.EXPECT().
-					GetBalance("0x1234567890123456789012345678901234567890", "2023-12-09T12:00:00.000Z").
+					GetBalance("0x1234567890123456789012345678901234567890", "0").
 					Return("0x64")
 			},
 			expectedResult: "0x64",
@@ -827,30 +828,16 @@ func TestGetBalance_Latest(t *testing.T) {
 	// Create mock client
 	mockClient := mocks.NewMockMirrorClient(ctrl)
 
-	// Setup expectations for getting latest block
+	// Setup expectations for getting balance with "0" timestamp
 	mockClient.EXPECT().
-		GetLatestBlock().
-		Return(map[string]interface{}{"number": float64(42)}, nil)
-
-	// Setup expectations for getting block by number
-	mockClient.EXPECT().
-		GetBlockByHashOrNumber("42").
-		Return(&domain.BlockResponse{
-			Timestamp: domain.Timestamp{
-				To: "1234567890.000000000",
-			},
-		})
-
-	// Setup expectations for getting balance
-	mockClient.EXPECT().
-		GetBalance("0x123", "1234567890.000000000").
+		GetBalance("0x123", "0").
 		Return("0x2a")
 
 	s := service.NewEthService(
-		nil, // hClient not needed for this test
+		nil,
 		mockClient,
 		logger,
-		nil, // tieredLimiter not needed for this test
+		nil,
 		defaultChainId,
 		cacheService,
 	)
@@ -876,13 +863,13 @@ func TestGetBalance_Earliest(t *testing.T) {
 		GetBlockByHashOrNumber("0").
 		Return(&domain.BlockResponse{
 			Timestamp: domain.Timestamp{
-				To: "0.000000000",
+				To: "2023-01-01T00:00:00.000Z",
 			},
 		})
 
 	// Setup expectations for getting balance
 	mockClient.EXPECT().
-		GetBalance("0x123", "0.000000000").
+		GetBalance("0x123", "2023-01-01T00:00:00.000Z").
 		Return("0x0")
 
 	s := service.NewEthService(
