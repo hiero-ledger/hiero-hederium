@@ -187,14 +187,6 @@ func (s *EthService) GetBlockByHash(hash string, showDetails bool) (interface{},
 func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (interface{}, map[string]interface{}) {
 	s.logger.Info("Getting block by number", zap.String("numberOrTag", numberOrTag), zap.Bool("showDetails", showDetails))
 
-	cachedKey := fmt.Sprintf("%s_%s_%t", GetBlockByNumber, numberOrTag, showDetails)
-
-	var cachedBlock domain.Block
-	if err := s.cacheService.Get(s.ctx, cachedKey, &cachedBlock); err == nil && cachedBlock.Hash != nil {
-		s.logger.Info("Block fetched from cache", zap.Any("block", cachedBlock))
-		return &cachedBlock, nil
-	}
-
 	blockNumber, errMap := s.getBlockNumberByHashOrTag(numberOrTag)
 	if errMap != nil {
 		return nil, errMap
@@ -206,6 +198,14 @@ func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (int
 			"code":    -32602,
 			"message": "Invalid block number",
 		}
+	}
+
+	cachedKey := fmt.Sprintf("%s_%d_%t", GetBlockByNumber, blockNumberInt, showDetails)
+
+	var cachedBlock domain.Block
+	if err := s.cacheService.Get(s.ctx, cachedKey, &cachedBlock); err == nil && cachedBlock.Hash != nil {
+		s.logger.Info("Block fetched from cache", zap.Any("block", cachedBlock))
+		return &cachedBlock, nil
 	}
 
 	block := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockNumberInt, 10))
