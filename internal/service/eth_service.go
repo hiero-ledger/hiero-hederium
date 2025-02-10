@@ -231,29 +231,8 @@ func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) str
 
 	switch blockNumberTagOrHash {
 	case "latest", "pending":
-		latestBlock, errMap := s.GetBlockNumber()
-		if errMap != nil {
-			s.logger.Debug("Failed to get latest block number")
-			return "0x0"
-		}
-
-		latestBlockStr, ok := latestBlock.(string)
-		if !ok {
-			s.logger.Debug("Invalid block number format")
-			return "0x0"
-		}
-
-		// Convert hex string to int, remove "0x" prefix
-		latestBlockNum, err := strconv.ParseInt(latestBlockStr[2:], 16, 64)
-		if err != nil {
-			s.logger.Debug("Failed to parse latest block number", zap.Error(err))
-			return "0x0"
-		}
-		block = s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(latestBlockNum, 10))
-		if block == nil {
-			s.logger.Debug("Latest block not found")
-			return "0x0"
-		}
+		balance := s.mClient.GetBalance(address, "0")
+		return balance
 	case "earliest":
 		block = s.mClient.GetBlockByHashOrNumber("0")
 		if block == nil {
