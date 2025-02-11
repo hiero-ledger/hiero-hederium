@@ -286,14 +286,6 @@ func (s *EthService) GetTransactionCount(address string, blockNumberOrTag string
 		return "0x0"
 	}
 
-	cachedKey := fmt.Sprintf("%s_%s_%d", GetTransactionCount, address, blockNumberInt)
-
-	var cachedTxCount string
-	if err := s.cacheService.Get(s.ctx, cachedKey, &cachedTxCount); err == nil && cachedTxCount != "" {
-		s.logger.Info("Transaction count fetched from cache", zap.String("txCount", cachedTxCount))
-		return cachedTxCount
-	}
-
 	requestingLatest := s.isLatestBlockRequest(blockNumberOrTag, blockNumberInt)
 
 	block := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockNumberInt, 10))
@@ -322,10 +314,6 @@ func (s *EthService) GetTransactionCount(address string, blockNumberOrTag string
 	contractResultResponse := contractResult.(domain.ContractResultResponse)
 
 	nonce := fmt.Sprintf("0x%x", contractResultResponse.Nonce+1) // We add 1 here, because of the nature nonce is incremented.
-
-	if err := s.cacheService.Set(s.ctx, cachedKey, nonce, DefaultExpiration); err != nil {
-		s.logger.Debug("Failed to cache transaction count", zap.Error(err))
-	}
 
 	s.logger.Info("Returning nonce", zap.String("nonce", nonce), zap.String("address", address))
 	return nonce
