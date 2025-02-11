@@ -46,8 +46,8 @@ func TestGetFeeWeibars_Success(t *testing.T) {
 		cacheService,
 	)
 
-	result, errMap := service.GetFeeWeibars(s, "", "")
-	assert.Nil(t, errMap)
+	result, err := service.GetFeeWeibars(s, "", "")
+	assert.Nil(t, err)
 
 	// Expected weibars = tinybars * 10^10
 	expectedWeibars := big.NewInt(expectedGasTinybars)
@@ -72,11 +72,9 @@ func TestGetFeeWeibars_Error(t *testing.T) {
 		cacheService,
 	)
 
-	result, errMap := service.GetFeeWeibars(s, "", "")
+	result, err := service.GetFeeWeibars(s, "", "")
 	assert.Nil(t, result)
-	assert.NotNil(t, errMap)
-	assert.Equal(t, -32000, errMap["code"])
-	assert.Equal(t, "Failed to fetch gas price", errMap["message"])
+	assert.NotNil(t, err)
 }
 
 func TestProcessBlock_Success(t *testing.T) {

@@ -208,7 +208,7 @@ func TestGetBlockTransactionCountByHash(t *testing.T) {
 		blockHash      string
 		mockResponse   *domain.BlockResponse
 		expectedResult interface{}
-		expectedError  map[string]interface{}
+		expectedError  *domain.RPCError
 	}{
 		{
 			name:      "Success with transactions",
@@ -263,10 +263,10 @@ func TestGetBlockTransactionCountByHash(t *testing.T) {
 					Return(nil)
 			}
 
-			result, errMap := s.GetBlockTransactionCountByHash(tc.blockHash)
+			result, errRpc := s.GetBlockTransactionCountByHash(tc.blockHash)
 
 			assert.Equal(t, tc.expectedResult, result)
-			assert.Equal(t, tc.expectedError, errMap)
+			assert.Equal(t, tc.expectedError, errRpc)
 		})
 	}
 }
@@ -338,12 +338,9 @@ func TestGetGasPrice_Error(t *testing.T) {
 		GetNetworkFees("", "").
 		Return(int64(0), fmt.Errorf("failed to fetch network fees"))
 
-	result, errMap := s.GetGasPrice()
+	result, errRpc := s.GetGasPrice()
 	assert.Nil(t, result)
-	assert.Equal(t, map[string]interface{}{
-		"code":    -32000,
-		"message": "Failed to fetch gas price",
-	}, errMap)
+	assert.Equal(t, domain.NewRPCError(domain.ServerError, "Failed to fetch gas price"), errRpc)
 }
 
 func TestGetChainId(t *testing.T) {
@@ -715,21 +712,20 @@ func TestGetBlockByNumber(t *testing.T) {
 			tc.setupMocks()
 
 			s := service.NewEthService(nil, mockClient, logger, nil, defaultChainId, cacheService)
-			result, errMap := s.GetBlockByNumber(tc.numberOrTag, tc.showDetails)
+			result, errRpc := s.GetBlockByNumber(tc.numberOrTag, tc.showDetails)
 
 			if tc.name == "Invalid hex number" {
-				assert.NotNil(t, errMap)
-				assert.Equal(t, -32000, errMap["code"])
-				assert.Equal(t, "Failed to parse hex value", errMap["message"])
+				assert.NotNil(t, errRpc)
+				assert.Equal(t, domain.NewRPCError(domain.ServerError, "Invalid block number"), errRpc)
 				return
 			}
 
 			if tc.expectNil {
 				assert.Nil(t, result)
-				assert.Nil(t, errMap)
+				assert.Nil(t, errRpc)
 			} else {
 				assert.NotNil(t, result)
-				assert.Nil(t, errMap)
+				assert.Nil(t, errRpc)
 
 				block, ok := result.(*domain.Block)
 				assert.True(t, ok)
@@ -1064,13 +1060,13 @@ func TestCall(t *testing.T) {
 					Times(1)
 			}
 
-			result, errMap := s.Call(tc.transaction, tc.blockParam)
+			result, errRpc := s.Call(tc.transaction, tc.blockParam)
 
 			if tc.expectError {
-				assert.NotNil(t, errMap)
-				assert.Equal(t, -32000, errMap["code"])
+				assert.NotNil(t, errRpc)
+				assert.Equal(t, -32000, errRpc.Code)
 			} else {
-				assert.Nil(t, errMap)
+				assert.Nil(t, errRpc)
 				assert.Equal(t, tc.expectedResult, result)
 			}
 		})
@@ -1154,13 +1150,13 @@ func TestEstimateGas(t *testing.T) {
 					Times(1)
 			}
 
-			result, errMap := s.EstimateGas(tc.transaction, tc.blockParam)
+			result, errRpc := s.EstimateGas(tc.transaction, tc.blockParam)
 
 			if tc.expectError {
-				assert.NotNil(t, errMap)
-				assert.Equal(t, -32000, errMap["code"])
+				assert.NotNil(t, errRpc)
+				assert.Equal(t, -32000, errRpc.Code)
 			} else {
-				assert.Nil(t, errMap)
+				assert.Nil(t, errRpc)
 				assert.Equal(t, tc.expectedResult, result)
 			}
 		})
@@ -1302,7 +1298,7 @@ func TestGetTransactionByHash(t *testing.T) {
 					Times(1)
 			}
 
-			result := s.GetTransactionByHash(tc.hash)
+			result, _ := s.GetTransactionByHash(tc.hash)
 			if tc.checkFields != nil {
 				tc.checkFields(t, result)
 			}
@@ -1922,13 +1918,13 @@ func TestGetStorageAt(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.setupMock()
 
-			result, errMap := s.GetStorageAt(tc.address, tc.slot, tc.blockParam)
+			result, errRpc := s.GetStorageAt(tc.address, tc.slot, tc.blockParam)
 
 			if tc.expectError {
-				assert.NotNil(t, errMap)
-				assert.Equal(t, -32000, errMap["code"])
+				assert.NotNil(t, errRpc)
+				assert.Equal(t, -32000, errRpc.Code)
 			} else {
-				assert.Nil(t, errMap)
+				assert.Nil(t, errRpc)
 				assert.Equal(t, tc.expectedResult, result)
 			}
 		})
@@ -2135,13 +2131,13 @@ func TestGetLogs(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.setupMocks()
 
-			result, errMap := s.GetLogs(tc.logParams)
+			result, errRpc := s.GetLogs(tc.logParams)
 
 			if tc.expectError {
-				assert.NotNil(t, errMap)
-				assert.Equal(t, -32000, errMap["code"])
+				assert.NotNil(t, errRpc)
+				assert.Equal(t, -32000, errRpc.Code)
 			} else {
-				assert.Nil(t, errMap)
+				assert.Nil(t, errRpc)
 				assert.Equal(t, tc.expectedResult, result)
 			}
 		})
@@ -2164,7 +2160,7 @@ func TestGetBlockTransactionCountByNumber(t *testing.T) {
 		mockLatestBlock map[string]interface{}
 		mockResponse    *domain.BlockResponse
 		expectedResult  interface{}
-		expectedError   map[string]interface{}
+		expectedError   *domain.RPCError
 		setupMock       func()
 	}{
 		{
@@ -2268,11 +2264,8 @@ func TestGetBlockTransactionCountByNumber(t *testing.T) {
 			name:           "Invalid block number format",
 			blockParam:     "0xinvalid",
 			expectedResult: nil,
-			expectedError: map[string]interface{}{
-				"code":    -32000,
-				"message": "Failed to parse hex value",
-			},
-			setupMock: func() {},
+			expectedError:  domain.NewRPCError(domain.ServerError, "Invalid block number"),
+			setupMock:      func() {},
 		},
 	}
 
@@ -2332,7 +2325,7 @@ func TestGetTransactionByBlockHashAndIndex(t *testing.T) {
 		index          string
 		mockResult     *domain.ContractResults
 		expectedResult interface{}
-		expectedError  map[string]interface{}
+		expectedError  *domain.RPCError
 		setupMocks     func()
 		checkFields    func(t *testing.T, result interface{})
 	}{
@@ -2388,10 +2381,7 @@ func TestGetTransactionByBlockHashAndIndex(t *testing.T) {
 			index:          "0xinvalid",
 			mockResult:     nil,
 			expectedResult: nil,
-			expectedError: map[string]interface{}{
-				"code":    -32000,
-				"message": "Failed to parse hex value",
-			},
+			expectedError:  domain.NewRPCError(domain.ServerError, "Failed to parse hex value"),
 			setupMocks: func() {
 				// Mock cache miss - we expect cache check even for invalid input
 				cacheService.EXPECT().
@@ -2536,7 +2526,7 @@ func TestGetTransactionByBlockNumberAndIndex(t *testing.T) {
 		index          string
 		mockResult     *domain.ContractResults
 		expectedResult interface{}
-		expectedError  map[string]interface{}
+		expectedError  *domain.RPCError
 		setupMocks     func()
 		checkFields    func(t *testing.T, result interface{})
 	}{
@@ -2642,10 +2632,7 @@ func TestGetTransactionByBlockNumberAndIndex(t *testing.T) {
 			index:          "0xinvalid",
 			mockResult:     nil,
 			expectedResult: nil,
-			expectedError: map[string]interface{}{
-				"code":    -32000,
-				"message": "Failed to parse hex value",
-			},
+			expectedError:  domain.NewRPCError(domain.ServerError, "Failed to parse hex value"),
 			setupMocks: func() {
 				// Mock cache miss - we expect cache check even for invalid input
 				cacheService.EXPECT().
@@ -2732,12 +2719,12 @@ func TestGetTransactionByBlockNumberAndIndex(t *testing.T) {
 				tc.setupMocks()
 			}
 
-			result, errMap := s.GetTransactionByBlockNumberAndIndex(tc.blockNumber, tc.index)
+			result, errRpc := s.GetTransactionByBlockNumberAndIndex(tc.blockNumber, tc.index)
 
 			if tc.expectedError != nil {
-				assert.Equal(t, tc.expectedError, errMap)
+				assert.Equal(t, tc.expectedError, errRpc)
 			} else {
-				assert.Nil(t, errMap)
+				assert.Nil(t, errRpc)
 				if tc.checkFields != nil {
 					tc.checkFields(t, result)
 				} else {
@@ -2985,11 +2972,10 @@ func TestSendRawTransactionEndpoint(t *testing.T) {
 
 	// Test case 2: Invalid transaction data
 	t.Run("Invalid transaction data", func(t *testing.T) {
-		result, errMap := ethService.SendRawTransaction("")
+		result, errRpc := ethService.SendRawTransaction("")
 
-		assert.NotNil(t, errMap)
+		assert.NotNil(t, errRpc)
 		assert.Nil(t, result)
-		assert.Equal(t, -32000, errMap["code"])
-		assert.Contains(t, errMap["message"], "transaction data is empty")
+		assert.Equal(t, domain.NewRPCError(domain.ServerError, "Failed to parse transaction"), errRpc)
 	})
 }
