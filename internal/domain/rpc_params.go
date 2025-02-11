@@ -15,13 +15,13 @@ type RPCParams interface {
 // EthGetBlockByHashParams represents parameters for eth_getBlockByHash
 type EthGetBlockByHashParams struct {
 	BlockHash   string `json:"blockHash" binding:"required,len=66,hexadecimal,startswith=0x"`
-	ShowDetails bool   `json:"showDetails" binding:"required"`
+	ShowDetails bool   `json:"showDetails"`
 }
 
 // EthGetBlockByNumberParams represents parameters for eth_getBlockByNumber
 type EthGetBlockByNumberParams struct {
 	BlockNumber string `json:"blockNumber" binding:"required,block_number_or_tag"`
-	ShowDetails bool   `json:"showDetails" binding:"required"`
+	ShowDetails bool   `json:"showDetails"`
 }
 
 // EthGetBalanceParams represents parameters for eth_getBalance
@@ -179,12 +179,18 @@ func (p *EthGetBlockByNumberParams) FromPositionalParams(params []interface{}) e
 		return fmt.Errorf("expected 2 parameters, got %d", len(params))
 	}
 
-	if blockNumber, ok := params[0].(string); ok {
-		p.BlockNumber = blockNumber
+	blockNumber, ok := params[0].(string)
+	if !ok {
+		return fmt.Errorf("blockNumber must be a string")
 	}
-	if showDetails, ok := params[1].(bool); ok {
-		p.ShowDetails = showDetails
+	p.BlockNumber = blockNumber
+
+	showDetails, ok := params[1].(bool)
+	if !ok {
+		return fmt.Errorf("showDetails must be a boolean")
 	}
+	p.ShowDetails = showDetails
+
 	return nil
 }
 
