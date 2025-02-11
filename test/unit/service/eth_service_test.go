@@ -169,25 +169,25 @@ func TestUncleRelatedMethods(t *testing.T) {
 
 	// Test all uncle-related methods
 	t.Run("GetUncleCountByBlockNumber", func(t *testing.T) {
-		result, errMap := s.GetUncleCountByBlockNumber()
+		result, errMap := s.GetUncleCountByBlockNumber("0x1")
 		assert.Nil(t, errMap)
 		assert.Equal(t, "0x0", result)
 	})
 
 	t.Run("GetUncleByBlockNumberAndIndex", func(t *testing.T) {
-		result, errMap := s.GetUncleByBlockNumberAndIndex()
+		result, errMap := s.GetUncleByBlockNumberAndIndex("0x1", "0x0")
 		assert.Nil(t, errMap)
 		assert.Nil(t, result)
 	})
 
 	t.Run("GetUncleCountByBlockHash", func(t *testing.T) {
-		result, errMap := s.GetUncleCountByBlockHash()
+		result, errMap := s.GetUncleCountByBlockHash("0x1234567890123456789012345678901234567890123456789012345678901234")
 		assert.Nil(t, errMap)
 		assert.Equal(t, "0x0", result)
 	})
 
 	t.Run("GetUncleByBlockHashAndIndex", func(t *testing.T) {
-		result, errMap := s.GetUncleByBlockHashAndIndex()
+		result, errMap := s.GetUncleByBlockHashAndIndex("0x1234567890123456789012345678901234567890123456789012345678901234", "0x0")
 		assert.Nil(t, errMap)
 		assert.Nil(t, result)
 	})
