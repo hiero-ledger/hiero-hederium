@@ -97,15 +97,7 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		if err := rpcParams.FromPositionalParams(p); err != nil {
 			return nil, map[string]interface{}{
 				"code":    -32602,
-				"message": err.Error(),
-			}
-		}
-	case map[string]interface{}:
-		logger.Debug("Processing object params", zap.Any("object_params", p))
-		if err := rpcParams.FromNamedParams(p); err != nil {
-			return nil, map[string]interface{}{
-				"code":    -32602,
-				"message": err.Error(),
+				"message": fmt.Sprintf("Invalid params: %s", err.Error()),
 			}
 		}
 	default:
@@ -121,7 +113,7 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 			logger.Debug("Validation failed", zap.Error(err))
 			return nil, map[string]interface{}{
 				"code":    -32602,
-				"message": err.Error(),
+				"message": "Invalid params",
 			}
 		}
 	}
