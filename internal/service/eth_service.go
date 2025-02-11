@@ -63,15 +63,12 @@ func NewEthService(
 //     or nil on failure
 //   - map[string]interface{}: Error details if the operation fails, nil on success.
 //     Error format follows Ethereum JSON-RPC error specifications.
-func (s *EthService) GetBlockNumber() (interface{}, map[string]interface{}) {
+func (s *EthService) GetBlockNumber() (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting block number")
 	block, err := s.mClient.GetLatestBlock()
 	if err != nil {
 		s.logger.Error("Failed to fetch latest block", zap.Error(err))
-		return nil, map[string]interface{}{
-			"code":    -32000,
-			"message": "Failed to fetch block data",
-		}
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to fetch block data: "+err.Error())
 	}
 
 	s.logger.Debug("Received block data", zap.Any("block", block))
@@ -87,16 +84,13 @@ func (s *EthService) GetBlockNumber() (interface{}, map[string]interface{}) {
 	}
 
 	s.logger.Error("Block number not found or invalid type", zap.Any("block", block))
-	return nil, map[string]interface{}{
-		"code":    -32000,
-		"message": "Invalid block data",
-	}
+	return nil, domain.NewRPCError(domain.ServerError, "Invalid block data")
 }
 
 // GetGasPrice returns the current gas price in wei with a 10% buffer added.
 // The gas price is fetched from the network in tinybars, converted to weibars,
 // and returned as a hex string with "0x" prefix.
-func (s *EthService) GetGasPrice() (interface{}, map[string]interface{}) {
+func (s *EthService) GetGasPrice() (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting gas price")
 
 	cacheKey := GetGasPrice
@@ -113,12 +107,8 @@ func (s *EthService) GetGasPrice() (interface{}, map[string]interface{}) {
 
 	weibars, errMap := GetFeeWeibars(s, timestampTo, order)
 	if errMap != nil {
-		errMsg := "Failed to fetch gas price"
-		s.logger.Error(errMsg)
-		return nil, map[string]interface{}{
-			"code":    -32000,
-			"message": errMsg,
-		}
+		s.logger.Error("Failed to fetch gas price")
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to fetch gas price") // TODO: Add error code
 	}
 
 	gasPrice := fmt.Sprintf("0x%x", weibars)
@@ -133,7 +123,7 @@ func (s *EthService) GetGasPrice() (interface{}, map[string]interface{}) {
 
 // GetChainId returns the network's chain ID as configured in the service.
 // The chain ID is returned as a hex string with "0x" prefix.
-func (s *EthService) GetChainId() (interface{}, map[string]interface{}) {
+func (s *EthService) GetChainId() (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting chain ID")
 	s.logger.Info("Returning chain ID", zap.String("chainId", s.chainId))
 	return s.chainId, nil
@@ -145,7 +135,7 @@ func (s *EthService) GetChainId() (interface{}, map[string]interface{}) {
 //   - showDetails: If true, returns full transaction objects; if false, only transaction hashes
 //
 // Returns nil for both return values if the block is not found.
-func (s *EthService) GetBlockByHash(hash string, showDetails bool) (interface{}, map[string]interface{}) {
+func (s *EthService) GetBlockByHash(hash string, showDetails bool) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting block by hash", zap.String("hash", hash), zap.Bool("showDetails", showDetails))
 
 	cacheKey := fmt.Sprintf("%s_%s_%t", GetBlockByHash, hash, showDetails)
@@ -161,9 +151,10 @@ func (s *EthService) GetBlockByHash(hash string, showDetails bool) (interface{},
 		return nil, nil
 	}
 
-	processedBlock, errMap := ProcessBlock(s, block, showDetails)
-	if errMap != nil {
-		return nil, errMap
+	processedBlock, err := ProcessBlock(s, block, showDetails)
+	if err != nil {
+		s.logger.Error("Failed to process block", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to process block")
 	}
 
 	if err := s.cacheService.Set(s.ctx, cacheKey, &processedBlock, DefaultExpiration); err != nil {
@@ -184,7 +175,7 @@ func (s *EthService) GetBlockByHash(hash string, showDetails bool) (interface{},
 // Returns:
 //   - interface{}: The block data in Ethereum format (*domain.Block), or nil if not found
 //   - map[string]interface{}: Error information if any occurred, nil otherwise
-func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (interface{}, map[string]interface{}) {
+func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting block by number", zap.String("numberOrTag", numberOrTag), zap.Bool("showDetails", showDetails))
 
 	blockNumber, errMap := s.getBlockNumberByHashOrTag(numberOrTag)
@@ -194,10 +185,7 @@ func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (int
 
 	blockNumberInt, ok := blockNumber.(int64)
 	if !ok {
-		return nil, map[string]interface{}{
-			"code":    -32602,
-			"message": "Invalid block number",
-		}
+		return nil, nil
 	}
 
 	cachedKey := fmt.Sprintf("%s_%d_%t", GetBlockByNumber, blockNumberInt, showDetails)
@@ -213,9 +201,10 @@ func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (int
 		return nil, nil
 	}
 
-	processedBlock, errMap := ProcessBlock(s, block, showDetails)
-	if errMap != nil {
-		return nil, errMap
+	processedBlock, err := ProcessBlock(s, block, showDetails)
+	if err != nil {
+		s.logger.Error("Failed to process block", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to process block")
 	}
 
 	if err := s.cacheService.Set(s.ctx, cachedKey, &processedBlock, DefaultExpiration); err != nil {
@@ -225,6 +214,7 @@ func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (int
 	return processedBlock, nil
 }
 
+// TODO: Add error handling
 func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) string {
 	s.logger.Info("Getting balance", zap.String("address", address), zap.String("blockNumberTagOrHash", blockNumberTagOrHash))
 
@@ -273,6 +263,7 @@ func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) str
 	return balance
 }
 
+// TODO: Add error handling
 func (s *EthService) GetTransactionCount(address string, blockNumberOrTag string) string {
 	s.logger.Info("Getting transaction count", zap.String("address", address), zap.String("blockNumberOrTag", blockNumberOrTag))
 
@@ -293,6 +284,7 @@ func (s *EthService) GetTransactionCount(address string, blockNumberOrTag string
 	if block == nil {
 		return "0x0"
 	}
+
 	account := s.mClient.GetAccount(address, block.Timestamp.To)
 	if account == nil {
 		return "0x0"
@@ -319,26 +311,25 @@ func (s *EthService) GetTransactionCount(address string, blockNumberOrTag string
 	return nonce
 }
 
-func (s *EthService) EstimateGas(transaction interface{}, blockParam interface{}) (string, map[string]interface{}) {
+func (s *EthService) EstimateGas(transaction interface{}, blockParam interface{}) (string, *domain.RPCError) {
 	s.logger.Info("Estimating gas", zap.Any("transaction", transaction))
-	errorObject := map[string]interface{}{
-		"code":    -32000,
-		"message": "Error encountered while estimating gas",
-	}
 
 	txObj, err := ParseTransactionCallObject(s, transaction)
 	if err != nil {
-		return "0x0", errorObject
+		s.logger.Error("Failed to parse transaction call object", zap.Error(err))
+		return "0x0", domain.NewRPCError(domain.ServerError, "Failed to parse transaction call object")
 	}
 
 	formatResult, err := FormatTransactionCallObject(s, txObj, blockParam, true)
 	if err != nil {
-		return "0x0", errorObject
+		s.logger.Error("Failed to format transaction call object", zap.Error(err))
+		return "0x0", domain.NewRPCError(domain.ServerError, "Failed to format transaction call object")
 	}
 
 	callResult := s.mClient.PostCall(formatResult)
 	if callResult == nil {
-		return "0x0", errorObject
+		s.logger.Error("Failed to post call", zap.Error(err))
+		return "0x0", domain.NewRPCError(domain.ServerError, "Failed to post call")
 	}
 
 	// Remove leading zeros from the result string
@@ -348,33 +339,32 @@ func (s *EthService) EstimateGas(transaction interface{}, blockParam interface{}
 	return result, nil
 }
 
-func (s *EthService) Call(transaction interface{}, blockParam interface{}) (interface{}, map[string]interface{}) {
+func (s *EthService) Call(transaction interface{}, blockParam interface{}) (interface{}, *domain.RPCError) {
 	s.logger.Info("Performing eth_call", zap.Any("transaction", transaction))
-	errorObject := map[string]interface{}{
-		"code":    -32000,
-		"message": "Error encountered while performing eth_call",
-	}
 
 	txObj, err := ParseTransactionCallObject(s, transaction)
 	if err != nil {
-		return "0x0", errorObject
+		s.logger.Error("Failed to parse transaction call object", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to parse transaction call object")
 	}
 
 	result, err := FormatTransactionCallObject(s, txObj, blockParam, false)
 	if err != nil {
-		return "0x0", errorObject
+		s.logger.Error("Failed to format transaction call object", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to format transaction call object")
 	}
 
 	callResult := s.mClient.PostCall(result)
 	if callResult == nil {
-		return "0x0", errorObject
+		s.logger.Error("Failed to post call", zap.Error(err))
+		return "0x0", domain.NewRPCError(domain.ServerError, "Failed to post call")
 	}
 
 	s.logger.Info("Returning transaction call result", zap.Any("result", callResult))
 	return callResult, nil
 }
 
-func (s *EthService) GetTransactionByHash(hash string) interface{} {
+func (s *EthService) GetTransactionByHash(hash string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting transaction by hash", zap.String("hash", hash))
 
 	cacheKey := fmt.Sprintf("%s_%s", GetTransactionByHash, hash)
@@ -382,13 +372,13 @@ func (s *EthService) GetTransactionByHash(hash string) interface{} {
 	var cachedTx interface{}
 	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedTx); err == nil && cachedTx != nil {
 		s.logger.Info("Transaction fetched from cache", zap.Any("transaction", cachedTx))
-		return cachedTx
+		return cachedTx, nil
 	}
 	contractResult := s.mClient.GetContractResult(hash)
 
 	if contractResult == nil {
 		// TODO: Here we should handle synthetic transactions
-		return nil
+		return nil, nil
 	}
 	contractResultResponse := contractResult.(domain.ContractResultResponse)
 
@@ -399,10 +389,10 @@ func (s *EthService) GetTransactionByHash(hash string) interface{} {
 		s.logger.Debug("Failed to cache transaction", zap.Error(err))
 	}
 
-	return transaction
+	return transaction, nil
 }
 
-func (s *EthService) GetTransactionReceipt(hash string) (interface{}, map[string]interface{}) {
+func (s *EthService) GetTransactionReceipt(hash string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting transaction receipt", zap.String("hash", hash))
 
 	cacheKey := fmt.Sprintf("%s_%s", GetTransactionReceipt, hash)
@@ -454,9 +444,9 @@ func (s *EthService) GetTransactionReceipt(hash string) (interface{}, map[string
 		s.logger.Error("Failed to resolve EVM address for to", zap.Any("error", errMap))
 	}
 
-	effectiveGasPrice, errMap := s.getCurrentGasPriceForBlock(contractResultResponse.BlockHash[:66])
-	if errMap != nil {
-		s.logger.Error("Failed to get gas price for block")
+	effectiveGasPrice, err := s.getCurrentGasPriceForBlock(contractResultResponse.BlockHash[:66])
+	if err != nil {
+		s.logger.Error("Failed to get gas price for block", zap.Any("error", err))
 	}
 
 	// Create receipt
@@ -508,43 +498,38 @@ func (s *EthService) GetTransactionReceipt(hash string) (interface{}, map[string
 	return receipt, nil
 }
 
-func (s *EthService) FeeHistory(blockCount string, newestBlock string, rewardPercentiles []string) (interface{}, map[string]interface{}) {
+func (s *EthService) FeeHistory(blockCount string, newestBlock string, rewardPercentiles []string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting fee history", zap.String("blockCount", blockCount), zap.String("newestBlock", newestBlock), zap.Any("rewardPercentiles", rewardPercentiles))
 
 	//Get the block number of the newest block
-	latestBlockNumber, err := s.GetBlockNumber()
-	if err != nil {
-		return nil, map[string]interface{}{
-			"code":    -32000,
-			"message": "Failed to get latest block number1",
-		}
+	latestBlockNumber, errRpc := s.GetBlockNumber()
+	if errRpc != nil {
+		return nil, errRpc
 	}
 
 	latestBlockHex, ok := latestBlockNumber.(string)
 	if !ok {
-		return nil, map[string]interface{}{
-			"code":    -32000,
-			"message": "Failed to parse latest block number2",
-		}
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to parse latest block number")
 	}
-	latestBlockInt, errMap := HexToDec(latestBlockHex)
-	if errMap != nil {
-		return nil, errMap
+	latestBlockInt, err := HexToDec(latestBlockHex)
+	if err != nil {
+		return nil, domain.NewRPCError(domain.ServerError, fmt.Sprintf("Failed to parse latest block number: %s", err.Error()))
 	}
-	newestBlockNumber, errMap := s.getBlockNumberByHashOrTag(newestBlock)
-	if errMap != nil {
-		return nil, errMap
+	newestBlockNumber, errRpc := s.getBlockNumberByHashOrTag(newestBlock)
+	if errRpc != nil {
+		return nil, errRpc
 	}
 
 	newestBlockInt, ok := newestBlockNumber.(int64)
 	if !ok {
-		return nil, errMap
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to parse newest block number")
 	}
 
 	//Convert the block number to decimal
-	blockCountInt, errMap := HexToDec(blockCount)
-	if errMap != nil {
-		return nil, errMap
+	blockCountInt, err := HexToDec(blockCount)
+	if err != nil {
+		s.logger.Error("Failed to parse block count", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to parse block count:")
 	}
 
 	//Check if the blockCount is greater then the one we need
@@ -564,54 +549,46 @@ func (s *EthService) FeeHistory(blockCount string, newestBlock string, rewardPer
 			blockCountInt = 1
 			oldestBlockInt = 1
 		}
-		fee, errMap := s.GetGasPrice()
-		if errMap != nil {
-			return nil, errMap
+		fee, errRpc := s.GetGasPrice()
+		if errRpc != nil {
+			return nil, errRpc
 		}
 		feeHex, ok := fee.(string)
 		if !ok {
-			return nil, map[string]interface{}{
-				"code":    -32000,
-				"message": "Failed to parse fee",
-			}
+			return nil, domain.NewRPCError(domain.ServerError, "Failed to parse fee")
 		}
 
 		feeHistory := s.getRepeatedFeeHistory(blockCountInt, oldestBlockInt, rewardPercentiles, feeHex)
 		return feeHistory, nil
 	}
 
-	feeHistory, errMap := s.getFeeHistory(blockCountInt, newestBlockInt, latestBlockInt, rewardPercentiles)
-	if errMap != nil {
-		return nil, errMap
+	feeHistory, err := s.getFeeHistory(blockCountInt, newestBlockInt, latestBlockInt, rewardPercentiles)
+	if err != nil {
+		s.logger.Error("Failed to get fee history", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to get fee history:")
 	}
 
 	return feeHistory, nil
 }
 
-func (s *EthService) GetStorageAt(address, slot, blockNumberOrHash string) (interface{}, map[string]interface{}) {
+func (s *EthService) GetStorageAt(address, slot, blockNumberOrHash string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting storage at", zap.String("address", address), zap.String("slot", slot), zap.String("blockNumberOrHash", blockNumberOrHash))
-	blockInt, errMap := s.getBlockNumberByHashOrTag(blockNumberOrHash)
-	if errMap != nil {
-		return nil, errMap
+	blockInt, errRpc := s.getBlockNumberByHashOrTag(blockNumberOrHash)
+	if errRpc != nil {
+		return nil, errRpc
 	}
 
 	blockResponse := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockInt.(int64), 10))
 
 	if blockResponse == nil {
-		return nil, map[string]interface{}{
-			"code":    -32000,
-			"message": "Failed to get block data",
-		}
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to get block data")
 	}
 
 	timestampTo := blockResponse.Timestamp.To
 
 	result, err := s.mClient.GetContractStateByAddressAndSlot(address, slot, timestampTo)
 	if err != nil {
-		return nil, map[string]interface{}{
-			"code":    -32000,
-			"message": "Failed to get storage data",
-		}
+		return nil, domain.NewRPCError(domain.ServerError, fmt.Sprintf("Failed to get storage data: %s", err.Error()))
 	}
 
 	if result == nil || len(result.State) == 0 {
@@ -623,7 +600,7 @@ func (s *EthService) GetStorageAt(address, slot, blockNumberOrHash string) (inte
 	return result.State[0].Value, nil
 }
 
-func (s *EthService) GetLogs(logParams domain.LogParams) (interface{}, map[string]interface{}) {
+func (s *EthService) GetLogs(logParams domain.LogParams) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting logs", zap.Any("logParams", logParams))
 	params := make(map[string]interface{})
 
@@ -649,16 +626,14 @@ func (s *EthService) GetLogs(logParams domain.LogParams) (interface{}, map[strin
 
 	logs, err := s.getLogsWithParams(logParams.Address, params)
 	if err != nil {
-		return nil, map[string]interface{}{
-			"code":    -32000,
-			"message": "Failed to get logs",
-		}
+		s.logger.Error("Failed to get logs", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to get logs")
 	}
 
 	return logs, nil
 }
 
-func (s *EthService) GetBlockTransactionCountByHash(blockHash string) (interface{}, map[string]interface{}) {
+func (s *EthService) GetBlockTransactionCountByHash(blockHash string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting block transaction count by hash", zap.String("blockHash", blockHash))
 
 	cacheKey := fmt.Sprintf("%s_%s", GetBlockTransactionCountByHash, blockHash)
@@ -685,7 +660,7 @@ func (s *EthService) GetBlockTransactionCountByHash(blockHash string) (interface
 	return transactionCount, nil
 }
 
-func (s *EthService) GetBlockTransactionCountByNumber(blockNumberOrTag string) (interface{}, map[string]interface{}) {
+func (s *EthService) GetBlockTransactionCountByNumber(blockNumberOrTag string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting block transaction count by number", zap.String("blockNumber", blockNumberOrTag))
 	blockNumber, errMap := s.getBlockNumberByHashOrTag(blockNumberOrTag)
 	if errMap != nil {
@@ -694,10 +669,7 @@ func (s *EthService) GetBlockTransactionCountByNumber(blockNumberOrTag string) (
 
 	blockNumberInt, ok := blockNumber.(int64)
 	if !ok {
-		return nil, map[string]interface{}{
-			"code":    -32000,
-			"message": "Invalid block number",
-		}
+		return nil, domain.NewRPCError(domain.ServerError, "Invalid block number")
 	}
 
 	cachedKey := fmt.Sprintf("%s_%d", GetBlockTransactionCountByNumber, blockNumberInt)
@@ -724,7 +696,7 @@ func (s *EthService) GetBlockTransactionCountByNumber(blockNumberOrTag string) (
 	return transactionCount, nil
 }
 
-func (s *EthService) GetTransactionByBlockHashAndIndex(blockHash string, txIndex string) (interface{}, map[string]interface{}) {
+func (s *EthService) GetTransactionByBlockHashAndIndex(blockHash string, txIndex string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting transaction by block and index", zap.String("blockHash", blockHash), zap.String("txIndex", txIndex))
 
 	cacheKey := fmt.Sprintf("%s_%s_%s", GetTransactionByBlockHashAndIndex, blockHash, txIndex)
@@ -735,9 +707,10 @@ func (s *EthService) GetTransactionByBlockHashAndIndex(blockHash string, txIndex
 		return cachedTx, nil
 	}
 
-	txIndexInt, errMap := HexToDec(txIndex)
-	if errMap != nil {
-		return nil, errMap
+	txIndexInt, err := HexToDec(txIndex)
+	if err != nil {
+		s.logger.Error("Failed to parse transaction index", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to parse hex value")
 	}
 
 	queryParamas := map[string]interface{}{
@@ -745,9 +718,10 @@ func (s *EthService) GetTransactionByBlockHashAndIndex(blockHash string, txIndex
 		"transaction.index": txIndexInt,
 	}
 
-	tx, errMap := s.getTransactionByBlockAndIndex(queryParamas)
-	if errMap != nil {
-		return nil, errMap
+	tx, err := s.getTransactionByBlockAndIndex(queryParamas)
+	if err != nil {
+		s.logger.Error("Failed to get transaction by block and index", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to get transaction by block and index")
 	}
 
 	if tx != nil {
@@ -759,7 +733,7 @@ func (s *EthService) GetTransactionByBlockHashAndIndex(blockHash string, txIndex
 	return tx, nil
 }
 
-func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string, txIndex string) (interface{}, map[string]interface{}) {
+func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string, txIndex string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting transaction by block number and index", zap.String("blockNumberOrTag", blockNumberOrTag), zap.String("txIndex", txIndex))
 
 	cacheKey := fmt.Sprintf("%s_%s_%s", GetTransactionByBlockNumberAndIndex, blockNumberOrTag, txIndex)
@@ -777,15 +751,13 @@ func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string
 
 	blockNumberInt, ok := blockNumber.(int64)
 	if !ok {
-		return nil, map[string]interface{}{
-			"code":    -32000,
-			"message": "Invalid block number",
-		}
+		return nil, domain.NewRPCError(domain.ServerError, "Invalid block number")
 	}
 
-	txIndexInt, errMap := HexToDec(txIndex)
-	if errMap != nil {
-		return nil, errMap
+	txIndexInt, err := HexToDec(txIndex)
+	if err != nil {
+		s.logger.Error("Failed to parse transaction index", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to parse hex value")
 	}
 
 	queryParamas := map[string]interface{}{
@@ -793,9 +765,10 @@ func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string
 		"transaction.index": txIndexInt,
 	}
 
-	tx, errMap := s.getTransactionByBlockAndIndex(queryParamas)
-	if errMap != nil {
-		return nil, errMap
+	tx, err := s.getTransactionByBlockAndIndex(queryParamas)
+	if err != nil {
+		s.logger.Error("Failed to get transaction by block and index", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to get transaction by block and index")
 	}
 
 	if tx != nil {
@@ -807,63 +780,53 @@ func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string
 	return tx, nil
 }
 
-func (s *EthService) SendRawTransaction(data string) (interface{}, map[string]interface{}) {
+func (s *EthService) SendRawTransaction(data string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Sending raw transaction", zap.String("data", data))
 
 	parsedTx, err := ParseTransaction(data)
 	if err != nil {
-		return nil, map[string]interface{}{
-			"code":    -32000,
-			"message": fmt.Sprintf("Failed to parse transaction: %s", err.Error()),
-		}
+		s.logger.Error("Failed to parse transaction", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to parse transaction")
 	}
 
 	if err = s.precheck.CheckSize(data); err != nil {
-		return nil, map[string]interface{}{
-			"code":    -32000,
-			"message": err.Error(),
-		}
+		return nil, domain.NewRPCError(domain.ServerError, err.Error())
 	}
 
-	gasPriceHex, errMap := s.GetGasPrice()
-	if errMap != nil {
-		return nil, errMap
+	gasPriceHex, rpcErr := s.GetGasPrice()
+	if rpcErr != nil {
+		return nil, rpcErr
 	}
 
-	gasPrice, errMap := HexToDec(gasPriceHex.(string))
-	if errMap != nil {
-		return nil, errMap
+	gasPrice, err := HexToDec(gasPriceHex.(string))
+	if err != nil {
+		s.logger.Error("Failed to parse gas price", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to parse gas price")
 	}
 
 	if err = s.precheck.SendRawTransactionCheck(parsedTx, gasPrice); err != nil {
-		return nil, map[string]interface{}{
-			"code":    -32000,
-			"message": fmt.Sprintf("Transaction rejected by precheck: %s", err.Error()),
-		}
+		s.logger.Error("Transaction rejected by precheck", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Transaction rejected by precheck")
 	}
 
 	rawTxHex := strings.TrimPrefix(data, "0x")
 
 	rawTx, err := hex.DecodeString(rawTxHex)
 	if err != nil {
-		return nil, map[string]interface{}{
-			"code":    -32000,
-			"message": fmt.Sprintf("Failed to decode raw transaction: %s", err.Error()),
-		}
+		s.logger.Error("Failed to decode raw transaction", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to decode raw transaction")
 	}
 
 	txHash, err := s.SendRawTransactionProcessor(rawTx, parsedTx, gasPrice)
 	if err != nil {
-		return nil, map[string]interface{}{
-			"code":    -32000,
-			"message": fmt.Sprintf("Failed to process transaction: %s", err.Error()),
-		}
+		s.logger.Error("Failed to process transaction", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to process transaction")
 	}
 
 	return txHash, nil
 }
 
-func (s *EthService) GetCode(address string, blockNumberOrTag string) (interface{}, map[string]interface{}) {
+func (s *EthService) GetCode(address string, blockNumberOrTag string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting code", zap.String("address", address), zap.String("blockNumberOrTag", blockNumberOrTag))
 
 	// Check for iHTS precompile address first
@@ -893,10 +856,7 @@ func (s *EthService) GetCode(address string, blockNumberOrTag string) (interface
 			bytecode, err := hexutil.Decode(*contract.RuntimeBytecode)
 			if err != nil {
 				s.logger.Error("Failed to decode bytecode", zap.Error(err))
-				return nil, map[string]interface{}{
-					"code":    -32000,
-					"message": "Failed to decode bytecode",
-				}
+				return nil, domain.NewRPCError(domain.ServerError, "Failed to decode bytecode")
 			}
 
 			if !hasProhibitedOpcodes(bytecode) {
@@ -930,63 +890,63 @@ func (s *EthService) GetCode(address string, blockNumberOrTag string) (interface
 }
 
 // GetAccounts returns an empty array of accounts, similar to Infura's implementation
-func (s *EthService) GetAccounts() (interface{}, map[string]interface{}) {
+func (s *EthService) GetAccounts() (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting accounts")
 	s.logger.Debug("Returning empty accounts array as per specification")
 	return []string{}, nil
 }
 
 // Syncing returns false, because the Hedera network does not support syncing
-func (s *EthService) Syncing() (interface{}, map[string]interface{}) {
+func (s *EthService) Syncing() (interface{}, *domain.RPCError) {
 	s.logger.Info("Syncing")
 	s.logger.Debug("Returning false as per specification")
 	return false, nil
 }
 
 // Mining returns false, because the Hedera network does not support mining
-func (s *EthService) Mining() (interface{}, map[string]interface{}) {
+func (s *EthService) Mining() (interface{}, *domain.RPCError) {
 	s.logger.Info("Mining")
 	s.logger.Debug("Returning false as per specification")
 	return false, nil
 }
 
 // MaxPriorityFeePerGas returns 0x0, because the Hedera network does not support it
-func (s *EthService) MaxPriorityFeePerGas() (interface{}, map[string]interface{}) {
+func (s *EthService) MaxPriorityFeePerGas() (interface{}, *domain.RPCError) {
 	s.logger.Info("MaxPriorityFeePerGas")
 	s.logger.Debug("Returning 0x0 as per specification")
 	return "0x0", nil
 }
 
 // Hashrate returns 0x0, because the Hedera network does not support it
-func (s *EthService) Hashrate() (interface{}, map[string]interface{}) {
+func (s *EthService) Hashrate() (interface{}, *domain.RPCError) {
 	s.logger.Info("Hashrate")
 	s.logger.Debug("Returning 0x0 as per specification")
 	return "0x0", nil
 }
 
 // GetUncleCountByBlockNumber returns 0x0, because the Hedera network does not support it
-func (s *EthService) GetUncleCountByBlockNumber(blockNumber string) (interface{}, map[string]interface{}) {
+func (s *EthService) GetUncleCountByBlockNumber(blockNumber string) (interface{}, *domain.RPCError) {
 	s.logger.Info("GetUncleCountByBlockNumber", zap.String("blockNumber", blockNumber))
 	s.logger.Debug("Returning 0x0 as per specification")
 	return "0x0", nil
 }
 
 // GetUncleByBlockNumberAndIndex returns nil, because the Hedera network does not support it
-func (s *EthService) GetUncleByBlockNumberAndIndex(blockNumber string, index string) (interface{}, map[string]interface{}) {
+func (s *EthService) GetUncleByBlockNumberAndIndex(blockNumber string, index string) (interface{}, *domain.RPCError) {
 	s.logger.Info("GetUncleByBlockNumberAndIndex", zap.String("blockNumber", blockNumber), zap.String("index", index))
 	s.logger.Debug("Returning nil as per specification")
 	return nil, nil
 }
 
 // GetUncleCountByBlockHash returns 0x0, because the Hedera network does not support it
-func (s *EthService) GetUncleCountByBlockHash(blockHash string) (interface{}, map[string]interface{}) {
+func (s *EthService) GetUncleCountByBlockHash(blockHash string) (interface{}, *domain.RPCError) {
 	s.logger.Info("GetUncleCountByBlockHash", zap.String("blockHash", blockHash))
 	s.logger.Debug("Returning 0x0 as per specification")
 	return "0x0", nil
 }
 
 // GetUncleByBlockHashAndIndex returns nil, because the Hedera network does not support it
-func (s *EthService) GetUncleByBlockHashAndIndex(blockHash string, index string) (interface{}, map[string]interface{}) {
+func (s *EthService) GetUncleByBlockHashAndIndex(blockHash string, index string) (interface{}, *domain.RPCError) {
 	s.logger.Info("GetUncleByBlockHashAndIndex", zap.String("blockHash", blockHash), zap.String("index", index))
 	s.logger.Debug("Returning nil as per specification")
 	return nil, nil
