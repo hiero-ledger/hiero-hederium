@@ -147,6 +147,16 @@ type EthGetUncleByBlockNumberAndIndexParams struct {
 	Index       string `json:"index" binding:"required,hexadecimal,startswith=0x"`
 }
 
+// EthBlockNumberParams represents parameters for eth_blockNumber
+type EthBlockNumberParams struct{}
+
+func (p *EthBlockNumberParams) FromPositionalParams(params []interface{}) error {
+	if len(params) != 0 {
+		return fmt.Errorf("eth_blockNumber expects no parameters")
+	}
+	return nil
+}
+
 // FromPositionalParams implements parameter conversion for EthGetBlockByHashParams
 func (p *EthGetBlockByHashParams) FromPositionalParams(params []interface{}) error {
 	if len(params) != 2 {
@@ -251,11 +261,8 @@ func (p *EthGetLogsParams) FromPositionalParams(params []interface{}) error {
 			return fmt.Errorf("can't use both blockHash and toBlock/fromBlock")
 		}
 	} else {
-		if p.FromBlock != "" && p.ToBlock == "" {
+		if p.FromBlock != "" && p.ToBlock != "" {
 			return fmt.Errorf("provided fromBlock parameter without specifying toBlock")
-		}
-		if p.ToBlock != "" && p.FromBlock == "" {
-			return fmt.Errorf("provided toBlock parameter without specifying fromBlock")
 		}
 		if p.FromBlock == "" && p.ToBlock == "" {
 			p.FromBlock = "latest"
@@ -647,5 +654,25 @@ func (p *EthGetUncleByBlockNumberAndIndexParams) FromPositionalParams(params []i
 	}
 	p.Index = index
 
+	return nil
+}
+
+// EthGasPriceParams represents parameters for eth_gasPrice
+type EthGasPriceParams struct{}
+
+func (p *EthGasPriceParams) FromPositionalParams(params []interface{}) error {
+	if len(params) != 0 {
+		return fmt.Errorf("eth_gasPrice expects no parameters")
+	}
+	return nil
+}
+
+// EthChainIdParams represents parameters for eth_chainId
+type EthChainIdParams struct{}
+
+func (p *EthChainIdParams) FromPositionalParams(params []interface{}) error {
+	if len(params) != 0 {
+		return fmt.Errorf("eth_chainId expects no parameters")
+	}
 	return nil
 }

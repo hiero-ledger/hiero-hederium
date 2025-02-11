@@ -26,6 +26,9 @@ type JSONRPCResponse struct {
 }
 
 var methodParamsMap = map[string]func() domain.RPCParams{
+	"eth_blockNumber":                         func() domain.RPCParams { return &domain.EthBlockNumberParams{} },
+	"eth_gasPrice":                            func() domain.RPCParams { return &domain.EthGasPriceParams{} },
+	"eth_chainId":                             func() domain.RPCParams { return &domain.EthChainIdParams{} },
 	"eth_getBlockByHash":                      func() domain.RPCParams { return &domain.EthGetBlockByHashParams{} },
 	"eth_getBlockByNumber":                    func() domain.RPCParams { return &domain.EthGetBlockByNumberParams{} },
 	"eth_getLogs":                             func() domain.RPCParams { return &domain.EthGetLogsParams{} },
