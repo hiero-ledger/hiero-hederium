@@ -199,6 +199,20 @@ func (p *EthGetLogsParams) FromPositionalParams(params []interface{}) error {
 		return fmt.Errorf("eth_getLogs expects a filter object parameter")
 	}
 
+	validFields := map[string]bool{
+		"address":   true,
+		"topics":    true,
+		"blockHash": true,
+		"fromBlock": true,
+		"toBlock":   true,
+	}
+
+	for field := range filterObj {
+		if !validFields[field] {
+			return fmt.Errorf("'%s' is not a valid parameter for eth_getLogs", field)
+		}
+	}
+
 	var filter FilterObject
 	filterBytes, err := json.Marshal(filterObj)
 	if err != nil {
@@ -209,14 +223,22 @@ func (p *EthGetLogsParams) FromPositionalParams(params []interface{}) error {
 		return fmt.Errorf("failed to unmarshal filter object: %v", err)
 	}
 
-	if err := binding.Validator.Engine().(*validator.Validate).Struct(filter); err != nil {
-		return err
+	validate := binding.Validator.Engine().(*validator.Validate)
+	if err := validate.Struct(&filter); err != nil {
+		return fmt.Errorf("invalid filter parameters: %v", err)
 	}
 
-	if addr, ok := filter.Address.(string); ok {
+	switch addr := filter.Address.(type) {
+	case string:
 		p.Address = []string{addr}
-	} else if addrs, ok := filter.Address.([]string); ok {
-		p.Address = addrs
+	case []interface{}:
+		addresses := make([]string, 0, len(addr))
+		for _, a := range addr {
+			if strAddr, ok := a.(string); ok {
+				addresses = append(addresses, strAddr)
+			}
+		}
+		p.Address = addresses
 	}
 
 	p.Topics = filter.Topics
