@@ -540,7 +540,7 @@ func TestGetBlockByNumber(t *testing.T) {
 			mockResults:  []domain.ContractResults{{Hash: "0xtx1"}},
 			expectNil:    false,
 			setupMocks: func() {
-				cacheKey := fmt.Sprintf("%s_%s_%t", service.GetBlockByNumber, "0x7b", false)
+				cacheKey := fmt.Sprintf("eth_getBlockByNumber_%d_%t", 123, false)
 				cacheService.EXPECT().
 					Get(gomock.Any(), cacheKey, gomock.Any()).
 					Return(errors.New("not found"))
@@ -566,7 +566,7 @@ func TestGetBlockByNumber(t *testing.T) {
 			mockResults:  []domain.ContractResults{{Hash: "0xtx1"}},
 			expectNil:    false,
 			setupMocks: func() {
-				cacheKey := fmt.Sprintf("%s_%s_%t", service.GetBlockByNumber, "latest", false)
+				cacheKey := fmt.Sprintf("eth_getBlockByNumber_%d_%t", 123, false)
 				cacheService.EXPECT().
 					Get(gomock.Any(), cacheKey, gomock.Any()).
 					Return(errors.New("not found"))
@@ -596,7 +596,7 @@ func TestGetBlockByNumber(t *testing.T) {
 			mockResults:  []domain.ContractResults{{Hash: "0xtx1"}},
 			expectNil:    false,
 			setupMocks: func() {
-				cacheKey := fmt.Sprintf("%s_%s_%t", service.GetBlockByNumber, "earliest", false)
+				cacheKey := fmt.Sprintf("eth_getBlockByNumber_%d_%t", 0, false)
 				cacheService.EXPECT().
 					Get(gomock.Any(), cacheKey, gomock.Any()).
 					Return(errors.New("not found"))
@@ -621,7 +621,7 @@ func TestGetBlockByNumber(t *testing.T) {
 			mockResponse: nil,
 			expectNil:    true,
 			setupMocks: func() {
-				cacheKey := fmt.Sprintf("%s_%s_%t", service.GetBlockByNumber, "0x999", false)
+				cacheKey := fmt.Sprintf("eth_getBlockByNumber_%d_%t", 2457, false)
 				cacheService.EXPECT().
 					Get(gomock.Any(), cacheKey, gomock.Any()).
 					Return(errors.New("not found"))
@@ -637,10 +637,7 @@ func TestGetBlockByNumber(t *testing.T) {
 			showDetails: false,
 			expectNil:   false,
 			setupMocks: func() {
-				cacheKey := fmt.Sprintf("%s_%s_%t", service.GetBlockByNumber, "0xinvalid", false)
-				cacheService.EXPECT().
-					Get(gomock.Any(), cacheKey, gomock.Any()).
-					Return(errors.New("not found"))
+				// No need to mock cache calls for invalid block numbers
 			},
 		},
 		{
@@ -650,7 +647,7 @@ func TestGetBlockByNumber(t *testing.T) {
 			mockResponse: expectedBlock,
 			expectNil:    false,
 			setupMocks: func() {
-				cacheKey := fmt.Sprintf("%s_%s_%t", service.GetBlockByNumber, "0x7b", false)
+				cacheKey := fmt.Sprintf("eth_getBlockByNumber_%d_%t", 123, false)
 				cacheService.EXPECT().
 					Get(gomock.Any(), cacheKey, gomock.Any()).
 					DoAndReturn(func(_ context.Context, _ string, block interface{}) error {
@@ -679,6 +676,38 @@ func TestGetBlockByNumber(t *testing.T) {
 					})
 			},
 		},
+		{
+			name:         "Success with show details true",
+			numberOrTag:  "0x7b",
+			showDetails:  true,
+			mockResponse: expectedBlock,
+			mockResults:  []domain.ContractResults{{Hash: "0xtx1"}},
+			expectNil:    false,
+			setupMocks: func() {
+				cacheKey := fmt.Sprintf("eth_getBlockByNumber_%d_%t", 123, true)
+				cacheService.EXPECT().
+					Get(gomock.Any(), cacheKey, gomock.Any()).
+					Return(errors.New("not found"))
+
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("123").
+					Return(expectedBlock)
+
+				mockClient.EXPECT().
+					GetContractResults(expectedBlock.Timestamp).
+					Return([]domain.ContractResults{{
+						Hash:             "0xtx1",
+						Result:           "SUCCESS",
+						BlockHash:        expectedBlock.Hash,
+						BlockNumber:      int64(expectedBlock.Number),
+						TransactionIndex: 0,
+					}})
+
+				cacheService.EXPECT().
+					Set(gomock.Any(), cacheKey, gomock.Any(), service.DefaultExpiration).
+					Return(nil)
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -705,11 +734,26 @@ func TestGetBlockByNumber(t *testing.T) {
 				block, ok := result.(*domain.Block)
 				assert.True(t, ok)
 				if ok {
-					assert.Equal(t, "0x7b", *block.Number)
-					assert.Equal(t, expectedBlock.Hash, *block.Hash)
-					assert.Equal(t, expectedBlock.PreviousHash, block.ParentHash)
+					if tc.mockResponse != nil {
+						assert.Equal(t, fmt.Sprintf("0x%x", tc.mockResponse.Number), *block.Number)
+						assert.Equal(t, tc.mockResponse.Hash, *block.Hash)
+						assert.Equal(t, tc.mockResponse.PreviousHash, block.ParentHash)
+						assert.Equal(t, fmt.Sprintf("0x%x", tc.mockResponse.GasUsed), block.GasUsed)
+						assert.Equal(t, fmt.Sprintf("0x%x", tc.mockResponse.Size), block.Size)
+						assert.Equal(t, tc.mockResponse.LogsBloom, block.LogsBloom)
+					}
+
 					if !strings.Contains(tc.name, "cached") {
-						assert.Equal(t, len(tc.mockResults), len(block.Transactions))
+						if tc.showDetails {
+							assert.Equal(t, len(tc.mockResults), len(block.Transactions))
+							// For show details true, just verify the transaction exists
+							assert.NotNil(t, block.Transactions[0])
+						} else {
+							assert.Equal(t, len(tc.mockResults), len(block.Transactions))
+							for i, tx := range tc.mockResults {
+								assert.Equal(t, tx.Hash, block.Transactions[i])
+							}
+						}
 					}
 				}
 			}
