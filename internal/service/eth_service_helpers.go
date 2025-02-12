@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/LimeChain/Hederium/internal/domain"
 	"github.com/ethereum/go-ethereum/common"
@@ -783,48 +784,86 @@ func (s *EthService) getLogsWithParams(address []string, params map[string]inter
 	return logs, nil
 }
 
-// Optimise the function to avoid multiple calls to the mirror node
 func (s *EthService) resolveEvmAddress(address string) (*string, error) {
+	if address == "" {
+		return nil, fmt.Errorf("address is empty")
+	}
+
+	cacheKey := fmt.Sprintf("evm_address_%s", address)
+	var cachedResult string
+	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedResult); err == nil && cachedResult != "" {
+		s.logger.Info("EVM Address fetched from cache", zap.String("address", cachedResult))
+		return &cachedResult, nil
+	}
+
+	evmAddress := address
+
 	result, err := s.resolveAddressType(address)
-	if err != nil {
-		return nil, err
+	if err == nil {
+		switch data := result.(type) {
+		case *domain.AccountResponse:
+			evmAddress = data.EvmAddress
+		case *domain.ContractResponse:
+			evmAddress = data.EvmAddress
+		}
 	}
 
-	switch data := result.(type) {
-	case *domain.AccountResponse:
-		return &data.EvmAddress, nil
-	case *domain.ContractResponse:
-		return &data.EvmAddress, nil
-	case *domain.TokenResponse:
-		return &address, nil
+	if err := s.cacheService.Set(s.ctx, cacheKey, evmAddress, DefaultExpiration); err != nil {
+		s.logger.Debug("Failed to cache evm address", zap.Error(err))
 	}
 
-	return nil, fmt.Errorf("unable to resolve EVM address")
+	return &evmAddress, nil
 }
 
 func (s *EthService) resolveAddressType(address string) (interface{}, error) {
-	if contractData, _ := s.mClient.GetContractById(address); contractData != nil {
-		return contractData, nil
+	res := make(chan interface{}, 1)
+
+	var wg sync.WaitGroup
+
+	tryResolve := func(f func() (interface{}, error)) {
+		defer wg.Done()
+		if data, err := f(); err == nil && data != nil {
+			select {
+			case res <- data:
+			default:
+			}
+		}
 	}
 
-	if accountData, _ := s.mClient.GetAccountById(address); accountData != nil {
-		return accountData, nil
+	wg.Add(2)
+	go tryResolve(func() (interface{}, error) { return s.mClient.GetContractById(address) })
+	go tryResolve(func() (interface{}, error) { return s.mClient.GetAccountById(address) })
+
+	if tokenId, err := checkTokenId(address); err == nil && tokenId != nil {
+		wg.Add(1)
+		go tryResolve(func() (interface{}, error) { return s.mClient.GetTokenById(*tokenId) })
 	}
 
-	// TODO: Make it in constant
-	if strings.HasPrefix(address, "0x000000000000") {
-		addressNum, err := HexToDec(address)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse hex value: %s", err.Error())
-		}
+	go func() {
+		wg.Wait()
+		close(res)
+	}()
 
-		tokenId := "0.0." + strconv.FormatInt(addressNum, 10)
-		if tokenData, _ := s.mClient.GetTokenById(tokenId); tokenData != nil {
-			return tokenData, nil
-		}
+	if res, ok := <-res; ok {
+		s.logger.Info("Resolved address type", zap.Any("result", res))
+		return res, nil
 	}
 
 	return nil, fmt.Errorf("unable to identify address type")
+}
+
+func checkTokenId(address string) (*string, error) {
+	if !strings.HasPrefix(address, "0x000000000000") {
+		return nil, fmt.Errorf("not a token address")
+	}
+
+	addressNum, err := HexToDec(address)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse hex value: %s", err.Error())
+	}
+
+	str := fmt.Sprintf("0.0.%d", addressNum)
+	return &str, nil
 }
 
 func (s *EthService) getTransactionByBlockAndIndex(queryParamas map[string]interface{}) (interface{}, error) {
