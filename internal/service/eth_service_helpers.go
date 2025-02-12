@@ -1025,3 +1025,24 @@ func truncateString(s string, maxLength int) string {
 	}
 	return s
 }
+
+func (s *EthService) isLatestBlockRequest(blockNumberOrTag string, blockNumber int64) bool {
+	if blockNumberOrTag == "latest" || blockNumberOrTag == "pending" {
+		return true
+	}
+	if blockNumberOrTag == "earliest" {
+		return false
+	}
+
+	latestBlock, err := s.getBlockNumberByHashOrTag("latest")
+	if err != nil {
+		return false
+	}
+
+	latestBlockInt, ok := latestBlock.(int64)
+	if !ok {
+		return false
+	}
+
+	return blockNumber+10 > latestBlockInt
+}

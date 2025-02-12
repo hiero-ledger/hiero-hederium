@@ -227,6 +227,7 @@ func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (int
 
 func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) string {
 	s.logger.Info("Getting balance", zap.String("address", address), zap.String("blockNumberTagOrHash", blockNumberTagOrHash))
+
 	var block *domain.BlockResponse
 
 	switch blockNumberTagOrHash {
@@ -274,68 +275,20 @@ func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) str
 
 func (s *EthService) GetTransactionCount(address string, blockNumberOrTag string) string {
 	s.logger.Info("Getting transaction count", zap.String("address", address), zap.String("blockNumberOrTag", blockNumberOrTag))
-	// TODO: This whole flow, could be optimized.
 
-	var block *domain.BlockResponse
-	requestingLatest := false
-	switch blockNumberOrTag {
-	case "latest", "pending":
-		requestingLatest = true
-		latestBlock, errMap := s.GetBlockNumber()
-		if errMap != nil {
-			s.logger.Debug("Failed to get latest block number")
-			return "0x0"
-		}
-
-		latestBlockStr, ok := latestBlock.(string)
-		if !ok {
-			s.logger.Debug("Invalid block number format")
-			return "0x0"
-		}
-
-		// Convert hex string to int, remove "0x" prefix
-		latestBlockNum, err := strconv.ParseInt(latestBlockStr[2:], 16, 64)
-		if err != nil {
-			s.logger.Debug("Failed to parse latest block number", zap.Error(err))
-			return "0x0"
-		}
-		block = s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(latestBlockNum, 10))
-
-	case "earliest":
-		block = s.mClient.GetBlockByHashOrNumber("0")
-	default:
-
-		latestBlock, errMap := s.GetBlockNumber()
-		if errMap != nil {
-			s.logger.Debug("Failed to get latest block number")
-			return "0x0"
-		}
-
-		latestBlockStr, ok := latestBlock.(string)
-		if !ok {
-			s.logger.Debug("Invalid block number format")
-			return "0x0"
-		}
-
-		// Convert hex string to int, remove "0x" prefix
-		latestBlockNum, err := strconv.ParseInt(latestBlockStr[2:], 16, 64)
-		if err != nil {
-			s.logger.Debug("Failed to parse latest block number", zap.Error(err))
-			return "0x0"
-		}
-
-		// If it's a hex number, convert it to decimal
-		num, err := strconv.ParseInt(blockNumberOrTag[2:], 16, 64)
-		if err != nil {
-			s.logger.Debug("Failed to parse block number", zap.Error(err))
-			return "0x0"
-		}
-		if num+10 > latestBlockNum {
-			requestingLatest = true
-		}
-		block = s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(num, 10))
-
+	blockNumber, errMap := s.getBlockNumberByHashOrTag(blockNumberOrTag)
+	if errMap != nil {
+		return "0x0"
 	}
+
+	blockNumberInt, ok := blockNumber.(int64)
+	if !ok {
+		return "0x0"
+	}
+
+	requestingLatest := s.isLatestBlockRequest(blockNumberOrTag, blockNumberInt)
+
+	block := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockNumberInt, 10))
 
 	if block == nil {
 		return "0x0"
@@ -347,7 +300,11 @@ func (s *EthService) GetTransactionCount(address string, blockNumberOrTag string
 	accountResponse := account.(domain.AccountResponse)
 
 	if requestingLatest {
-		return "0x" + strconv.FormatUint(uint64(accountResponse.EthereumNonce), 16)
+		return fmt.Sprintf("0x%x", accountResponse.EthereumNonce)
+	}
+
+	if len(accountResponse.Transactions) == 0 {
+		return "0x0"
 	}
 
 	contractResult := s.mClient.GetContractResult(accountResponse.Transactions[0].TransactionId)
@@ -355,7 +312,8 @@ func (s *EthService) GetTransactionCount(address string, blockNumberOrTag string
 		return "0x0"
 	}
 	contractResultResponse := contractResult.(domain.ContractResultResponse)
-	nonce := "0x" + strconv.FormatUint(uint64(contractResultResponse.Nonce+1), 16) // We add 1 here, because of the nature nonce is incremented.
+
+	nonce := fmt.Sprintf("0x%x", contractResultResponse.Nonce+1) // We add 1 here, because of the nature nonce is incremented.
 
 	s.logger.Info("Returning nonce", zap.String("nonce", nonce), zap.String("address", address))
 	return nonce
