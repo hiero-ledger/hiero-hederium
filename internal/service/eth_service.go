@@ -965,29 +965,29 @@ func (s *EthService) Hashrate() (interface{}, map[string]interface{}) {
 }
 
 // GetUncleCountByBlockNumber returns 0x0, because the Hedera network does not support it
-func (s *EthService) GetUncleCountByBlockNumber() (interface{}, map[string]interface{}) {
-	s.logger.Info("GetUncleCountByBlockNumber")
+func (s *EthService) GetUncleCountByBlockNumber(blockNumber string) (interface{}, map[string]interface{}) {
+	s.logger.Info("GetUncleCountByBlockNumber", zap.String("blockNumber", blockNumber))
 	s.logger.Debug("Returning 0x0 as per specification")
 	return "0x0", nil
 }
 
 // GetUncleByBlockNumberAndIndex returns nil, because the Hedera network does not support it
-func (s *EthService) GetUncleByBlockNumberAndIndex() (interface{}, map[string]interface{}) {
-	s.logger.Info("GetUncleByBlockNumberAndIndex")
+func (s *EthService) GetUncleByBlockNumberAndIndex(blockNumber string, index string) (interface{}, map[string]interface{}) {
+	s.logger.Info("GetUncleByBlockNumberAndIndex", zap.String("blockNumber", blockNumber), zap.String("index", index))
 	s.logger.Debug("Returning nil as per specification")
 	return nil, nil
 }
 
 // GetUncleCountByBlockHash returns 0x0, because the Hedera network does not support it
-func (s *EthService) GetUncleCountByBlockHash() (interface{}, map[string]interface{}) {
-	s.logger.Info("GetUncleCountByBlockHash")
+func (s *EthService) GetUncleCountByBlockHash(blockHash string) (interface{}, map[string]interface{}) {
+	s.logger.Info("GetUncleCountByBlockHash", zap.String("blockHash", blockHash))
 	s.logger.Debug("Returning 0x0 as per specification")
 	return "0x0", nil
 }
 
 // GetUncleByBlockHashAndIndex returns nil, because the Hedera network does not support it
-func (s *EthService) GetUncleByBlockHashAndIndex() (interface{}, map[string]interface{}) {
-	s.logger.Info("GetUncleByBlockHashAndIndex")
+func (s *EthService) GetUncleByBlockHashAndIndex(blockHash string, index string) (interface{}, map[string]interface{}) {
+	s.logger.Info("GetUncleByBlockHashAndIndex", zap.String("blockHash", blockHash), zap.String("index", index))
 	s.logger.Debug("Returning nil as per specification")
 	return nil, nil
 }
