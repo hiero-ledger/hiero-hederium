@@ -19,10 +19,10 @@ type JSONRPCRequest struct {
 }
 
 type JSONRPCResponse struct {
-	JSONRPC string      `json:"jsonrpc"`
-	Result  interface{} `json:"result"`
-	Error   interface{} `json:"error,omitempty"`
-	ID      interface{} `json:"id,omitempty"`
+	JSONRPC string           `json:"jsonrpc"`
+	Result  interface{}      `json:"result"`
+	Error   *domain.RPCError `json:"error,omitempty"`
+	ID      interface{}      `json:"id,omitempty"`
 }
 
 var methodParamsMap = map[string]func() domain.RPCParams{
@@ -63,10 +63,7 @@ func rpcHandler(ctx *gin.Context) {
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, JSONRPCResponse{
 			JSONRPC: "2.0",
-			Error: map[string]interface{}{
-				"code":    -32600,
-				"message": "Invalid Request",
-			},
+			Error:   domain.NewRPCError(domain.InvalidRequest, "Invalid Request"),
 		})
 		return
 	}
@@ -84,10 +81,10 @@ func rpcHandler(ctx *gin.Context) {
 	}
 }
 
-func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (interface{}, map[string]interface{}) {
+func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (interface{}, *domain.RPCError) {
 	paramsCreator, ok := methodParamsMap[methodName]
 	if !ok {
-		return nil, unsupportedMethodError(methodName)
+		return nil, domain.NewRPCError(domain.MethodNotFound, fmt.Sprintf("Unsupported JSON-RPC method: %s", methodName))
 	}
 
 	logger.Debug("Received params", zap.Any("params", params))
@@ -98,26 +95,17 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 	case []interface{}:
 		logger.Debug("Processing array params", zap.Any("array_params", p))
 		if err := rpcParams.FromPositionalParams(p); err != nil {
-			return nil, map[string]interface{}{
-				"code":    -32602,
-				"message": fmt.Sprintf("Invalid params: %s", err.Error()),
-			}
+			return nil, domain.NewRPCError(domain.InvalidParams, err.Error())
 		}
 	default:
 		logger.Debug("Invalid params type", zap.String("type", fmt.Sprintf("%T", params)))
-		return nil, map[string]interface{}{
-			"code":    -32602,
-			"message": "Invalid params: expected array or object",
-		}
+		return nil, domain.NewRPCError(domain.InvalidParams, "Invalid params: expected array or object")
 	}
 
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
 		if err := v.Struct(rpcParams); err != nil {
 			logger.Debug("Validation failed", zap.Error(err))
-			return nil, map[string]interface{}{
-				"code":    -32602,
-				"message": "Invalid params",
-			}
+			return nil, domain.NewRPCError(domain.InvalidParams, err.Error())
 		}
 	}
 
@@ -146,7 +134,7 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		return ethService.Call(params.CallObject, params.Block)
 	case "eth_getTransactionByHash":
 		params := rpcParams.(*domain.EthGetTransactionByHashParams)
-		return ethService.GetTransactionByHash(params.TransactionHash), nil
+		return ethService.GetTransactionByHash(params.TransactionHash)
 	case "eth_getTransactionReceipt":
 		params := rpcParams.(*domain.EthGetTransactionReceiptParams)
 		return ethService.GetTransactionReceipt(params.TransactionHash)
@@ -213,10 +201,6 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 	}
 }
 
-func unsupportedMethodError(methodName string) map[string]interface{} {
-	return map[string]interface{}{
-		"code":    -32601,
-		"message": fmt.Sprintf("Unsupported JSON-RPC method: %s", methodName),
-		"name":    "Method not found",
-	}
+func unsupportedMethodError(methodName string) *domain.RPCError {
+	return domain.NewRPCError(domain.MethodNotFound, fmt.Sprintf("Unsupported JSON-RPC method: %s", methodName))
 }

@@ -33,7 +33,7 @@ import (
 //     The error map contains:
 //   - "code": -32000 for failed requests
 //   - "message": Description of the error
-func GetFeeWeibars(s *EthService, params ...string) (*big.Int, map[string]interface{}) {
+func GetFeeWeibars(s *EthService, params ...string) (*big.Int, error) {
 	// Default values
 	timestampTo := ""
 	order := ""
@@ -47,10 +47,7 @@ func GetFeeWeibars(s *EthService, params ...string) (*big.Int, map[string]interf
 
 	gasTinybars, err := s.mClient.GetNetworkFees(timestampTo, order)
 	if err != nil {
-		return nil, map[string]interface{}{
-			"code":    -32000,
-			"message": "Failed to fetch gas price",
-		}
+		return nil, fmt.Errorf("failed to fetch gas price: %s", err.Error())
 	}
 
 	// Convert tinybars to weibars
@@ -60,7 +57,7 @@ func GetFeeWeibars(s *EthService, params ...string) (*big.Int, map[string]interf
 	return weibars, nil
 }
 
-func ProcessBlock(s *EthService, block *domain.BlockResponse, showDetails bool) (*domain.Block, map[string]interface{}) {
+func ProcessBlock(s *EthService, block *domain.BlockResponse, showDetails bool) (*domain.Block, error) {
 	// Create a new Block instance with default values
 	ethBlock := domain.NewBlock()
 
@@ -496,38 +493,35 @@ func hexify(n int64) string {
 	return "0x" + strconv.FormatInt(n, 16)
 }
 
-func HexToDec(hexStr string) (int64, map[string]interface{}) {
+func HexToDec(hexStr string) (int64, error) {
 	dec, err := strconv.ParseInt(strings.TrimPrefix(hexStr, "0x"), 16, 64)
 	if err != nil {
-		return 0, map[string]interface{}{
-			"code":    -32000,
-			"message": "Failed to parse hex value",
-		}
+		return 0, fmt.Errorf("failed to parse hex value: %s", err)
 	}
 	return dec, nil
 }
 
-func (s *EthService) getBlockNumberByHashOrTag(blockNumberOrTag string) (interface{}, map[string]interface{}) {
+func (s *EthService) getBlockNumberByHashOrTag(blockNumberOrTag string) (interface{}, *domain.RPCError) {
 	s.logger.Debug("Getting block number by hash or tag", zap.String("blockNumberOrTag", blockNumberOrTag))
 	switch blockNumberOrTag {
 	case "latest", "pending":
 		latestBlock, errMap := s.GetBlockNumber()
 		if errMap != nil {
-			s.logger.Debug("Failed to get latest block number")
+			s.logger.Error("Failed to get latest block number", zap.Error(errMap))
 			return "0x0", errMap
 		}
 
 		latestBlockStr, ok := latestBlock.(string)
 		if !ok {
-			s.logger.Debug("Invalid block number format")
+			s.logger.Error("Invalid block number format", zap.Error(errMap))
 			return "0x0", errMap
 		}
 
 		// Convert hex string to int, remove "0x" prefix
 		latestBlockNum, err := HexToDec(latestBlockStr)
 		if err != nil {
-			s.logger.Debug("Failed to parse latest block number")
-			return "0x0", errMap
+			s.logger.Error("Failed to parse latest block number", zap.Error(err))
+			return "0x0", domain.NewRPCError(domain.ServerError, "Invalid block number")
 		}
 		return latestBlockNum, nil
 
@@ -537,15 +531,15 @@ func (s *EthService) getBlockNumberByHashOrTag(blockNumberOrTag string) (interfa
 		// Convert hex string to int, remove "0x" prefix
 		latestBlockNum, err := HexToDec(blockNumberOrTag)
 		if err != nil {
-			s.logger.Debug("Failed to parse latest block number")
-			return "0x0", err
+			s.logger.Error("Failed to parse latest block number", zap.Error(err))
+			return "0x0", domain.NewRPCError(domain.ServerError, "Invalid block number")
 		}
 
 		return latestBlockNum, nil
 	}
 }
 
-func (s *EthService) getFeeHistory(blockCount, newestBlockInt, latestBlockInt int64, rewardPercentiles []string) (*domain.FeeHistory, map[string]interface{}) {
+func (s *EthService) getFeeHistory(blockCount, newestBlockInt, latestBlockInt int64, rewardPercentiles []string) (*domain.FeeHistory, error) {
 	oldestBlockNumber := newestBlockInt - blockCount + 1
 	if oldestBlockNumber < 0 {
 		oldestBlockNumber = 0
@@ -570,11 +564,11 @@ func (s *EthService) getFeeHistory(blockCount, newestBlockInt, latestBlockInt in
 
 	// Get the fee for the next block if the newest block is not the latest
 	var nextBaseFeePerGas string
-	var errMap map[string]interface{}
+	var err error
 	if latestBlockInt > newestBlockInt {
-		nextBaseFeePerGas, errMap = s.getFeeByBlockNumber(newestBlockInt + 1)
-		if errMap != nil {
-			return nil, errMap
+		nextBaseFeePerGas, err = s.getFeeByBlockNumber(newestBlockInt + 1)
+		if err != nil {
+			return nil, err
 		}
 	} else {
 		nextBaseFeePerGas = feeHistory.BaseFeePerGas[len(feeHistory.BaseFeePerGas)-1]
@@ -599,21 +593,15 @@ func (s *EthService) getFeeHistory(blockCount, newestBlockInt, latestBlockInt in
 	return feeHistory, nil
 }
 
-func (s *EthService) getFeeByBlockNumber(blockNumber int64) (string, map[string]interface{}) {
+func (s *EthService) getFeeByBlockNumber(blockNumber int64) (string, error) {
 	block := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockNumber, 10))
 	if block == nil {
-		return "", map[string]interface{}{
-			"code":    -32000,
-			"message": "Failed to get block data",
-		}
+		return "", fmt.Errorf("failed to get block data")
 	}
 
 	fee, err := GetFeeWeibars(s, block.Timestamp.To, "desc") // Hardcode desc to be sure that we get latest
 	if err != nil {
-		return "", map[string]interface{}{
-			"code":    -32000,
-			"message": "Failed to get fee data",
-		}
+		return "", err
 	}
 
 	// Implement dec to hex func
@@ -684,14 +672,14 @@ func (s *EthService) validateBlockRangeAndAddTimestampToParams(params map[string
 		toBlock = latestBlockStr
 	}
 
-	latestBlockNum, errMap := HexToDec(latestBlockStr)
-	if errMap != nil {
-		s.logger.Debug("Failed to parse latest block number", zap.Any("error", errMap))
+	latestBlockNum, err := HexToDec(latestBlockStr)
+	if err != nil {
+		s.logger.Debug("Failed to parse latest block number", zap.Any("error", err))
 		return false
 	}
 
-	toBlockNum, errMap := HexToDec(toBlock)
-	if errMap != nil {
+	toBlockNum, err := HexToDec(toBlock)
+	if err != nil {
 		return false
 	}
 
@@ -700,8 +688,8 @@ func (s *EthService) validateBlockRangeAndAddTimestampToParams(params map[string
 		return false
 	}
 
-	fromBlockNum, errMap := HexToDec(fromBlock)
-	if errMap != nil {
+	fromBlockNum, err := HexToDec(fromBlock)
+	if err != nil {
 		return false
 	}
 
@@ -745,7 +733,7 @@ func (s *EthService) validateBlockRangeAndAddTimestampToParams(params map[string
 	return true
 }
 
-func (s *EthService) getLogsWithParams(address []string, params map[string]interface{}) ([]domain.Log, map[string]interface{}) {
+func (s *EthService) getLogsWithParams(address []string, params map[string]interface{}) ([]domain.Log, error) {
 	addresses := address
 
 	var logs []domain.Log
@@ -754,10 +742,7 @@ func (s *EthService) getLogsWithParams(address []string, params map[string]inter
 		logResults, err := s.mClient.GetContractResultsLogsWithRetry(params)
 		if err != nil {
 			s.logger.Error("Failed to get logs", zap.Error(err))
-			return nil, map[string]interface{}{
-				"code":    -32000,
-				"message": "Failed to get logs",
-			}
+			return nil, err
 		}
 
 		for _, logResult := range logResults {
@@ -777,10 +762,7 @@ func (s *EthService) getLogsWithParams(address []string, params map[string]inter
 		logResults, err := s.mClient.GetContractResultsLogsByAddress(addr, params)
 		if err != nil {
 			s.logger.Error("Failed to get logs", zap.Error(err))
-			return nil, map[string]interface{}{
-				"code":    -32000,
-				"message": "Failed to get logs",
-			}
+			return nil, err
 		}
 		for _, logResult := range logResults {
 			logs = append(logs, domain.Log{
@@ -802,10 +784,10 @@ func (s *EthService) getLogsWithParams(address []string, params map[string]inter
 }
 
 // Optimise the function to avoid multiple calls to the mirror node
-func (s *EthService) resolveEvmAddress(address string) (*string, map[string]interface{}) {
-	result, errMap := s.resolveAddressType(address)
-	if errMap != nil {
-		return nil, errMap
+func (s *EthService) resolveEvmAddress(address string) (*string, error) {
+	result, err := s.resolveAddressType(address)
+	if err != nil {
+		return nil, err
 	}
 
 	switch data := result.(type) {
@@ -817,13 +799,10 @@ func (s *EthService) resolveEvmAddress(address string) (*string, map[string]inte
 		return &address, nil
 	}
 
-	return nil, map[string]interface{}{
-		"code":    -32000,
-		"message": "Unable to resolve EVM address",
-	}
+	return nil, fmt.Errorf("unable to resolve EVM address")
 }
 
-func (s *EthService) resolveAddressType(address string) (interface{}, map[string]interface{}) {
+func (s *EthService) resolveAddressType(address string) (interface{}, error) {
 	if contractData, _ := s.mClient.GetContractById(address); contractData != nil {
 		return contractData, nil
 	}
@@ -834,9 +813,9 @@ func (s *EthService) resolveAddressType(address string) (interface{}, map[string
 
 	// TODO: Make it in constant
 	if strings.HasPrefix(address, "0x000000000000") {
-		addressNum, errMap := HexToDec(address)
-		if errMap != nil {
-			return nil, errMap
+		addressNum, err := HexToDec(address)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse hex value: %s", err.Error())
 		}
 
 		tokenId := "0.0." + strconv.FormatInt(addressNum, 10)
@@ -845,33 +824,27 @@ func (s *EthService) resolveAddressType(address string) (interface{}, map[string
 		}
 	}
 
-	return nil, map[string]interface{}{
-		"code":    -32000,
-		"message": "Unable to identify address type",
-	}
+	return nil, fmt.Errorf("unable to identify address type")
 }
 
-func (s *EthService) getTransactionByBlockAndIndex(queryParamas map[string]interface{}) (interface{}, map[string]interface{}) {
+func (s *EthService) getTransactionByBlockAndIndex(queryParamas map[string]interface{}) (interface{}, error) {
 	transaction, err := s.mClient.GetContractResultWithRetry(queryParamas)
 	if err != nil {
-		return nil, map[string]interface{}{
-			"code":    -32000,
-			"message": "Failed to get transaction",
-		}
+		return nil, fmt.Errorf("failed to get transaction: %s", err.Error())
 	}
 
 	if transaction == nil {
 		return nil, nil
 	}
 
-	evmAddressTo, errMap := s.resolveEvmAddress(transaction.To)
-	if errMap != nil {
-		return nil, errMap
+	evmAddressTo, err := s.resolveEvmAddress(transaction.To)
+	if err != nil {
+		return nil, err
 	}
 
-	evmAddressFrom, errMap := s.resolveEvmAddress(transaction.From)
-	if errMap != nil {
-		return nil, errMap
+	evmAddressFrom, err := s.resolveEvmAddress(transaction.From)
+	if err != nil {
+		return nil, err
 	}
 
 	s.logger.Info("Processing contract result", zap.Any("evmAddressTO", evmAddressTo))
@@ -971,11 +944,11 @@ func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *typ
 	return nil, fmt.Errorf("failed to send transaction: %w", err)
 }
 
-func (s *EthService) getCurrentGasPriceForBlock(blockHash string) (string, map[string]interface{}) {
+func (s *EthService) getCurrentGasPriceForBlock(blockHash string) (string, error) {
 	block := s.mClient.GetBlockByHashOrNumber(blockHash)
-	gasPriceForTimestamp, errMap := GetFeeWeibars(s, block.Timestamp.From)
-	if errMap != nil {
-		return "", errMap
+	gasPriceForTimestamp, err := GetFeeWeibars(s, block.Timestamp.From)
+	if err != nil {
+		return "", err
 	}
 
 	return fmt.Sprintf("0x%x", gasPriceForTimestamp), nil
