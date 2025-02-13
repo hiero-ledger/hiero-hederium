@@ -398,7 +398,7 @@ func FormatTransactionCallObject(s *EthService, transactionCallObject *domain.Tr
 		if transactionCallObject.From != "" {
 			result["from"] = transactionCallObject.From
 		} else {
-			result["from"] = "0x17b2b8c63fa35402088640e426c6709a254c7ffb" // TODO: For now we just hardcode random account
+			result["from"] = s.hClient.GetOperatorPublicKey()
 		}
 	}
 
