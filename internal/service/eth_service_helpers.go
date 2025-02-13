@@ -62,16 +62,18 @@ func ProcessBlock(s *EthService, block *domain.BlockResponse, showDetails bool) 
 	// Create a new Block instance with default values
 	ethBlock := domain.NewBlock()
 
-	hexNumber := "0x" + strconv.FormatUint(uint64(block.Number), 16)
-	hexGasUsed := "0x" + strconv.FormatUint(uint64(block.GasUsed), 16)
-	hexSize := "0x" + strconv.FormatUint(uint64(block.Size), 16)
+	hexNumber := hexify(int64(block.Number))
+	hexGasUsed := hexify(int64(block.GasUsed))
+	hexSize := hexify(int64(block.Size))
 	timestampStr := strings.Split(block.Timestamp.From, ".")[0]
-	timestampInt, _ := strconv.ParseUint(timestampStr, 10, 64)
-	hexTimestamp := "0x" + strconv.FormatUint(timestampInt, 16)
+	timestampInt, _ := strconv.ParseInt(timestampStr, 10, 64)
+	hexTimestamp := hexify(timestampInt)
+
 	trimmedHash := block.Hash
 	if len(trimmedHash) > 66 {
 		trimmedHash = trimmedHash[:66]
 	}
+
 	trimmedParentHash := block.PreviousHash
 	if len(trimmedParentHash) > 66 {
 		trimmedParentHash = trimmedParentHash[:66]
@@ -79,7 +81,7 @@ func ProcessBlock(s *EthService, block *domain.BlockResponse, showDetails bool) 
 
 	ethBlock.Number = &hexNumber
 	ethBlock.GasUsed = hexGasUsed
-	ethBlock.GasLimit = "0x" + strconv.FormatUint(15000000, 16) // Hedera's default gas limit
+	ethBlock.GasLimit = hexify(15000000) // Hedera's default gas limit
 	ethBlock.Hash = &trimmedHash
 	ethBlock.LogsBloom = block.LogsBloom
 	ethBlock.TransactionsRoot = &trimmedHash
