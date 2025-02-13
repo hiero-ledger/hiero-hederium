@@ -416,32 +416,29 @@ func (s *EthService) GetTransactionReceipt(hash string) (interface{}, *domain.RP
 		logs[i] = domain.Log{
 			Address:          log.Address,
 			BlockHash:        contractResultResponse.BlockHash[:66],
-			BlockNumber:      "0x" + strconv.FormatInt(contractResultResponse.BlockNumber, 16),
+			BlockNumber:      hexify(contractResultResponse.BlockNumber),
 			Data:             log.Data,
-			LogIndex:         "0x" + strconv.FormatInt(int64(i), 16),
+			LogIndex:         hexify(int64(i)),
 			Removed:          false,
 			Topics:           log.Topics,
 			TransactionHash:  hash,
-			TransactionIndex: "0x" + strconv.FormatInt(int64(contractResultResponse.TransactionIndex), 16),
+			TransactionIndex: hexify(int64(contractResultResponse.TransactionIndex)),
 		}
 	}
 
-	// TODO: Check if the address is a system contract here
 	// Default values
 	const emptyHex = "0x"
 	const emptyBloom = "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 	const defaultRootHash = "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
-	// TODO: Check revert reason, if matches error_message, return it, else it's ASCII so make it hex and return then
-	// TODO: Implement resolveEvmAddress for from/to addresses
 
-	evmAddressFrom, errMap := s.resolveEvmAddress(contractResultResponse.From)
-	if errMap != nil {
-		s.logger.Error("Failed to resolve EVM address for from", zap.Any("error", errMap))
+	evmAddressFrom, err := s.resolveEvmAddress(contractResultResponse.From)
+	if err != nil {
+		s.logger.Error("Failed to resolve EVM address for from", zap.Any("error", err))
 	}
 
-	evmAddressTo, errMap := s.resolveEvmAddress(contractResultResponse.To)
-	if errMap != nil {
-		s.logger.Error("Failed to resolve EVM address for to", zap.Any("error", errMap))
+	evmAddressTo, err := s.resolveEvmAddress(contractResultResponse.To)
+	if err != nil {
+		s.logger.Error("Failed to resolve EVM address for to", zap.Any("error", err))
 	}
 
 	effectiveGasPrice, err := s.getCurrentGasPriceForBlock(contractResultResponse.BlockHash[:66])
@@ -449,45 +446,44 @@ func (s *EthService) GetTransactionReceipt(hash string) (interface{}, *domain.RP
 		s.logger.Error("Failed to get gas price for block", zap.Any("error", err))
 	}
 
+	logsBloom := contractResultResponse.Bloom
+	if logsBloom == emptyHex {
+		logsBloom = emptyBloom
+	}
+
+	var contractType *string
+	if contractResultResponse.Type != nil {
+		hexType := hexify(int64(*contractResultResponse.Type))
+		contractType = &hexType
+	}
+
+	contractAddress := s.getContractAddressFromReceipt(contractResultResponse)
+
 	// Create receipt
-	// TODO: add utility function to convert to hex
 	receipt := domain.TransactionReceipt{
-		BlockHash:   contractResultResponse.BlockHash[:66],
-		BlockNumber: "0x" + strconv.FormatInt(contractResultResponse.BlockNumber, 16),
-		From: func() string {
-			if evmAddressFrom != nil {
-				return *evmAddressFrom
-			}
-			return contractResultResponse.From
-		}(),
-		To: func() string {
-			if evmAddressTo != nil {
-				return *evmAddressTo
-			}
-			return contractResultResponse.To
-		}(),
-		CumulativeGasUsed: "0x" + strconv.FormatInt(contractResultResponse.BlockGasUsed, 16),
-		GasUsed:           "0x" + strconv.FormatInt(contractResultResponse.GasUsed, 16),
-		ContractAddress:   contractResultResponse.Address, // TODO: Set if contract creation
+		BlockHash:         contractResultResponse.BlockHash[:66],
+		BlockNumber:       hexify(contractResultResponse.BlockNumber),
+		From:              *evmAddressFrom,
+		To:                *evmAddressTo,
+		CumulativeGasUsed: hexify(contractResultResponse.BlockGasUsed),
+		GasUsed:           hexify(contractResultResponse.GasUsed),
+		ContractAddress:   contractAddress,
 		Logs:              logs,
-		LogsBloom: func() string {
-			if contractResultResponse.Bloom == emptyHex {
-				return emptyBloom
-			}
-			return contractResultResponse.Bloom
-		}(),
+		LogsBloom:         logsBloom,
 		TransactionHash:   hash,
-		TransactionIndex:  "0x" + strconv.FormatInt(int64(contractResultResponse.TransactionIndex), 16),
+		TransactionIndex:  hexify(int64(contractResultResponse.TransactionIndex)),
 		EffectiveGasPrice: effectiveGasPrice,
 		Root:              defaultRootHash,
 		Status:            contractResultResponse.Status,
-		Type: func() *string {
-			if contractResultResponse.Type == nil {
-				return nil
-			}
-			hexType := "0x" + strconv.FormatInt(int64(*contractResultResponse.Type), 16)
-			return &hexType
-		}(),
+		Type:              contractType,
+	}
+
+	if contractResultResponse.ErrorMessage != nil {
+		if isHexString(*contractResultResponse.ErrorMessage) {
+			receipt.RevertReason = *contractResultResponse.ErrorMessage
+		} else {
+			receipt.RevertReason = fmt.Sprintf("0x%s", hex.EncodeToString([]byte(*contractResultResponse.ErrorMessage)))
+		}
 	}
 
 	if err := s.cacheService.Set(s.ctx, cacheKey, &receipt, DefaultExpiration); err != nil {
