@@ -1071,3 +1071,33 @@ func (s *EthService) isLatestBlockRequest(blockNumberOrTag string, blockNumber i
 
 	return blockNumber+10 > latestBlockInt
 }
+
+func (s *EthService) getContractAddressFromReceipt(receiptResponse domain.ContractResultResponse) string {
+	if len(receiptResponse.FunctionParameters) < 10 {
+		return receiptResponse.Address
+	}
+
+	parameters := receiptResponse.FunctionParameters[:10]
+	if _, isHTSCreation := HTSCreateFuncSelectors[parameters]; !isHTSCreation {
+		return receiptResponse.Address
+	}
+
+	if len(receiptResponse.CallResult) < 40 {
+		return receiptResponse.Address
+	}
+
+	tokenAddress := receiptResponse.CallResult[len(receiptResponse.CallResult)-40:]
+
+	if !strings.HasPrefix(tokenAddress, "0x") {
+		tokenAddress = fmt.Sprintf("0x%s", tokenAddress)
+	}
+
+	return tokenAddress
+}
+
+func isHexString(str string) bool {
+	str = strings.TrimPrefix(str, "0x")
+
+	_, err := hex.DecodeString(str)
+	return err == nil
+}
