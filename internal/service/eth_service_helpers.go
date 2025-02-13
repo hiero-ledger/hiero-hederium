@@ -93,7 +93,18 @@ func ProcessBlock(s *EthService, block *domain.BlockResponse, showDetails bool) 
 			continue
 		}
 
-		// TODO: Resolve evm addresses
+		to, err := s.resolveEvmAddress(contractResult.To)
+		if err != nil {
+			s.logger.Error("Failed to resolve to address", zap.Error(err))
+		}
+
+		from, err := s.resolveEvmAddress(contractResult.From)
+		if err != nil {
+			s.logger.Error("Failed to resolve from address", zap.Error(err))
+		}
+
+		contractResult.To = *to
+		contractResult.From = *from
 
 		if showDetails {
 			tx := ProcessTransaction(contractResult)
