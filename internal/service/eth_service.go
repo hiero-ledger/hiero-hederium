@@ -178,14 +178,9 @@ func (s *EthService) GetBlockByHash(hash string, showDetails bool) (interface{},
 func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting block by number", zap.String("numberOrTag", numberOrTag), zap.Bool("showDetails", showDetails))
 
-	blockNumber, errMap := s.getBlockNumberByHashOrTag(numberOrTag)
-	if errMap != nil {
-		return nil, errMap
-	}
-
-	blockNumberInt, ok := blockNumber.(int64)
-	if !ok {
-		return nil, nil
+	blockNumberInt, errRpc := s.getBlockNumberByNumberOrTag(numberOrTag)
+	if errRpc != nil {
+		return nil, errRpc
 	}
 
 	cachedKey := fmt.Sprintf("%s_%d_%t", GetBlockByNumber, blockNumberInt, showDetails)
@@ -267,13 +262,8 @@ func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) str
 func (s *EthService) GetTransactionCount(address string, blockNumberOrTag string) string {
 	s.logger.Info("Getting transaction count", zap.String("address", address), zap.String("blockNumberOrTag", blockNumberOrTag))
 
-	blockNumber, errMap := s.getBlockNumberByHashOrTag(blockNumberOrTag)
-	if errMap != nil {
-		return "0x0"
-	}
-
-	blockNumberInt, ok := blockNumber.(int64)
-	if !ok {
+	blockNumberInt, errRpc := s.getBlockNumberByNumberOrTag(blockNumberOrTag)
+	if errRpc != nil {
 		return "0x0"
 	}
 
@@ -511,14 +501,9 @@ func (s *EthService) FeeHistory(blockCount string, newestBlock string, rewardPer
 	if err != nil {
 		return nil, domain.NewRPCError(domain.ServerError, fmt.Sprintf("Failed to parse latest block number: %s", err.Error()))
 	}
-	newestBlockNumber, errRpc := s.getBlockNumberByHashOrTag(newestBlock)
+	newestBlockInt, errRpc := s.getBlockNumberByNumberOrTag(newestBlock)
 	if errRpc != nil {
 		return nil, errRpc
-	}
-
-	newestBlockInt, ok := newestBlockNumber.(int64)
-	if !ok {
-		return nil, domain.NewRPCError(domain.ServerError, "Failed to parse newest block number")
 	}
 
 	//Convert the block number to decimal
@@ -569,12 +554,12 @@ func (s *EthService) FeeHistory(blockCount string, newestBlock string, rewardPer
 
 func (s *EthService) GetStorageAt(address, slot, blockNumberOrHash string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting storage at", zap.String("address", address), zap.String("slot", slot), zap.String("blockNumberOrHash", blockNumberOrHash))
-	blockInt, errRpc := s.getBlockNumberByHashOrTag(blockNumberOrHash)
+	blockInt, errRpc := s.getBlockNumberByNumberOrTag(blockNumberOrHash)
 	if errRpc != nil {
 		return nil, errRpc
 	}
 
-	blockResponse := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockInt.(int64), 10))
+	blockResponse := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockInt, 10))
 
 	if blockResponse == nil {
 		return nil, domain.NewRPCError(domain.ServerError, "Failed to get block data")
@@ -658,14 +643,9 @@ func (s *EthService) GetBlockTransactionCountByHash(blockHash string) (interface
 
 func (s *EthService) GetBlockTransactionCountByNumber(blockNumberOrTag string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting block transaction count by number", zap.String("blockNumber", blockNumberOrTag))
-	blockNumber, errMap := s.getBlockNumberByHashOrTag(blockNumberOrTag)
+	blockNumberInt, errMap := s.getBlockNumberByNumberOrTag(blockNumberOrTag)
 	if errMap != nil {
 		return nil, errMap
-	}
-
-	blockNumberInt, ok := blockNumber.(int64)
-	if !ok {
-		return nil, domain.NewRPCError(domain.ServerError, "Invalid block number")
 	}
 
 	cachedKey := fmt.Sprintf("%s_%d", GetBlockTransactionCountByNumber, blockNumberInt)
@@ -735,19 +715,14 @@ func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string
 	cacheKey := fmt.Sprintf("%s_%s_%s", GetTransactionByBlockNumberAndIndex, blockNumberOrTag, txIndex)
 
 	var cachedTx interface{}
-	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedTx); err == nil && cachedTx != nil {
+	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedTx); err == nil {
 		s.logger.Info("Transaction fetched from cache", zap.Any("transaction", cachedTx))
 		return cachedTx, nil
 	}
 
-	blockNumber, errMap := s.getBlockNumberByHashOrTag(blockNumberOrTag)
-	if errMap != nil {
-		return nil, errMap
-	}
-
-	blockNumberInt, ok := blockNumber.(int64)
-	if !ok {
-		return nil, domain.NewRPCError(domain.ServerError, "Invalid block number")
+	blockNumberInt, errRpc := s.getBlockNumberByNumberOrTag(blockNumberOrTag)
+	if errRpc != nil {
+		return nil, errRpc
 	}
 
 	txIndexInt, err := HexToDec(txIndex)

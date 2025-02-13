@@ -515,27 +515,27 @@ func HexToDec(hexStr string) (int64, error) {
 	return dec, nil
 }
 
-func (s *EthService) getBlockNumberByHashOrTag(blockNumberOrTag string) (interface{}, *domain.RPCError) {
-	s.logger.Debug("Getting block number by hash or tag", zap.String("blockNumberOrTag", blockNumberOrTag))
+func (s *EthService) getBlockNumberByNumberOrTag(blockNumberOrTag string) (int64, *domain.RPCError) {
+	s.logger.Debug("Getting block number by hash or tag", zap.String("blockHashOrTag", blockNumberOrTag))
 	switch blockNumberOrTag {
 	case "latest", "pending":
 		latestBlock, errMap := s.GetBlockNumber()
 		if errMap != nil {
 			s.logger.Error("Failed to get latest block number", zap.Error(errMap))
-			return "0x0", errMap
+			return 0, errMap
 		}
 
 		latestBlockStr, ok := latestBlock.(string)
 		if !ok {
 			s.logger.Error("Invalid block number format", zap.Error(errMap))
-			return "0x0", errMap
+			return 0, errMap
 		}
 
 		// Convert hex string to int, remove "0x" prefix
 		latestBlockNum, err := HexToDec(latestBlockStr)
 		if err != nil {
 			s.logger.Error("Failed to parse latest block number", zap.Error(err))
-			return "0x0", domain.NewRPCError(domain.ServerError, "Invalid block number")
+			return 0, domain.NewRPCError(domain.ServerError, "Invalid block number")
 		}
 		return latestBlockNum, nil
 
@@ -546,7 +546,7 @@ func (s *EthService) getBlockNumberByHashOrTag(blockNumberOrTag string) (interfa
 		latestBlockNum, err := HexToDec(blockNumberOrTag)
 		if err != nil {
 			s.logger.Error("Failed to parse latest block number", zap.Error(err))
-			return "0x0", domain.NewRPCError(domain.ServerError, "Invalid block number")
+			return 0, domain.NewRPCError(domain.ServerError, "Invalid block number")
 		}
 
 		return latestBlockNum, nil
@@ -1059,13 +1059,8 @@ func (s *EthService) isLatestBlockRequest(blockNumberOrTag string, blockNumber i
 		return false
 	}
 
-	latestBlock, err := s.getBlockNumberByHashOrTag("latest")
+	latestBlockInt, err := s.getBlockNumberByNumberOrTag("latest")
 	if err != nil {
-		return false
-	}
-
-	latestBlockInt, ok := latestBlock.(int64)
-	if !ok {
 		return false
 	}
 
