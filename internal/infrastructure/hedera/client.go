@@ -12,6 +12,7 @@ type HederaNodeClient interface {
 	GetNetworkFees() (int64, error)
 	SendRawTransaction(transactionData []byte, networkGasPriceInWeiBars int64, callerId *common.Address) (*TransactionResponse, error)
 	GetContractByteCode(shard, realm int64, address string) ([]byte, error)
+	GetOperatorPublicKey() string
 }
 
 type HederaClient struct {
@@ -205,4 +206,8 @@ func (h *HederaClient) GetContractByteCode(shard, realm int64, address string) (
 	}
 
 	return response, nil
+}
+
+func (h *HederaClient) GetOperatorPublicKey() string {
+	return h.Client.GetOperatorPublicKey().ToEvmAddress()
 }
