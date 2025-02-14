@@ -105,10 +105,10 @@ func (s *EthService) GetGasPrice() (interface{}, *domain.RPCError) {
 	timestampTo := "" // We pass empty, because we want gas from latest block
 	order := ""
 
-	weibars, errMap := GetFeeWeibars(s, timestampTo, order)
-	if errMap != nil {
-		s.logger.Error("Failed to fetch gas price")
-		return nil, domain.NewRPCError(domain.ServerError, "Failed to fetch gas price") // TODO: Add error code
+	weibars, err := GetFeeWeibars(s, timestampTo, order)
+	if err != nil {
+		s.logger.Error("Failed to fetch gas price", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to fetch gas price")
 	}
 
 	gasPrice := fmt.Sprintf("0x%x", weibars)
@@ -372,7 +372,6 @@ func (s *EthService) GetTransactionByHash(hash string) (interface{}, *domain.RPC
 	}
 	contractResultResponse := contractResult.(domain.ContractResultResponse)
 
-	// TODO: Resolve evm addresses
 	transaction := s.ProcessTransactionResponse(contractResultResponse)
 
 	if err := s.cacheService.Set(s.ctx, cacheKey, &transaction, DefaultExpiration); err != nil {
@@ -643,9 +642,9 @@ func (s *EthService) GetBlockTransactionCountByHash(blockHash string) (interface
 
 func (s *EthService) GetBlockTransactionCountByNumber(blockNumberOrTag string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting block transaction count by number", zap.String("blockNumber", blockNumberOrTag))
-	blockNumberInt, errMap := s.getBlockNumberByNumberOrTag(blockNumberOrTag)
-	if errMap != nil {
-		return nil, errMap
+	blockNumberInt, errRpc := s.getBlockNumberByNumberOrTag(blockNumberOrTag)
+	if errRpc != nil {
+		return nil, errRpc
 	}
 
 	cachedKey := fmt.Sprintf("%s_%d", GetBlockTransactionCountByNumber, blockNumberInt)
@@ -815,9 +814,9 @@ func (s *EthService) GetCode(address string, blockNumberOrTag string) (interface
 	}
 
 	// Resolve the address type (contract or token)
-	result, errMap := s.resolveAddressType(address)
-	if errMap != nil {
-		s.logger.Debug("Failed to resolve address type from Mirror node", zap.Any("error", errMap))
+	result, err := s.resolveAddressType(address)
+	if err != nil {
+		s.logger.Debug("Failed to resolve address type from Mirror node", zap.Any("error", err))
 	}
 
 	switch result := result.(type) {
@@ -844,7 +843,7 @@ func (s *EthService) GetCode(address string, blockNumberOrTag string) (interface
 		return "0x" + redirectBytecode, nil
 	}
 
-	result, err := s.hClient.GetContractByteCode(0, 0, address)
+	result, err = s.hClient.GetContractByteCode(0, 0, address)
 	if err != nil {
 		// TODO: Handle error better
 		s.logger.Error("Failed to get contract bytecode", zap.Error(err))

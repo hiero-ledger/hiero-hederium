@@ -260,8 +260,8 @@ func (s *EthService) ProcessTransactionResponse(contractResult domain.ContractRe
 	}
 
 	var toAddress string
-	evmAddressTo, errMap := s.resolveEvmAddress(hexTo)
-	if errMap != nil {
+	evmAddressTo, err := s.resolveEvmAddress(hexTo)
+	if err != nil {
 		toAddress = hexTo
 	} else {
 		toAddress = *evmAddressTo
@@ -273,8 +273,8 @@ func (s *EthService) ProcessTransactionResponse(contractResult domain.ContractRe
 	}
 
 	var fromAddress string
-	evmAddressFrom, errMap := s.resolveEvmAddress(trimmedFrom)
-	if errMap != nil {
+	evmAddressFrom, err := s.resolveEvmAddress(trimmedFrom)
+	if err != nil {
 		fromAddress = trimmedFrom
 	} else {
 		fromAddress = *evmAddressFrom
@@ -567,9 +567,9 @@ func (s *EthService) getFeeHistory(blockCount, newestBlockInt, latestBlockInt in
 
 	// Get fees from oldest to newest blocks
 	for blockNumber := oldestBlockNumber; blockNumber <= newestBlockInt; blockNumber++ {
-		fee, errMap := s.getFeeByBlockNumber(blockNumber)
-		if errMap != nil {
-			return nil, errMap
+		fee, err := s.getFeeByBlockNumber(blockNumber)
+		if err != nil {
+			return nil, err
 		}
 
 		feeHistory.BaseFeePerGas = append(feeHistory.BaseFeePerGas, fee)
@@ -667,8 +667,8 @@ func (s *EthService) validateBlockHashAndAddTimestampToParams(params map[string]
 }
 
 func (s *EthService) validateBlockRangeAndAddTimestampToParams(params map[string]interface{}, fromBlock, toBlock string, address []string) bool {
-	latestBlock, errMap := s.GetBlockNumber()
-	if errMap != nil {
+	latestBlock, errRpc := s.GetBlockNumber()
+	if errRpc != nil {
 		s.logger.Debug("Failed to get latest block number")
 		return false
 	}
