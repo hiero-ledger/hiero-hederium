@@ -677,7 +677,7 @@ func (s *EthService) GetTransactionByBlockHashAndIndex(blockHash string, txIndex
 	cacheKey := fmt.Sprintf("%s_%s_%s", GetTransactionByBlockHashAndIndex, blockHash, txIndex)
 
 	var cachedTx interface{}
-	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedTx); err == nil && cachedTx != nil {
+	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedTx); err == nil {
 		s.logger.Info("Transaction fetched from cache", zap.Any("transaction", cachedTx))
 		return cachedTx, nil
 	}
@@ -699,10 +699,8 @@ func (s *EthService) GetTransactionByBlockHashAndIndex(blockHash string, txIndex
 		return nil, domain.NewRPCError(domain.ServerError, "Failed to get transaction by block and index")
 	}
 
-	if tx != nil {
-		if err := s.cacheService.Set(s.ctx, cacheKey, tx, DefaultExpiration); err != nil {
-			s.logger.Debug("Failed to cache transaction", zap.Error(err))
-		}
+	if err := s.cacheService.Set(s.ctx, cacheKey, tx, DefaultExpiration); err != nil {
+		s.logger.Debug("Failed to cache transaction", zap.Error(err))
 	}
 
 	return tx, nil
@@ -711,17 +709,17 @@ func (s *EthService) GetTransactionByBlockHashAndIndex(blockHash string, txIndex
 func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string, txIndex string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting transaction by block number and index", zap.String("blockNumberOrTag", blockNumberOrTag), zap.String("txIndex", txIndex))
 
-	cacheKey := fmt.Sprintf("%s_%s_%s", GetTransactionByBlockNumberAndIndex, blockNumberOrTag, txIndex)
+	blockNumberInt, errRpc := s.getBlockNumberByNumberOrTag(blockNumberOrTag)
+	if errRpc != nil {
+		return nil, errRpc
+	}
+
+	cacheKey := fmt.Sprintf("%s_%d_%s", GetTransactionByBlockNumberAndIndex, blockNumberInt, txIndex)
 
 	var cachedTx interface{}
 	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedTx); err == nil {
 		s.logger.Info("Transaction fetched from cache", zap.Any("transaction", cachedTx))
 		return cachedTx, nil
-	}
-
-	blockNumberInt, errRpc := s.getBlockNumberByNumberOrTag(blockNumberOrTag)
-	if errRpc != nil {
-		return nil, errRpc
 	}
 
 	txIndexInt, err := HexToDec(txIndex)
@@ -741,10 +739,8 @@ func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string
 		return nil, domain.NewRPCError(domain.ServerError, "Failed to get transaction by block and index")
 	}
 
-	if tx != nil {
-		if err := s.cacheService.Set(s.ctx, cacheKey, tx, DefaultExpiration); err != nil {
-			s.logger.Debug("Failed to cache transaction", zap.Error(err))
-		}
+	if err := s.cacheService.Set(s.ctx, cacheKey, tx, DefaultExpiration); err != nil {
+		s.logger.Debug("Failed to cache transaction", zap.Error(err))
 	}
 
 	return tx, nil
