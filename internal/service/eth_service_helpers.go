@@ -799,7 +799,7 @@ func (s *EthService) getLogsWithParams(address []string, params map[string]inter
 
 func (s *EthService) resolveEvmAddress(address string) (*string, error) {
 	if address == "" {
-		return nil, fmt.Errorf("address is empty")
+		return &address, fmt.Errorf("address is empty")
 	}
 
 	cacheKey := fmt.Sprintf("evm_address_%s", address)
