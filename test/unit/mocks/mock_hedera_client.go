@@ -77,4 +77,15 @@ func (m *MockHederaNodeClient) GetContractByteCode(shard, realm int64, address s
 func (mr *MockHederaNodeClientMockRecorder) GetContractByteCode(shard, realm, address interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetContractByteCode", reflect.TypeOf((*MockHederaNodeClient)(nil).GetContractByteCode), shard, realm, address)
-} 
+}
+
+func (m *MockHederaNodeClient) GetOperatorPublicKey() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOperatorPublicKey")
+	return ret[0].(string)
+}
+
+func (mr *MockHederaNodeClientMockRecorder) GetOperatorPublicKey() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorPublicKey", reflect.TypeOf((*MockHederaNodeClient)(nil).GetOperatorPublicKey))
+}
