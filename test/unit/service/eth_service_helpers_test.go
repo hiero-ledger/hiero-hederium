@@ -5,7 +5,6 @@ import (
 	"math/big"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/LimeChain/Hederium/internal/domain"
 	"github.com/LimeChain/Hederium/internal/infrastructure/cache"
@@ -668,8 +667,8 @@ func TestProcessTransactionResponse(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			mockHederaClient := mocks.NewMockHederaNodeClient(ctrl)
 			mockMirrorClient := mocks.NewMockMirrorClient(ctrl)
+			mockCacheService := mocks.NewMockCacheService(ctrl)
 			logger := zap.NewNop()
-			cacheService := cache.NewMemoryCache(time.Hour, time.Hour)
 			cfg := map[string]interface{}{
 				"tiers": map[string]interface{}{
 					"free": map[string]interface{}{
@@ -678,16 +677,31 @@ func TestProcessTransactionResponse(t *testing.T) {
 				},
 			}
 			tieredLimiter := limiter.NewTieredLimiter(cfg, 1000)
-			chainId := "0x12a"
 
-			// Set up mock expectations for GetContractById
-			mockMirrorClient.EXPECT().GetContractById(tc.input.To).Return(nil, nil).AnyTimes()
-			mockMirrorClient.EXPECT().GetContractById(tc.input.From).Return(nil, nil).AnyTimes()
-			mockMirrorClient.EXPECT().GetAccountById(tc.input.To).Return(nil, nil).AnyTimes()
-			mockMirrorClient.EXPECT().GetAccountById(tc.input.From).Return(nil, nil).AnyTimes()
-			mockMirrorClient.EXPECT().GetTokenById(gomock.Any()).Return(nil, nil).AnyTimes()
+			// Set up cache expectations for both 'from' and 'to' addresses
+			fromAddress := tc.input.From
+			toAddress := tc.input.To
+			fromCacheKey := fmt.Sprintf("evm_address_%s", fromAddress)
+			toCacheKey := fmt.Sprintf("evm_address_%s", toAddress)
 
-			s := service.NewEthService(mockHederaClient, mockMirrorClient, logger, tieredLimiter, chainId, cacheService)
+			// Mock cache Get for 'from' address
+			mockCacheService.EXPECT().
+				Get(gomock.Any(), fromCacheKey, gomock.Any()).
+				DoAndReturn(func(_ interface{}, _ string, result *string) error {
+					*result = fromAddress
+					return nil
+				}).AnyTimes()
+
+			// Mock cache Get for 'to' address
+			mockCacheService.EXPECT().
+				Get(gomock.Any(), toCacheKey, gomock.Any()).
+				DoAndReturn(func(_ interface{}, _ string, result *string) error {
+					*result = toAddress
+					return nil
+				}).AnyTimes()
+
+			s := service.NewEthService(mockHederaClient, mockMirrorClient, logger, tieredLimiter, defaultChainId, mockCacheService)
+
 			result := s.ProcessTransactionResponse(tc.input)
 
 			// Type-specific assertions
