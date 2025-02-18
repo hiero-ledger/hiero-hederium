@@ -891,16 +891,13 @@ func (s *EthService) getTransactionByBlockAndIndex(queryParamas map[string]inter
 
 	evmAddressTo, err := s.resolveEvmAddress(transaction.To)
 	if err != nil {
-		return nil, err
+		s.logger.Error("Failed to resolve to address", zap.Error(err))
 	}
 
 	evmAddressFrom, err := s.resolveEvmAddress(transaction.From)
 	if err != nil {
-		return nil, err
+		s.logger.Error("Failed to resolve from address", zap.Error(err))
 	}
-
-	s.logger.Info("Processing contract result", zap.Any("evmAddressTO", evmAddressTo))
-	s.logger.Info("Processing contract result", zap.Any("evmAddressFROM", evmAddressFrom))
 
 	transaction.To = *evmAddressTo
 	transaction.From = *evmAddressFrom
