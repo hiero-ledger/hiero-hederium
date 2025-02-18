@@ -602,6 +602,46 @@ func TestGetBlockByNumber(t *testing.T) {
 						To:               "0x" + strings.Repeat("3", 40),
 					}})
 
+				// Mock resolveEvmAddress for 'from' address
+				fromCacheKey := fmt.Sprintf("evm_address_%s", "0x"+strings.Repeat("2", 40))
+				cacheService.EXPECT().
+					Get(gomock.Any(), fromCacheKey, gomock.Any()).
+					Return(errors.New("not found"))
+
+				mockClient.EXPECT().
+					GetContractById("0x"+strings.Repeat("2", 40)).
+					Return(nil, errors.New("not found"))
+
+				mockClient.EXPECT().
+					GetAccountById("0x"+strings.Repeat("2", 40)).
+					Return(&domain.AccountResponse{
+						EvmAddress: "0x" + strings.Repeat("2", 40),
+					}, nil)
+
+				cacheService.EXPECT().
+					Set(gomock.Any(), fromCacheKey, "0x"+strings.Repeat("2", 40), service.DefaultExpiration).
+					Return(nil)
+
+				// Mock resolveEvmAddress for 'to' address
+				toCacheKey := fmt.Sprintf("evm_address_%s", "0x"+strings.Repeat("3", 40))
+				cacheService.EXPECT().
+					Get(gomock.Any(), toCacheKey, gomock.Any()).
+					Return(errors.New("not found"))
+
+				mockClient.EXPECT().
+					GetContractById("0x"+strings.Repeat("3", 40)).
+					Return(nil, errors.New("not found"))
+
+				mockClient.EXPECT().
+					GetAccountById("0x"+strings.Repeat("3", 40)).
+					Return(&domain.AccountResponse{
+						EvmAddress: "0x" + strings.Repeat("3", 40),
+					}, nil)
+
+				cacheService.EXPECT().
+					Set(gomock.Any(), toCacheKey, "0x"+strings.Repeat("3", 40), service.DefaultExpiration).
+					Return(nil)
+
 				cacheService.EXPECT().
 					Set(gomock.Any(), cacheKey, gomock.Any(), service.DefaultExpiration).
 					Return(nil)
@@ -645,6 +685,46 @@ func TestGetBlockByNumber(t *testing.T) {
 						To:               "0x" + strings.Repeat("3", 40),
 					}})
 
+				// Mock resolveEvmAddress for 'from' address
+				fromCacheKey := fmt.Sprintf("evm_address_%s", "0x"+strings.Repeat("2", 40))
+				cacheService.EXPECT().
+					Get(gomock.Any(), fromCacheKey, gomock.Any()).
+					Return(errors.New("not found"))
+
+				mockClient.EXPECT().
+					GetContractById("0x"+strings.Repeat("2", 40)).
+					Return(nil, errors.New("not found"))
+
+				mockClient.EXPECT().
+					GetAccountById("0x"+strings.Repeat("2", 40)).
+					Return(&domain.AccountResponse{
+						EvmAddress: "0x" + strings.Repeat("2", 40),
+					}, nil)
+
+				cacheService.EXPECT().
+					Set(gomock.Any(), fromCacheKey, "0x"+strings.Repeat("2", 40), service.DefaultExpiration).
+					Return(nil)
+
+				// Mock resolveEvmAddress for 'to' address
+				toCacheKey := fmt.Sprintf("evm_address_%s", "0x"+strings.Repeat("3", 40))
+				cacheService.EXPECT().
+					Get(gomock.Any(), toCacheKey, gomock.Any()).
+					Return(errors.New("not found"))
+
+				mockClient.EXPECT().
+					GetContractById("0x"+strings.Repeat("3", 40)).
+					Return(nil, errors.New("not found"))
+
+				mockClient.EXPECT().
+					GetAccountById("0x"+strings.Repeat("3", 40)).
+					Return(&domain.AccountResponse{
+						EvmAddress: "0x" + strings.Repeat("3", 40),
+					}, nil)
+
+				cacheService.EXPECT().
+					Set(gomock.Any(), toCacheKey, "0x"+strings.Repeat("3", 40), service.DefaultExpiration).
+					Return(nil)
+
 				cacheService.EXPECT().
 					Set(gomock.Any(), cacheKey, gomock.Any(), service.DefaultExpiration).
 					Return(nil)
@@ -683,6 +763,46 @@ func TestGetBlockByNumber(t *testing.T) {
 						From:             "0x" + strings.Repeat("2", 40),
 						To:               "0x" + strings.Repeat("3", 40),
 					}})
+
+				// Mock resolveEvmAddress for 'from' address
+				fromCacheKey := fmt.Sprintf("evm_address_%s", "0x"+strings.Repeat("2", 40))
+				cacheService.EXPECT().
+					Get(gomock.Any(), fromCacheKey, gomock.Any()).
+					Return(errors.New("not found"))
+
+				mockClient.EXPECT().
+					GetContractById("0x"+strings.Repeat("2", 40)).
+					Return(nil, errors.New("not found"))
+
+				mockClient.EXPECT().
+					GetAccountById("0x"+strings.Repeat("2", 40)).
+					Return(&domain.AccountResponse{
+						EvmAddress: "0x" + strings.Repeat("2", 40),
+					}, nil)
+
+				cacheService.EXPECT().
+					Set(gomock.Any(), fromCacheKey, "0x"+strings.Repeat("2", 40), service.DefaultExpiration).
+					Return(nil)
+
+				// Mock resolveEvmAddress for 'to' address
+				toCacheKey := fmt.Sprintf("evm_address_%s", "0x"+strings.Repeat("3", 40))
+				cacheService.EXPECT().
+					Get(gomock.Any(), toCacheKey, gomock.Any()).
+					Return(errors.New("not found"))
+
+				mockClient.EXPECT().
+					GetContractById("0x"+strings.Repeat("3", 40)).
+					Return(nil, errors.New("not found"))
+
+				mockClient.EXPECT().
+					GetAccountById("0x"+strings.Repeat("3", 40)).
+					Return(&domain.AccountResponse{
+						EvmAddress: "0x" + strings.Repeat("3", 40),
+					}, nil)
+
+				cacheService.EXPECT().
+					Set(gomock.Any(), toCacheKey, "0x"+strings.Repeat("3", 40), service.DefaultExpiration).
+					Return(nil)
 
 				cacheService.EXPECT().
 					Set(gomock.Any(), cacheKey, gomock.Any(), service.DefaultExpiration).
@@ -786,6 +906,46 @@ func TestGetBlockByNumber(t *testing.T) {
 						From:             "0x" + strings.Repeat("2", 40),
 						To:               "0x" + strings.Repeat("3", 40),
 					}})
+
+				// Mock resolveEvmAddress for 'from' address
+				fromCacheKey := fmt.Sprintf("evm_address_%s", "0x"+strings.Repeat("2", 40))
+				cacheService.EXPECT().
+					Get(gomock.Any(), fromCacheKey, gomock.Any()).
+					Return(errors.New("not found"))
+
+				mockClient.EXPECT().
+					GetContractById("0x"+strings.Repeat("2", 40)).
+					Return(nil, errors.New("not found"))
+
+				mockClient.EXPECT().
+					GetAccountById("0x"+strings.Repeat("2", 40)).
+					Return(&domain.AccountResponse{
+						EvmAddress: "0x" + strings.Repeat("2", 40),
+					}, nil)
+
+				cacheService.EXPECT().
+					Set(gomock.Any(), fromCacheKey, "0x"+strings.Repeat("2", 40), service.DefaultExpiration).
+					Return(nil)
+
+				// Mock resolveEvmAddress for 'to' address
+				toCacheKey := fmt.Sprintf("evm_address_%s", "0x"+strings.Repeat("3", 40))
+				cacheService.EXPECT().
+					Get(gomock.Any(), toCacheKey, gomock.Any()).
+					Return(errors.New("not found"))
+
+				mockClient.EXPECT().
+					GetContractById("0x"+strings.Repeat("3", 40)).
+					Return(nil, errors.New("not found"))
+
+				mockClient.EXPECT().
+					GetAccountById("0x"+strings.Repeat("3", 40)).
+					Return(&domain.AccountResponse{
+						EvmAddress: "0x" + strings.Repeat("3", 40),
+					}, nil)
+
+				cacheService.EXPECT().
+					Set(gomock.Any(), toCacheKey, "0x"+strings.Repeat("3", 40), service.DefaultExpiration).
+					Return(nil)
 
 				cacheService.EXPECT().
 					Set(gomock.Any(), cacheKey, gomock.Any(), service.DefaultExpiration).
@@ -1443,17 +1603,20 @@ func TestGetTransactionReceipt(t *testing.T) {
 			name: "successful_transaction_receipt",
 			hash: txHash,
 			mockResult: domain.ContractResultResponse{
-				BlockHash:        blockHash,
-				BlockNumber:      123,
-				BlockGasUsed:     150000,
-				GasUsed:          100000,
-				From:             "0xabc",
-				To:               "0xdef",
-				TransactionIndex: 1,
-				Status:           "0x1",
-				Type:             nil,
-				Logs:             []domain.MirroNodeLogs{},
-				Bloom:            "0x0",
+				BlockHash:          blockHash,
+				BlockNumber:        123,
+				BlockGasUsed:       150000,
+				GasUsed:            100000,
+				From:               "0xabc",
+				To:                 "0xdef",
+				TransactionIndex:   1,
+				Status:             "0x1",
+				Type:               nil,
+				Logs:               []domain.MirroNodeLogs{},
+				Bloom:              "0x0",
+				Address:            "0x0",
+				FunctionParameters: "0000000000000000000000000000000000000000000000000000000000000000",
+				CallResult:         "",
 			},
 			mockBlock: &domain.BlockResponse{
 				Hash: blockHash,
@@ -1478,7 +1641,7 @@ func TestGetTransactionReceipt(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Set up cache expectations for transaction receipt
 			cacheService.EXPECT().
-				Get(gomock.Any(), fmt.Sprintf("eth_getTransactionReceipt_%s", tc.hash), gomock.Any()).
+				Get(gomock.Any(), fmt.Sprintf("%s_%s", service.GetTransactionReceipt, tc.hash), gomock.Any()).
 				Return(errors.New("not found")).
 				Times(1)
 
@@ -1576,7 +1739,7 @@ func TestGetTransactionReceipt(t *testing.T) {
 
 				// Mock cache Set for receipt
 				cacheService.EXPECT().
-					Set(gomock.Any(), fmt.Sprintf("eth_getTransactionReceipt_%s", tc.hash), gomock.Any(), service.DefaultExpiration).
+					Set(gomock.Any(), fmt.Sprintf("%s_%s", service.GetTransactionReceipt, tc.hash), gomock.Any(), service.DefaultExpiration).
 					Return(nil).
 					Times(1)
 			}
@@ -1806,7 +1969,6 @@ func TestFeeHistory(t *testing.T) {
 		})
 	}
 }
-
 func TestGetStorageAt(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

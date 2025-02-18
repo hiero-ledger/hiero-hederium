@@ -105,10 +105,10 @@ func (s *EthService) GetGasPrice() (interface{}, *domain.RPCError) {
 	timestampTo := "" // We pass empty, because we want gas from latest block
 	order := ""
 
-	weibars, errMap := GetFeeWeibars(s, timestampTo, order)
-	if errMap != nil {
-		s.logger.Error("Failed to fetch gas price")
-		return nil, domain.NewRPCError(domain.ServerError, "Failed to fetch gas price") // TODO: Add error code
+	weibars, err := GetFeeWeibars(s, timestampTo, order)
+	if err != nil {
+		s.logger.Error("Failed to fetch gas price", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to fetch gas price")
 	}
 
 	gasPrice := fmt.Sprintf("0x%x", weibars)
@@ -178,14 +178,9 @@ func (s *EthService) GetBlockByHash(hash string, showDetails bool) (interface{},
 func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting block by number", zap.String("numberOrTag", numberOrTag), zap.Bool("showDetails", showDetails))
 
-	blockNumber, errMap := s.getBlockNumberByHashOrTag(numberOrTag)
-	if errMap != nil {
-		return nil, errMap
-	}
-
-	blockNumberInt, ok := blockNumber.(int64)
-	if !ok {
-		return nil, nil
+	blockNumberInt, errRpc := s.getBlockNumberByNumberOrTag(numberOrTag)
+	if errRpc != nil {
+		return nil, errRpc
 	}
 
 	cachedKey := fmt.Sprintf("%s_%d_%t", GetBlockByNumber, blockNumberInt, showDetails)
@@ -267,13 +262,8 @@ func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) str
 func (s *EthService) GetTransactionCount(address string, blockNumberOrTag string) string {
 	s.logger.Info("Getting transaction count", zap.String("address", address), zap.String("blockNumberOrTag", blockNumberOrTag))
 
-	blockNumber, errMap := s.getBlockNumberByHashOrTag(blockNumberOrTag)
-	if errMap != nil {
-		return "0x0"
-	}
-
-	blockNumberInt, ok := blockNumber.(int64)
-	if !ok {
+	blockNumberInt, errRpc := s.getBlockNumberByNumberOrTag(blockNumberOrTag)
+	if errRpc != nil {
 		return "0x0"
 	}
 
@@ -382,7 +372,6 @@ func (s *EthService) GetTransactionByHash(hash string) (interface{}, *domain.RPC
 	}
 	contractResultResponse := contractResult.(domain.ContractResultResponse)
 
-	// TODO: Resolve evm addresses
 	transaction := s.ProcessTransactionResponse(contractResultResponse)
 
 	if err := s.cacheService.Set(s.ctx, cacheKey, &transaction, DefaultExpiration); err != nil {
@@ -416,32 +405,29 @@ func (s *EthService) GetTransactionReceipt(hash string) (interface{}, *domain.RP
 		logs[i] = domain.Log{
 			Address:          log.Address,
 			BlockHash:        contractResultResponse.BlockHash[:66],
-			BlockNumber:      "0x" + strconv.FormatInt(contractResultResponse.BlockNumber, 16),
+			BlockNumber:      hexify(contractResultResponse.BlockNumber),
 			Data:             log.Data,
-			LogIndex:         "0x" + strconv.FormatInt(int64(i), 16),
+			LogIndex:         hexify(int64(i)),
 			Removed:          false,
 			Topics:           log.Topics,
 			TransactionHash:  hash,
-			TransactionIndex: "0x" + strconv.FormatInt(int64(contractResultResponse.TransactionIndex), 16),
+			TransactionIndex: hexify(int64(contractResultResponse.TransactionIndex)),
 		}
 	}
 
-	// TODO: Check if the address is a system contract here
 	// Default values
 	const emptyHex = "0x"
 	const emptyBloom = "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 	const defaultRootHash = "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
-	// TODO: Check revert reason, if matches error_message, return it, else it's ASCII so make it hex and return then
-	// TODO: Implement resolveEvmAddress for from/to addresses
 
-	evmAddressFrom, errMap := s.resolveEvmAddress(contractResultResponse.From)
-	if errMap != nil {
-		s.logger.Error("Failed to resolve EVM address for from", zap.Any("error", errMap))
+	evmAddressFrom, err := s.resolveEvmAddress(contractResultResponse.From)
+	if err != nil {
+		s.logger.Error("Failed to resolve EVM address for from", zap.Any("error", err))
 	}
 
-	evmAddressTo, errMap := s.resolveEvmAddress(contractResultResponse.To)
-	if errMap != nil {
-		s.logger.Error("Failed to resolve EVM address for to", zap.Any("error", errMap))
+	evmAddressTo, err := s.resolveEvmAddress(contractResultResponse.To)
+	if err != nil {
+		s.logger.Error("Failed to resolve EVM address for to", zap.Any("error", err))
 	}
 
 	effectiveGasPrice, err := s.getCurrentGasPriceForBlock(contractResultResponse.BlockHash[:66])
@@ -449,45 +435,44 @@ func (s *EthService) GetTransactionReceipt(hash string) (interface{}, *domain.RP
 		s.logger.Error("Failed to get gas price for block", zap.Any("error", err))
 	}
 
+	logsBloom := contractResultResponse.Bloom
+	if logsBloom == emptyHex {
+		logsBloom = emptyBloom
+	}
+
+	var contractType *string
+	if contractResultResponse.Type != nil {
+		hexType := hexify(int64(*contractResultResponse.Type))
+		contractType = &hexType
+	}
+
+	contractAddress := s.getContractAddressFromReceipt(contractResultResponse)
+
 	// Create receipt
-	// TODO: add utility function to convert to hex
 	receipt := domain.TransactionReceipt{
-		BlockHash:   contractResultResponse.BlockHash[:66],
-		BlockNumber: "0x" + strconv.FormatInt(contractResultResponse.BlockNumber, 16),
-		From: func() string {
-			if evmAddressFrom != nil {
-				return *evmAddressFrom
-			}
-			return contractResultResponse.From
-		}(),
-		To: func() string {
-			if evmAddressTo != nil {
-				return *evmAddressTo
-			}
-			return contractResultResponse.To
-		}(),
-		CumulativeGasUsed: "0x" + strconv.FormatInt(contractResultResponse.BlockGasUsed, 16),
-		GasUsed:           "0x" + strconv.FormatInt(contractResultResponse.GasUsed, 16),
-		ContractAddress:   contractResultResponse.Address, // TODO: Set if contract creation
+		BlockHash:         contractResultResponse.BlockHash[:66],
+		BlockNumber:       hexify(contractResultResponse.BlockNumber),
+		From:              *evmAddressFrom,
+		To:                *evmAddressTo,
+		CumulativeGasUsed: hexify(contractResultResponse.BlockGasUsed),
+		GasUsed:           hexify(contractResultResponse.GasUsed),
+		ContractAddress:   contractAddress,
 		Logs:              logs,
-		LogsBloom: func() string {
-			if contractResultResponse.Bloom == emptyHex {
-				return emptyBloom
-			}
-			return contractResultResponse.Bloom
-		}(),
+		LogsBloom:         logsBloom,
 		TransactionHash:   hash,
-		TransactionIndex:  "0x" + strconv.FormatInt(int64(contractResultResponse.TransactionIndex), 16),
+		TransactionIndex:  hexify(int64(contractResultResponse.TransactionIndex)),
 		EffectiveGasPrice: effectiveGasPrice,
 		Root:              defaultRootHash,
 		Status:            contractResultResponse.Status,
-		Type: func() *string {
-			if contractResultResponse.Type == nil {
-				return nil
-			}
-			hexType := "0x" + strconv.FormatInt(int64(*contractResultResponse.Type), 16)
-			return &hexType
-		}(),
+		Type:              contractType,
+	}
+
+	if contractResultResponse.ErrorMessage != nil {
+		if isHexString(*contractResultResponse.ErrorMessage) {
+			receipt.RevertReason = *contractResultResponse.ErrorMessage
+		} else {
+			receipt.RevertReason = fmt.Sprintf("0x%s", hex.EncodeToString([]byte(*contractResultResponse.ErrorMessage)))
+		}
 	}
 
 	if err := s.cacheService.Set(s.ctx, cacheKey, &receipt, DefaultExpiration); err != nil {
@@ -515,14 +500,9 @@ func (s *EthService) FeeHistory(blockCount string, newestBlock string, rewardPer
 	if err != nil {
 		return nil, domain.NewRPCError(domain.ServerError, fmt.Sprintf("Failed to parse latest block number: %s", err.Error()))
 	}
-	newestBlockNumber, errRpc := s.getBlockNumberByHashOrTag(newestBlock)
+	newestBlockInt, errRpc := s.getBlockNumberByNumberOrTag(newestBlock)
 	if errRpc != nil {
 		return nil, errRpc
-	}
-
-	newestBlockInt, ok := newestBlockNumber.(int64)
-	if !ok {
-		return nil, domain.NewRPCError(domain.ServerError, "Failed to parse newest block number")
 	}
 
 	//Convert the block number to decimal
@@ -573,12 +553,12 @@ func (s *EthService) FeeHistory(blockCount string, newestBlock string, rewardPer
 
 func (s *EthService) GetStorageAt(address, slot, blockNumberOrHash string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting storage at", zap.String("address", address), zap.String("slot", slot), zap.String("blockNumberOrHash", blockNumberOrHash))
-	blockInt, errRpc := s.getBlockNumberByHashOrTag(blockNumberOrHash)
+	blockInt, errRpc := s.getBlockNumberByNumberOrTag(blockNumberOrHash)
 	if errRpc != nil {
 		return nil, errRpc
 	}
 
-	blockResponse := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockInt.(int64), 10))
+	blockResponse := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockInt, 10))
 
 	if blockResponse == nil {
 		return nil, domain.NewRPCError(domain.ServerError, "Failed to get block data")
@@ -662,14 +642,9 @@ func (s *EthService) GetBlockTransactionCountByHash(blockHash string) (interface
 
 func (s *EthService) GetBlockTransactionCountByNumber(blockNumberOrTag string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting block transaction count by number", zap.String("blockNumber", blockNumberOrTag))
-	blockNumber, errMap := s.getBlockNumberByHashOrTag(blockNumberOrTag)
-	if errMap != nil {
-		return nil, errMap
-	}
-
-	blockNumberInt, ok := blockNumber.(int64)
-	if !ok {
-		return nil, domain.NewRPCError(domain.ServerError, "Invalid block number")
+	blockNumberInt, errRpc := s.getBlockNumberByNumberOrTag(blockNumberOrTag)
+	if errRpc != nil {
+		return nil, errRpc
 	}
 
 	cachedKey := fmt.Sprintf("%s_%d", GetBlockTransactionCountByNumber, blockNumberInt)
@@ -739,19 +714,14 @@ func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string
 	cacheKey := fmt.Sprintf("%s_%s_%s", GetTransactionByBlockNumberAndIndex, blockNumberOrTag, txIndex)
 
 	var cachedTx interface{}
-	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedTx); err == nil && cachedTx != nil {
+	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedTx); err == nil {
 		s.logger.Info("Transaction fetched from cache", zap.Any("transaction", cachedTx))
 		return cachedTx, nil
 	}
 
-	blockNumber, errMap := s.getBlockNumberByHashOrTag(blockNumberOrTag)
-	if errMap != nil {
-		return nil, errMap
-	}
-
-	blockNumberInt, ok := blockNumber.(int64)
-	if !ok {
-		return nil, domain.NewRPCError(domain.ServerError, "Invalid block number")
+	blockNumberInt, errRpc := s.getBlockNumberByNumberOrTag(blockNumberOrTag)
+	if errRpc != nil {
+		return nil, errRpc
 	}
 
 	txIndexInt, err := HexToDec(txIndex)
@@ -844,9 +814,9 @@ func (s *EthService) GetCode(address string, blockNumberOrTag string) (interface
 	}
 
 	// Resolve the address type (contract or token)
-	result, errMap := s.resolveAddressType(address)
-	if errMap != nil {
-		s.logger.Debug("Failed to resolve address type from Mirror node", zap.Any("error", errMap))
+	result, err := s.resolveAddressType(address)
+	if err != nil {
+		s.logger.Debug("Failed to resolve address type from Mirror node", zap.Any("error", err))
 	}
 
 	switch result := result.(type) {
@@ -873,7 +843,7 @@ func (s *EthService) GetCode(address string, blockNumberOrTag string) (interface
 		return "0x" + redirectBytecode, nil
 	}
 
-	result, err := s.hClient.GetContractByteCode(0, 0, address)
+	result, err = s.hClient.GetContractByteCode(0, 0, address)
 	if err != nil {
 		// TODO: Handle error better
 		s.logger.Error("Failed to get contract bytecode", zap.Error(err))

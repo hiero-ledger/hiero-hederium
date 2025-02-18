@@ -62,16 +62,18 @@ func ProcessBlock(s *EthService, block *domain.BlockResponse, showDetails bool) 
 	// Create a new Block instance with default values
 	ethBlock := domain.NewBlock()
 
-	hexNumber := "0x" + strconv.FormatUint(uint64(block.Number), 16)
-	hexGasUsed := "0x" + strconv.FormatUint(uint64(block.GasUsed), 16)
-	hexSize := "0x" + strconv.FormatUint(uint64(block.Size), 16)
+	hexNumber := hexify(int64(block.Number))
+	hexGasUsed := hexify(int64(block.GasUsed))
+	hexSize := hexify(int64(block.Size))
 	timestampStr := strings.Split(block.Timestamp.From, ".")[0]
-	timestampInt, _ := strconv.ParseUint(timestampStr, 10, 64)
-	hexTimestamp := "0x" + strconv.FormatUint(timestampInt, 16)
+	timestampInt, _ := strconv.ParseInt(timestampStr, 10, 64)
+	hexTimestamp := hexify(timestampInt)
+
 	trimmedHash := block.Hash
 	if len(trimmedHash) > 66 {
 		trimmedHash = trimmedHash[:66]
 	}
+
 	trimmedParentHash := block.PreviousHash
 	if len(trimmedParentHash) > 66 {
 		trimmedParentHash = trimmedParentHash[:66]
@@ -79,7 +81,7 @@ func ProcessBlock(s *EthService, block *domain.BlockResponse, showDetails bool) 
 
 	ethBlock.Number = &hexNumber
 	ethBlock.GasUsed = hexGasUsed
-	ethBlock.GasLimit = "0x" + strconv.FormatUint(15000000, 16) // Hedera's default gas limit
+	ethBlock.GasLimit = hexify(15000000) // Hedera's default gas limit
 	ethBlock.Hash = &trimmedHash
 	ethBlock.LogsBloom = block.LogsBloom
 	ethBlock.TransactionsRoot = &trimmedHash
@@ -93,7 +95,18 @@ func ProcessBlock(s *EthService, block *domain.BlockResponse, showDetails bool) 
 			continue
 		}
 
-		// TODO: Resolve evm addresses
+		to, err := s.resolveEvmAddress(contractResult.To)
+		if err != nil {
+			s.logger.Error("Failed to resolve to address", zap.Error(err))
+		}
+
+		from, err := s.resolveEvmAddress(contractResult.From)
+		if err != nil {
+			s.logger.Error("Failed to resolve from address", zap.Error(err))
+		}
+
+		contractResult.To = *to
+		contractResult.From = *from
 
 		if showDetails {
 			tx := ProcessTransaction(contractResult)
@@ -247,8 +260,8 @@ func (s *EthService) ProcessTransactionResponse(contractResult domain.ContractRe
 	}
 
 	var toAddress string
-	evmAddressTo, errMap := s.resolveEvmAddress(hexTo)
-	if errMap != nil {
+	evmAddressTo, err := s.resolveEvmAddress(hexTo)
+	if err != nil {
 		toAddress = hexTo
 	} else {
 		toAddress = *evmAddressTo
@@ -260,8 +273,8 @@ func (s *EthService) ProcessTransactionResponse(contractResult domain.ContractRe
 	}
 
 	var fromAddress string
-	evmAddressFrom, errMap := s.resolveEvmAddress(trimmedFrom)
-	if errMap != nil {
+	evmAddressFrom, err := s.resolveEvmAddress(trimmedFrom)
+	if err != nil {
 		fromAddress = trimmedFrom
 	} else {
 		fromAddress = *evmAddressFrom
@@ -502,27 +515,27 @@ func HexToDec(hexStr string) (int64, error) {
 	return dec, nil
 }
 
-func (s *EthService) getBlockNumberByHashOrTag(blockNumberOrTag string) (interface{}, *domain.RPCError) {
-	s.logger.Debug("Getting block number by hash or tag", zap.String("blockNumberOrTag", blockNumberOrTag))
+func (s *EthService) getBlockNumberByNumberOrTag(blockNumberOrTag string) (int64, *domain.RPCError) {
+	s.logger.Debug("Getting block number by hash or tag", zap.String("blockHashOrTag", blockNumberOrTag))
 	switch blockNumberOrTag {
 	case "latest", "pending":
 		latestBlock, errMap := s.GetBlockNumber()
 		if errMap != nil {
 			s.logger.Error("Failed to get latest block number", zap.Error(errMap))
-			return "0x0", errMap
+			return 0, errMap
 		}
 
 		latestBlockStr, ok := latestBlock.(string)
 		if !ok {
 			s.logger.Error("Invalid block number format", zap.Error(errMap))
-			return "0x0", errMap
+			return 0, errMap
 		}
 
 		// Convert hex string to int, remove "0x" prefix
 		latestBlockNum, err := HexToDec(latestBlockStr)
 		if err != nil {
 			s.logger.Error("Failed to parse latest block number", zap.Error(err))
-			return "0x0", domain.NewRPCError(domain.ServerError, "Invalid block number")
+			return 0, domain.NewRPCError(domain.ServerError, "Invalid block number")
 		}
 		return latestBlockNum, nil
 
@@ -533,7 +546,7 @@ func (s *EthService) getBlockNumberByHashOrTag(blockNumberOrTag string) (interfa
 		latestBlockNum, err := HexToDec(blockNumberOrTag)
 		if err != nil {
 			s.logger.Error("Failed to parse latest block number", zap.Error(err))
-			return "0x0", domain.NewRPCError(domain.ServerError, "Invalid block number")
+			return 0, domain.NewRPCError(domain.ServerError, "Invalid block number")
 		}
 
 		return latestBlockNum, nil
@@ -554,9 +567,9 @@ func (s *EthService) getFeeHistory(blockCount, newestBlockInt, latestBlockInt in
 
 	// Get fees from oldest to newest blocks
 	for blockNumber := oldestBlockNumber; blockNumber <= newestBlockInt; blockNumber++ {
-		fee, errMap := s.getFeeByBlockNumber(blockNumber)
-		if errMap != nil {
-			return nil, errMap
+		fee, err := s.getFeeByBlockNumber(blockNumber)
+		if err != nil {
+			return nil, err
 		}
 
 		feeHistory.BaseFeePerGas = append(feeHistory.BaseFeePerGas, fee)
@@ -654,8 +667,8 @@ func (s *EthService) validateBlockHashAndAddTimestampToParams(params map[string]
 }
 
 func (s *EthService) validateBlockRangeAndAddTimestampToParams(params map[string]interface{}, fromBlock, toBlock string, address []string) bool {
-	latestBlock, errMap := s.GetBlockNumber()
-	if errMap != nil {
+	latestBlock, errRpc := s.GetBlockNumber()
+	if errRpc != nil {
 		s.logger.Debug("Failed to get latest block number")
 		return false
 	}
@@ -786,7 +799,7 @@ func (s *EthService) getLogsWithParams(address []string, params map[string]inter
 
 func (s *EthService) resolveEvmAddress(address string) (*string, error) {
 	if address == "" {
-		return nil, fmt.Errorf("address is empty")
+		return &address, fmt.Errorf("address is empty")
 	}
 
 	cacheKey := fmt.Sprintf("evm_address_%s", address)
@@ -1046,15 +1059,40 @@ func (s *EthService) isLatestBlockRequest(blockNumberOrTag string, blockNumber i
 		return false
 	}
 
-	latestBlock, err := s.getBlockNumberByHashOrTag("latest")
+	latestBlockInt, err := s.getBlockNumberByNumberOrTag("latest")
 	if err != nil {
 		return false
 	}
 
-	latestBlockInt, ok := latestBlock.(int64)
-	if !ok {
-		return false
+	return blockNumber+10 > latestBlockInt
+}
+
+func (s *EthService) getContractAddressFromReceipt(receiptResponse domain.ContractResultResponse) string {
+	if len(receiptResponse.FunctionParameters) < 10 {
+		return receiptResponse.Address
 	}
 
-	return blockNumber+10 > latestBlockInt
+	parameters := receiptResponse.FunctionParameters[:10]
+	if _, isHTSCreation := HTSCreateFuncSelectors[parameters]; !isHTSCreation {
+		return receiptResponse.Address
+	}
+
+	if len(receiptResponse.CallResult) < 40 {
+		return receiptResponse.Address
+	}
+
+	tokenAddress := receiptResponse.CallResult[len(receiptResponse.CallResult)-40:]
+
+	if !strings.HasPrefix(tokenAddress, "0x") {
+		tokenAddress = fmt.Sprintf("0x%s", tokenAddress)
+	}
+
+	return tokenAddress
+}
+
+func isHexString(str string) bool {
+	str = strings.TrimPrefix(str, "0x")
+
+	_, err := hex.DecodeString(str)
+	return err == nil
 }

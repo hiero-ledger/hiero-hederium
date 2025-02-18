@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/LimeChain/Hederium/internal/domain"
-	"github.com/LimeChain/Hederium/internal/infrastructure/cache"
 	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
 	"github.com/LimeChain/Hederium/internal/service"
 	"github.com/LimeChain/Hederium/test/unit/mocks"
@@ -17,14 +16,14 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-func setupTest(t *testing.T) (*gomock.Controller, *mocks.MockMirrorClient, *zap.Logger, cache.CacheService) {
+func setupTest(t *testing.T) (*gomock.Controller, *mocks.MockMirrorClient, *zap.Logger, *mocks.MockCacheService) {
 	ctrl := gomock.NewController(t)
 	cfg := zap.NewDevelopmentConfig()
 	cfg.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
 	logger, _ := cfg.Build()
 	mockClient := mocks.NewMockMirrorClient(ctrl)
-	cacheService := mocks.NewMockCacheService(ctrl)
-	return ctrl, mockClient, logger, cacheService
+	mockCacheService := mocks.NewMockCacheService(ctrl)
+	return ctrl, mockClient, logger, mockCacheService
 }
 
 func TestGetFeeWeibars_Success(t *testing.T) {
@@ -77,7 +76,7 @@ func TestGetFeeWeibars_Error(t *testing.T) {
 }
 
 func TestProcessBlock_Success(t *testing.T) {
-	ctrl, mockClient, logger, cacheService := setupTest(t)
+	ctrl, mockClient, logger, mockCacheService := setupTest(t)
 	defer ctrl.Finish()
 
 	block := &domain.BlockResponse{
@@ -96,14 +95,20 @@ func TestProcessBlock_Success(t *testing.T) {
 		{
 			Hash:   "0xtx1",
 			Result: "SUCCESS",
+			From:   "0x" + strings.Repeat("2", 40),
+			To:     "0x" + strings.Repeat("3", 40),
 		},
 		{
 			Hash:   "0xtx2",
 			Result: "WRONG_NONCE", // Should be filtered out
+			From:   "0x" + strings.Repeat("4", 40),
+			To:     "0x" + strings.Repeat("5", 40),
 		},
 		{
 			Hash:   "0xtx3",
 			Result: "SUCCESS",
+			From:   "0x" + strings.Repeat("6", 40),
+			To:     "0x" + strings.Repeat("7", 40),
 		},
 	}
 
@@ -111,13 +116,91 @@ func TestProcessBlock_Success(t *testing.T) {
 		GetContractResults(block.Timestamp).
 		Return(contractResults)
 
+	// Mock address resolution for first transaction
+	fromCacheKey1 := fmt.Sprintf("evm_address_%s", contractResults[0].From)
+	mockCacheService.EXPECT().
+		Get(gomock.Any(), fromCacheKey1, gomock.Any()).
+		Return(fmt.Errorf("not found"))
+
+	mockClient.EXPECT().
+		GetContractById(contractResults[0].From).
+		Return(nil, fmt.Errorf("not found"))
+
+	mockClient.EXPECT().
+		GetAccountById(contractResults[0].From).
+		Return(&domain.AccountResponse{
+			EvmAddress: contractResults[0].From,
+		}, nil)
+
+	mockCacheService.EXPECT().
+		Set(gomock.Any(), fromCacheKey1, contractResults[0].From, service.DefaultExpiration).
+		Return(nil)
+
+	toCacheKey1 := fmt.Sprintf("evm_address_%s", contractResults[0].To)
+	mockCacheService.EXPECT().
+		Get(gomock.Any(), toCacheKey1, gomock.Any()).
+		Return(fmt.Errorf("not found"))
+
+	mockClient.EXPECT().
+		GetContractById(contractResults[0].To).
+		Return(nil, fmt.Errorf("not found"))
+
+	mockClient.EXPECT().
+		GetAccountById(contractResults[0].To).
+		Return(&domain.AccountResponse{
+			EvmAddress: contractResults[0].To,
+		}, nil)
+
+	mockCacheService.EXPECT().
+		Set(gomock.Any(), toCacheKey1, contractResults[0].To, service.DefaultExpiration).
+		Return(nil)
+
+	// Mock address resolution for third transaction
+	fromCacheKey3 := fmt.Sprintf("evm_address_%s", contractResults[2].From)
+	mockCacheService.EXPECT().
+		Get(gomock.Any(), fromCacheKey3, gomock.Any()).
+		Return(fmt.Errorf("not found"))
+
+	mockClient.EXPECT().
+		GetContractById(contractResults[2].From).
+		Return(nil, fmt.Errorf("not found"))
+
+	mockClient.EXPECT().
+		GetAccountById(contractResults[2].From).
+		Return(&domain.AccountResponse{
+			EvmAddress: contractResults[2].From,
+		}, nil)
+
+	mockCacheService.EXPECT().
+		Set(gomock.Any(), fromCacheKey3, contractResults[2].From, service.DefaultExpiration).
+		Return(nil)
+
+	toCacheKey3 := fmt.Sprintf("evm_address_%s", contractResults[2].To)
+	mockCacheService.EXPECT().
+		Get(gomock.Any(), toCacheKey3, gomock.Any()).
+		Return(fmt.Errorf("not found"))
+
+	mockClient.EXPECT().
+		GetContractById(contractResults[2].To).
+		Return(nil, fmt.Errorf("not found"))
+
+	mockClient.EXPECT().
+		GetAccountById(contractResults[2].To).
+		Return(&domain.AccountResponse{
+			EvmAddress: contractResults[2].To,
+		}, nil)
+
+	mockCacheService.EXPECT().
+		Set(gomock.Any(), toCacheKey3, contractResults[2].To, service.DefaultExpiration).
+		Return(nil)
+
 	s := service.NewEthService(
 		nil,
 		mockClient,
 		logger,
 		nil,
 		defaultChainId,
-		cacheService,
+		mockCacheService,
 	)
 
 	result, errMap := service.ProcessBlock(s, block, false)
