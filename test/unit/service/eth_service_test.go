@@ -2692,6 +2692,11 @@ func TestGetTransactionByBlockHashAndIndex(t *testing.T) {
 				mockClient.EXPECT().
 					GetContractResultWithRetry(gomock.Any()).
 					Return(nil, nil)
+
+				// Mock cache set for nil result
+				cacheService.EXPECT().
+					Set(gomock.Any(), cacheKey, nil, service.DefaultExpiration).
+					Return(nil)
 			},
 			expectedResult: nil,
 		},
@@ -2757,12 +2762,17 @@ func TestGetTransactionByBlockNumberAndIndex(t *testing.T) {
 		checkFields    func(t *testing.T, result interface{})
 	}{
 		{
-			name:        "successful transaction retrieval",
-			blockNumber: "0x7b", // 123 in hex
+			name:        "successful transaction retrieval with latest block",
+			blockNumber: "latest",
 			index:       "0x1",
 			setupMocks: func() {
+				// Mock GetLatestBlock for block number validation
+				mockClient.EXPECT().
+					GetLatestBlock().
+					Return(map[string]interface{}{"number": float64(123)}, nil)
+
 				// Mock cache miss for transaction
-				cacheKey := fmt.Sprintf("%s_%s_%s", service.GetTransactionByBlockNumberAndIndex, "0x7b", "0x1")
+				cacheKey := fmt.Sprintf("%s_%d_%s", service.GetTransactionByBlockNumberAndIndex, 123, "0x1")
 				cacheService.EXPECT().
 					Get(gomock.Any(), cacheKey, gomock.Any()).
 					Return(errors.New("cache miss"))
@@ -2776,19 +2786,53 @@ func TestGetTransactionByBlockNumberAndIndex(t *testing.T) {
 				fromCacheKey := fmt.Sprintf("evm_address_%s", baseContractResult.From)
 				cacheService.EXPECT().
 					Get(gomock.Any(), fromCacheKey, gomock.Any()).
-					DoAndReturn(func(_ interface{}, _ string, result *string) error {
-						*result = baseContractResult.From
-						return nil
-					})
+					Return(errors.New("not found"))
+
+				// Mock concurrent resolution calls for from address
+				mockClient.EXPECT().
+					GetContractById(baseContractResult.From).
+					Return(&domain.ContractResponse{
+						EvmAddress: baseContractResult.From,
+					}, nil).
+					AnyTimes()
+
+				mockClient.EXPECT().
+					GetAccountById(baseContractResult.From).
+					Return(&domain.AccountResponse{
+						EvmAddress: baseContractResult.From,
+					}, nil).
+					AnyTimes()
+
+				// Mock cache set for from address
+				cacheService.EXPECT().
+					Set(gomock.Any(), fromCacheKey, baseContractResult.From, service.DefaultExpiration).
+					Return(nil)
 
 				// Mock cache service for to address
 				toCacheKey := fmt.Sprintf("evm_address_%s", baseContractResult.To)
 				cacheService.EXPECT().
 					Get(gomock.Any(), toCacheKey, gomock.Any()).
-					DoAndReturn(func(_ interface{}, _ string, result *string) error {
-						*result = baseContractResult.To
-						return nil
-					})
+					Return(errors.New("not found"))
+
+				// Mock concurrent resolution calls for to address
+				mockClient.EXPECT().
+					GetContractById(baseContractResult.To).
+					Return(&domain.ContractResponse{
+						EvmAddress: baseContractResult.To,
+					}, nil).
+					AnyTimes()
+
+				mockClient.EXPECT().
+					GetAccountById(baseContractResult.To).
+					Return(&domain.AccountResponse{
+						EvmAddress: baseContractResult.To,
+					}, nil).
+					AnyTimes()
+
+				// Mock cache set for to address
+				cacheService.EXPECT().
+					Set(gomock.Any(), toCacheKey, baseContractResult.To, service.DefaultExpiration).
+					Return(nil)
 
 				// Mock cache set for transaction
 				cacheService.EXPECT().
@@ -2815,16 +2859,102 @@ func TestGetTransactionByBlockNumberAndIndex(t *testing.T) {
 			},
 		},
 		{
-			name:        "invalid block number",
-			blockNumber: "invalid",
+			name:        "successful transaction retrieval with hex block",
+			blockNumber: "0x7b", // 123 in hex
 			index:       "0x1",
 			setupMocks: func() {
 				// Mock cache miss for transaction
-				cacheKey := fmt.Sprintf("%s_%s_%s", service.GetTransactionByBlockNumberAndIndex, "invalid", "0x1")
+				cacheKey := fmt.Sprintf("%s_%d_%s", service.GetTransactionByBlockNumberAndIndex, 123, "0x1")
 				cacheService.EXPECT().
 					Get(gomock.Any(), cacheKey, gomock.Any()).
 					Return(errors.New("cache miss"))
+
+				// Mock getting contract result
+				mockClient.EXPECT().
+					GetContractResultWithRetry(gomock.Any()).
+					Return(&baseContractResult, nil)
+
+				// Mock cache service for from address
+				fromCacheKey := fmt.Sprintf("evm_address_%s", baseContractResult.From)
+				cacheService.EXPECT().
+					Get(gomock.Any(), fromCacheKey, gomock.Any()).
+					Return(errors.New("not found"))
+
+				// Mock concurrent resolution calls for from address
+				mockClient.EXPECT().
+					GetContractById(baseContractResult.From).
+					Return(&domain.ContractResponse{
+						EvmAddress: baseContractResult.From,
+					}, nil).
+					AnyTimes()
+
+				mockClient.EXPECT().
+					GetAccountById(baseContractResult.From).
+					Return(&domain.AccountResponse{
+						EvmAddress: baseContractResult.From,
+					}, nil).
+					AnyTimes()
+
+				// Mock cache set for from address
+				cacheService.EXPECT().
+					Set(gomock.Any(), fromCacheKey, baseContractResult.From, service.DefaultExpiration).
+					Return(nil)
+
+				// Mock cache service for to address
+				toCacheKey := fmt.Sprintf("evm_address_%s", baseContractResult.To)
+				cacheService.EXPECT().
+					Get(gomock.Any(), toCacheKey, gomock.Any()).
+					Return(errors.New("not found"))
+
+				// Mock concurrent resolution calls for to address
+				mockClient.EXPECT().
+					GetContractById(baseContractResult.To).
+					Return(&domain.ContractResponse{
+						EvmAddress: baseContractResult.To,
+					}, nil).
+					AnyTimes()
+
+				mockClient.EXPECT().
+					GetAccountById(baseContractResult.To).
+					Return(&domain.AccountResponse{
+						EvmAddress: baseContractResult.To,
+					}, nil).
+					AnyTimes()
+
+				// Mock cache set for to address
+				cacheService.EXPECT().
+					Set(gomock.Any(), toCacheKey, baseContractResult.To, service.DefaultExpiration).
+					Return(nil)
+
+				// Mock cache set for transaction
+				cacheService.EXPECT().
+					Set(gomock.Any(), cacheKey, gomock.Any(), service.DefaultExpiration).
+					Return(nil)
 			},
+			checkFields: func(t *testing.T, result interface{}) {
+				tx, ok := result.(domain.Transaction)
+				assert.True(t, ok)
+				assert.Equal(t, "0x7b", *tx.BlockNumber)
+				assert.Equal(t, baseContractResult.From, tx.From)
+				assert.Equal(t, baseContractResult.To, *tx.To)
+				assert.Equal(t, "0x5208", tx.Gas)              // 21000 in hex
+				assert.Equal(t, "0xc953642ae000", tx.GasPrice) // 0x5678 * 10^10
+				assert.Equal(t, baseContractResult.Hash, tx.Hash)
+				assert.Equal(t, "0x5", tx.Nonce) // 5 in hex
+				assert.Equal(t, "0x1", *tx.TransactionIndex)
+				assert.Equal(t, "0xf4240", tx.Value) // 1000000 in hex
+				assert.Equal(t, "0x1b", tx.V)        // 27 in hex
+				assert.Equal(t, baseContractResult.R, tx.R)
+				assert.Equal(t, baseContractResult.S, tx.S)
+				assert.Equal(t, "0x0", tx.Type)
+				assert.Equal(t, "0x1", *tx.ChainId)
+			},
+		},
+		{
+			name:          "invalid block number",
+			blockNumber:   "invalid",
+			index:         "0x1",
+			setupMocks:    func() {}, // No mocks needed as it will fail at block number validation
 			expectedError: domain.NewRPCError(domain.ServerError, "Invalid block number"),
 		},
 		{
@@ -2833,7 +2963,7 @@ func TestGetTransactionByBlockNumberAndIndex(t *testing.T) {
 			index:       "invalid",
 			setupMocks: func() {
 				// Mock cache miss for transaction
-				cacheKey := fmt.Sprintf("%s_%s_%s", service.GetTransactionByBlockNumberAndIndex, "0x7b", "invalid")
+				cacheKey := fmt.Sprintf("%s_%d_%s", service.GetTransactionByBlockNumberAndIndex, 123, "invalid")
 				cacheService.EXPECT().
 					Get(gomock.Any(), cacheKey, gomock.Any()).
 					Return(errors.New("cache miss"))
@@ -2846,7 +2976,7 @@ func TestGetTransactionByBlockNumberAndIndex(t *testing.T) {
 			index:       "0x1",
 			setupMocks: func() {
 				// Mock cache miss for transaction
-				cacheKey := fmt.Sprintf("%s_%s_%s", service.GetTransactionByBlockNumberAndIndex, "0x7b", "0x1")
+				cacheKey := fmt.Sprintf("%s_%d_%s", service.GetTransactionByBlockNumberAndIndex, 123, "0x1")
 				cacheService.EXPECT().
 					Get(gomock.Any(), cacheKey, gomock.Any()).
 					Return(errors.New("cache miss"))
@@ -2855,6 +2985,11 @@ func TestGetTransactionByBlockNumberAndIndex(t *testing.T) {
 				mockClient.EXPECT().
 					GetContractResultWithRetry(gomock.Any()).
 					Return(nil, nil)
+
+				// Mock cache set for nil result
+				cacheService.EXPECT().
+					Set(gomock.Any(), cacheKey, nil, service.DefaultExpiration).
+					Return(nil)
 			},
 			expectedResult: nil,
 		},
