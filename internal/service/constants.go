@@ -38,4 +38,35 @@ const (
 	NetPeerCount                        = "net_peerCount"
 
 	DefaultExpiration = 1 * time.Hour
+
+	// Fungible token creation selectors
+	CreateFungibleTokenV1         string = "0x83062e38"
+	CreateFungibleTokenV2         string = "0x6577761c"
+	CreateFungibleTokenV3         string = "0x6c42689c"
+	CreateFungibleTokenWithFeesV1 string = "0x6446e17e"
+	CreateFungibleTokenWithFeesV2 string = "0x8f4eb604"
+	CreateFungibleTokenWithFeesV3 string = "0x5c14dd49"
+
+	// Non-fungible token creation selectors
+	CreateNonFungibleTokenV1         string = "0x5e724461"
+	CreateNonFungibleTokenV2         string = "0x5a3c15af"
+	CreateNonFungibleTokenV3         string = "0x5d24ea56"
+	CreateNonFungibleTokenWithFeesV1 string = "0x5e9a79c9"
+	CreateNonFungibleTokenWithFeesV2 string = "0x5f99d676"
+	CreateNonFungibleTokenWithFeesV3 string = "0x5e0c7ee3"
 )
+
+var HTSCreateFuncSelectors = map[string]struct{}{
+	CreateFungibleTokenV1:            {},
+	CreateFungibleTokenV2:            {},
+	CreateFungibleTokenV3:            {},
+	CreateFungibleTokenWithFeesV1:    {},
+	CreateFungibleTokenWithFeesV2:    {},
+	CreateFungibleTokenWithFeesV3:    {},
+	CreateNonFungibleTokenV1:         {},
+	CreateNonFungibleTokenV2:         {},
+	CreateNonFungibleTokenV3:         {},
+	CreateNonFungibleTokenWithFeesV1: {},
+	CreateNonFungibleTokenWithFeesV2: {},
+	CreateNonFungibleTokenWithFeesV3: {},
+}
