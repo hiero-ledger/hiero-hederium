@@ -1,5 +1,7 @@
 package domain
 
+import "fmt"
+
 // Standard JSON-RPC 2.0 error codes
 const (
 	// Parse error (-32700): Invalid JSON was received by the server.
@@ -31,6 +33,12 @@ const (
 
 	// Insufficient funds (-32018): Insufficient funds for transfer
 	InsufficientFunds = -32018
+
+	// Invalid block range (-39013): Invalid block range
+	InvalidBlockRange = -39013
+
+	// Timestamp range too large (-32004): The provided fromBlock and toBlock contain timestamps that exceed the maximum allowed duration of 7 days (604800 seconds)
+	InvalidTimestampRange = -32004
 )
 
 // RPCError represents a JSON-RPC 2.0 error
@@ -62,7 +70,7 @@ func NewInvalidRequestError(msg string) *RPCError {
 }
 
 func NewMethodNotFoundError(method string) *RPCError {
-	return NewRPCError(MethodNotFound, "Method not found: "+method)
+	return NewRPCError(MethodNotFound, fmt.Sprintf("Method not found: %s", method))
 }
 
 func NewInvalidParamsError(msg string) *RPCError {
@@ -91,4 +99,24 @@ func NewGasPriceTooLowError() *RPCError {
 
 func NewInsufficientFundsError() *RPCError {
 	return NewRPCError(InsufficientFunds, "insufficient funds for transfer")
+}
+
+func NewUnsupportedMethodError(method string) *RPCError {
+	return NewRPCError(MethodNotFound, fmt.Sprintf("Method not supported: %s", method))
+}
+
+func NewInvalidBlockRangeError() *RPCError {
+	return NewRPCError(InvalidBlockRange, "Invalid block range")
+}
+
+func NewFilterNotFoundError() *RPCError {
+	return NewRPCError(MethodNotFound, "filter not found")
+}
+
+func NewTimeStampRangeTooLargeError(fromBlock, toBlock string, fromTimestamp, toTimestamp float64) *RPCError {
+	return NewRPCError(InvalidTimestampRange, fmt.Sprintf("The provided fromBlock and toBlock contain timestamps that exceed the maximum allowed duration of 7 days (604800 seconds): fromBlock: %s (%f), toBlock: %s (%f)", fromBlock, fromTimestamp, toBlock, toTimestamp))
+}
+
+func NewRangeTooLarge(blockRange int) *RPCError {
+	return NewRPCError(ServerError, fmt.Sprintf("Exceeded maximum block range: %d", blockRange))
 }
