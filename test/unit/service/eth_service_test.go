@@ -29,6 +29,11 @@ const GetGasPrice = "eth_gasPrice"
 const GetCode = "eth_getCode"
 const DefaultExpiration = time.Hour // 1 hour expiration
 
+// Helper functions for creating pointers
+func ptr[T any](v T) *T {
+	return &v
+}
+
 func TestGetBlockNumber(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -2233,6 +2238,7 @@ func TestGetLogs(t *testing.T) {
 		setupMocks     func()
 		expectedResult interface{}
 		expectError    bool
+		expectedCode   int
 	}{
 		{
 			name: "Success with block hash",
@@ -2259,14 +2265,16 @@ func TestGetLogs(t *testing.T) {
 
 				mockClient.EXPECT().
 					GetContractResultsLogsByAddress("0x742d35Cc6634C0532925a3b844Bc454e4438f44e", expectedParams).
-					Return([]domain.ContractResults{
+					Return([]domain.LogEntry{
 						{
 							Address:          "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
 							BlockHash:        "0x123abc",
-							BlockNumber:      100,
-							Result:           "0xdata",
-							Hash:             "0xtxhash",
-							TransactionIndex: 1,
+							BlockNumber:      ptr(int64(100)),
+							Data:             "0xdata",
+							TransactionHash:  "0xtxhash",
+							TransactionIndex: ptr(1),
+							Index:            ptr(0),
+							Topics:           []string{"0xtopic1", "0xtopic2"},
 						},
 					}, nil)
 			},
@@ -2276,18 +2284,22 @@ func TestGetLogs(t *testing.T) {
 					BlockHash:        "0x123abc",
 					BlockNumber:      "0x64", // 100 in hex
 					Data:             "0xdata",
+					LogIndex:         "0x0",
+					Removed:          false,
+					Topics:           []string{"0xtopic1", "0xtopic2"},
 					TransactionHash:  "0xtxhash",
-					TransactionIndex: "1",
+					TransactionIndex: "0x1",
 				},
 			},
-			expectError: false,
+			expectError:  false,
+			expectedCode: 0,
 		},
 		{
 			name: "Success with block range within limits",
 			logParams: domain.LogParams{
 				FromBlock: "0x1",
 				ToBlock:   "0x2",
-				Address:   []string{},
+				Address:   nil,
 			},
 			setupMocks: func() {
 				mockClient.EXPECT().
@@ -2299,7 +2311,8 @@ func TestGetLogs(t *testing.T) {
 					Return(&domain.BlockResponse{
 						Number: 1,
 						Timestamp: domain.Timestamp{
-							From: "2023-01-01T00:00:00.000Z",
+							From: "1672531200",
+							To:   "1672531201",
 						},
 					})
 
@@ -2308,36 +2321,43 @@ func TestGetLogs(t *testing.T) {
 					Return(&domain.BlockResponse{
 						Number: 2,
 						Timestamp: domain.Timestamp{
-							To: "2023-01-01T00:00:02.000Z",
+							From: "1672531201",
+							To:   "1672531202",
 						},
 					})
 
-				expectedParams := map[string]interface{}{
-					"timestamp": "gte:2023-01-01T00:00:00.000Z&timestamp=lte:2023-01-01T00:00:02.000Z",
-				}
-
 				mockClient.EXPECT().
-					GetContractResultsLogsWithRetry(expectedParams).
-					Return([]domain.ContractResults{
+					GetContractResultsLogsWithRetry(map[string]interface{}{
+						"timestamp": "gte:1672531200&timestamp=lte:1672531202",
+					}).
+					Return([]domain.LogEntry{
 						{
+							Address:          "0xblockhash",
 							BlockHash:        "0xblockhash",
-							BlockNumber:      1,
-							Result:           "0xdata",
-							Hash:             "0xtxhash",
-							TransactionIndex: 0,
+							BlockNumber:      ptr(int64(1)),
+							Data:             "0xdata",
+							TransactionHash:  "0xtxhash",
+							TransactionIndex: ptr(0),
+							Index:            ptr(0),
+							Topics:           []string{},
 						},
 					}, nil)
 			},
 			expectedResult: []domain.Log{
 				{
+					Address:          "0xblockhash",
 					BlockHash:        "0xblockhash",
 					BlockNumber:      "0x1",
 					Data:             "0xdata",
+					LogIndex:         "0x0",
+					Removed:          false,
+					Topics:           []string{},
 					TransactionHash:  "0xtxhash",
-					TransactionIndex: "0",
+					TransactionIndex: "0x0",
 				},
 			},
-			expectError: false,
+			expectError:  false,
+			expectedCode: 0,
 		},
 		{
 			name: "Block range too large",
@@ -2352,14 +2372,27 @@ func TestGetLogs(t *testing.T) {
 
 				mockClient.EXPECT().
 					GetBlockByHashOrNumber("1").
-					Return(&domain.BlockResponse{Number: 1})
+					Return(&domain.BlockResponse{
+						Number: 1,
+						Timestamp: domain.Timestamp{
+							From: "1672531200",
+							To:   "1672531201",
+						},
+					})
 
 				mockClient.EXPECT().
 					GetBlockByHashOrNumber("100").
-					Return(&domain.BlockResponse{Number: 100})
+					Return(&domain.BlockResponse{
+						Number: 100,
+						Timestamp: domain.Timestamp{
+							From: "1673222400", // 8 days later
+							To:   "1673222401",
+						},
+					})
 			},
-			expectedResult: []domain.Log{},
-			expectError:    false,
+			expectedResult: nil,
+			expectError:    true,
+			expectedCode:   -32004, // InvalidTimestampRange
 		},
 		{
 			name: "Invalid block hash",
@@ -2370,9 +2403,14 @@ func TestGetLogs(t *testing.T) {
 				mockClient.EXPECT().
 					GetBlockByHashOrNumber("0xinvalid").
 					Return(nil)
+
+				mockClient.EXPECT().
+					GetContractResultsLogsWithRetry(map[string]interface{}{}).
+					Return([]domain.LogEntry{}, nil)
 			},
 			expectedResult: []domain.Log{},
 			expectError:    false,
+			expectedCode:   0,
 		},
 		{
 			name: "Latest block fetch failure",
@@ -2385,8 +2423,9 @@ func TestGetLogs(t *testing.T) {
 					GetLatestBlock().
 					Return(nil, fmt.Errorf("failed to fetch latest block"))
 			},
-			expectedResult: []domain.Log{},
-			expectError:    false,
+			expectedResult: nil,
+			expectError:    true,
+			expectedCode:   -32000,
 		},
 		{
 			name: "From block greater than to block",
@@ -2408,8 +2447,9 @@ func TestGetLogs(t *testing.T) {
 					GetBlockByHashOrNumber("5").
 					Return(&domain.BlockResponse{Number: 5})
 			},
-			expectedResult: []domain.Log{},
-			expectError:    false,
+			expectedResult: nil,
+			expectError:    true,
+			expectedCode:   -32602,
 		},
 	}
 
@@ -2421,7 +2461,9 @@ func TestGetLogs(t *testing.T) {
 
 			if tc.expectError {
 				assert.NotNil(t, errRpc)
-				assert.Equal(t, -32000, errRpc.Code)
+				if tc.expectedCode != 0 {
+					assert.Equal(t, tc.expectedCode, errRpc.Code)
+				}
 			} else {
 				assert.Nil(t, errRpc)
 				assert.Equal(t, tc.expectedResult, result)

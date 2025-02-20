@@ -25,4 +25,8 @@ const (
 	maxRetries = 2
 
 	retryDelay = 1 * time.Second
+
+	Limit = 100
+
+	MaxPages = 100
 )

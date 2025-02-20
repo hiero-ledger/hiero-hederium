@@ -585,11 +585,13 @@ func (s *EthService) GetLogs(logParams domain.LogParams) (interface{}, *domain.R
 	params := make(map[string]interface{})
 
 	if logParams.BlockHash != "" {
-		if !s.validateBlockHashAndAddTimestampToParams(params, logParams.BlockHash) {
+		if err := s.validateBlockHashAndAddTimestampToParams(params, logParams.BlockHash); err != nil {
 			return []domain.Log{}, nil
 		}
 	} else {
-		if !s.validateBlockRangeAndAddTimestampToParams(params, logParams.FromBlock, logParams.ToBlock, logParams.Address) {
+		if ok, errRpc := s.validateBlockRangeAndAddTimestampToParams(params, logParams.FromBlock, logParams.ToBlock, logParams.Address); errRpc != nil {
+			return nil, errRpc
+		} else if !ok {
 			return []domain.Log{}, nil
 		}
 	}
@@ -601,8 +603,6 @@ func (s *EthService) GetLogs(logParams domain.LogParams) (interface{}, *domain.R
 			}
 		}
 	}
-
-	s.logger.Debug("Received log parameters", zap.Any("params", params))
 
 	logs, err := s.getLogsWithParams(logParams.Address, params)
 	if err != nil {
