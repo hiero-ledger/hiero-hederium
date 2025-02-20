@@ -150,10 +150,10 @@ func (mr *MockMirrorClientMockRecorder) GetContractResults(timestamp interface{}
 }
 
 // GetContractResultsLogsByAddress mocks base method.
-func (m *MockMirrorClient) GetContractResultsLogsByAddress(address string, queryParams map[string]interface{}) ([]domain.ContractResults, error) {
+func (m *MockMirrorClient) GetContractResultsLogsByAddress(address string, queryParams map[string]interface{}) ([]domain.LogEntry, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetContractResultsLogsByAddress", address, queryParams)
-	ret0, _ := ret[0].([]domain.ContractResults)
+	ret0, _ := ret[0].([]domain.LogEntry)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -165,10 +165,10 @@ func (mr *MockMirrorClientMockRecorder) GetContractResultsLogsByAddress(address,
 }
 
 // GetContractResultsLogsWithRetry mocks base method.
-func (m *MockMirrorClient) GetContractResultsLogsWithRetry(queryParams map[string]interface{}) ([]domain.ContractResults, error) {
+func (m *MockMirrorClient) GetContractResultsLogsWithRetry(queryParams map[string]interface{}) ([]domain.LogEntry, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetContractResultsLogsWithRetry", queryParams)
-	ret0, _ := ret[0].([]domain.ContractResults)
+	ret0, _ := ret[0].([]domain.LogEntry)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
