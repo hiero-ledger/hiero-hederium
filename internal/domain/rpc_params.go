@@ -74,18 +74,39 @@ type EthGetStorageAtParams struct {
 	BlockNumber     string `json:"blockNumber" binding:"omitempty,block_number_or_tag"`
 }
 
+// Address represents an Ethereum address or an array of addresses
+type Address []string
+
+func (a *Address) UnmarshalJSON(data []byte) error {
+	if len(data) > 0 && data[0] == '"' {
+		var singleAddress string
+		if err := json.Unmarshal(data, &singleAddress); err != nil {
+			return err
+		}
+		*a = Address{singleAddress}
+		return nil
+	}
+
+	var addressArray []string
+	if err := json.Unmarshal(data, &addressArray); err != nil {
+		return err
+	}
+	*a = Address(addressArray)
+	return nil
+}
+
 // FilterObject represents the filter object for eth_getLogs
 type FilterObject struct {
-	Address   interface{} `json:"address" binding:"omitempty,eth_address_or_array"`
-	Topics    []string    `json:"topics" binding:"omitempty,dive,hexadecimal,len=66"`
-	BlockHash string      `json:"blockHash" binding:"omitempty,hexadecimal,len=66"`
-	FromBlock string      `json:"fromBlock" binding:"omitempty,block_number_or_tag"`
-	ToBlock   string      `json:"toBlock" binding:"omitempty,block_number_or_tag"`
+	Address   Address  `json:"address" binding:"omitempty,eth_address_or_array"`
+	Topics    []string `json:"topics" binding:"omitempty,dive,hexadecimal,len=66"`
+	BlockHash string   `json:"blockHash" binding:"omitempty,hexadecimal,len=66"`
+	FromBlock string   `json:"fromBlock" binding:"omitempty,block_number_or_tag"`
+	ToBlock   string   `json:"toBlock" binding:"omitempty,block_number_or_tag"`
 }
 
 // EthGetLogsParams represents parameters for eth_getLogs
 type EthGetLogsParams struct {
-	Address   []string `json:"address" binding:"omitempty,dive,eth_address"`
+	Address   Address  `json:"address" binding:"omitempty,dive,eth_address"`
 	Topics    []string `json:"topics" binding:"omitempty,dive,hexadecimal,len=66"`
 	BlockHash string   `json:"blockHash" binding:"omitempty,hexadecimal,len=66"`
 	FromBlock string   `json:"fromBlock" binding:"omitempty,block_number_or_tag"`
@@ -238,19 +259,7 @@ func (p *EthGetLogsParams) FromPositionalParams(params []interface{}) error {
 		return fmt.Errorf("invalid filter parameters: %v", err)
 	}
 
-	switch addr := filter.Address.(type) {
-	case string:
-		p.Address = []string{addr}
-	case []interface{}:
-		addresses := make([]string, 0, len(addr))
-		for _, a := range addr {
-			if strAddr, ok := a.(string); ok {
-				addresses = append(addresses, strAddr)
-			}
-		}
-		p.Address = addresses
-	}
-
+	p.Address = filter.Address
 	p.Topics = filter.Topics
 	p.BlockHash = filter.BlockHash
 	p.FromBlock = filter.FromBlock
@@ -261,12 +270,11 @@ func (p *EthGetLogsParams) FromPositionalParams(params []interface{}) error {
 			return fmt.Errorf("can't use both blockHash and toBlock/fromBlock")
 		}
 	} else {
-		if p.FromBlock != "" && p.ToBlock != "" {
-			return fmt.Errorf("provided fromBlock parameter without specifying toBlock")
-		}
-		if p.FromBlock == "" && p.ToBlock == "" {
-			p.FromBlock = "latest"
+		if p.ToBlock == "" {
 			p.ToBlock = "latest"
+		}
+		if p.FromBlock == "" {
+			p.FromBlock = "latest"
 		}
 	}
 

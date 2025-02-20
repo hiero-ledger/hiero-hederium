@@ -651,11 +651,11 @@ func (s *EthService) getRepeatedFeeHistory(blockCount, oldestBlockInt int64, rew
 	return feeHistory
 }
 
-func (s *EthService) validateBlockHashAndAddTimestampToParams(params map[string]interface{}, blockHash string) bool {
+func (s *EthService) validateBlockHashAndAddTimestampToParams(params map[string]interface{}, blockHash string) error {
 	block := s.mClient.GetBlockByHashOrNumber(blockHash)
 	if block == nil {
 		s.logger.Debug("Failed to get block data")
-		return false
+		return nil
 	}
 	s.logger.Debug("Received block data", zap.Any("block", block))
 
@@ -663,54 +663,53 @@ func (s *EthService) validateBlockHashAndAddTimestampToParams(params map[string]
 
 	s.logger.Debug("Returning timestamp", zap.Any("timestamp", params["timestamp"]))
 
-	return true
+	return nil
 }
 
-func (s *EthService) validateBlockRangeAndAddTimestampToParams(params map[string]interface{}, fromBlock, toBlock string, address []string) bool {
-	latestBlock, errRpc := s.GetBlockNumber()
+func (s *EthService) validateBlockRangeAndAddTimestampToParams(params map[string]interface{}, fromBlock, toBlock string, address []string) (bool, *domain.RPCError) {
+
+	// We get the latestBlockNum only once to avoid multiple calls
+	latestBlockNum, errRpc := s.getBlockNumberByNumberOrTag("latest")
 	if errRpc != nil {
-		s.logger.Debug("Failed to get latest block number")
-		return false
+		return false, errRpc
 	}
 
-	latestBlockStr, ok := latestBlock.(string)
-	if !ok {
-		return false
+	var toBlockNum int64
+
+	if blockTagIsLatestOrPending(&toBlock) {
+		toBlock = "latest"
+		toBlockNum = latestBlockNum
+	} else {
+		toBlockNum, errRpc = s.getBlockNumberByNumberOrTag(toBlock)
+		if errRpc != nil {
+			return false, errRpc
+		}
+
+		// - When `fromBlock` is not explicitly provided, it defaults to `latest`.
+		// - Then if `toBlock` equals `latestBlockNumber`, it means both `toBlock` and `fromBlock` essentially refer to the latest block, so the `MISSING_FROM_BLOCK_PARAM` error is not necessary.
+		// - If `toBlock` is explicitly provided and does not equals to `latestBlockNumber`, it establishes a solid upper bound.
+		// - If `fromBlock` is missing, indicating the absence of a lower bound, throw the `MISSING_FROM_BLOCK_PARAM` error.
+		if toBlockNum != latestBlockNum && fromBlock == "" {
+			return false, domain.NewRPCError(domain.InvalidParams, "Invalid block range")
+		}
 	}
 
-	if fromBlock == "latest" || fromBlock == "pending" {
-		fromBlock = latestBlockStr
-	}
+	var fromBlockNum int64
 
-	if toBlock == "latest" || toBlock == "pending" {
-		toBlock = latestBlockStr
-	}
-
-	latestBlockNum, err := HexToDec(latestBlockStr)
-	if err != nil {
-		s.logger.Debug("Failed to parse latest block number", zap.Any("error", err))
-		return false
-	}
-
-	toBlockNum, err := HexToDec(toBlock)
-	if err != nil {
-		return false
-	}
-
-	if toBlockNum < latestBlockNum && fromBlock == "" {
-		s.logger.Debug("Invalid block range", zap.String("toBlock", toBlock), zap.String("latestBlock", latestBlockStr))
-		return false
-	}
-
-	fromBlockNum, err := HexToDec(fromBlock)
-	if err != nil {
-		return false
+	if blockTagIsLatestOrPending(&fromBlock) {
+		fromBlock = "latest"
+		fromBlockNum = latestBlockNum
+	} else {
+		fromBlockNum, errRpc = s.getBlockNumberByNumberOrTag(fromBlock)
+		if errRpc != nil {
+			return false, errRpc
+		}
 	}
 
 	fromBlockResponse := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(fromBlockNum, 10))
 	if fromBlockResponse == nil {
 		s.logger.Debug("Failed to get from block data")
-		return false
+		return false, nil
 	}
 
 	var timestamp string
@@ -724,27 +723,62 @@ func (s *EthService) validateBlockRangeAndAddTimestampToParams(params map[string
 		fromBlockNum := fromBlockResponse.Number
 		toBlockResponse := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(toBlockNum, 10))
 
-		var toBlockNum int
+		/**
+		 * If `toBlock` is not provided, the `lte` field cannot be set,
+		 * resulting in a request to the Mirror Node that includes only the `gte` parameter.
+		 * Such requests will be rejected, hence causing the whole request to fail.
+		 * Return false to handle this gracefully and return an empty response to end client.
+		 */
+		if toBlockResponse == nil {
+			s.logger.Debug("failed to get to block data")
+			return false, nil
+		}
 
-		if toBlockResponse != nil {
-			timestamp = fmt.Sprintf("%s&timestamp=lte:%s", timestamp, toBlockResponse.Timestamp.To)
-			toBlockNum = toBlockResponse.Number
+		timestamp = fmt.Sprintf("%s&timestamp=lte:%s", timestamp, toBlockResponse.Timestamp.To)
+		toBlockNum := toBlockResponse.Number
+
+		toBlockTo, err := strconv.ParseFloat(toBlockResponse.Timestamp.To, 64)
+		if err != nil {
+			return false, domain.NewRPCError(domain.InvalidParams, "Invalid timestamp")
+		}
+
+		fromBlockFrom, err := strconv.ParseFloat(fromBlockResponse.Timestamp.From, 64)
+		if err != nil {
+			return false, domain.NewRPCError(domain.InvalidParams, "Invalid timestamp")
+		}
+
+		// Validate timestamp range for Mirror Node requests (maximum: 7 days or 604,800 seconds) to prevent exceeding the limit,
+		// as requests with timestamp parameters beyond 7 days are rejected by the Mirror Node.
+		timestampDiff := toBlockTo - fromBlockFrom
+		if timestampDiff > 604800 {
+			s.logger.Debug("Timestamp range is too large")
+			return false, domain.NewTimeStampRangeTooLargeError(fmt.Sprintf("0x%x", fromBlockNum), fmt.Sprintf("0x%x", toBlockNum), toBlockTo, fromBlockFrom)
 		}
 
 		if fromBlockNum > toBlockNum {
-			return false
+			return false, domain.NewInvalidBlockRangeError()
 		}
 
+		// Increasing it to more then one address may degrade mirror node performance
+		// when addresses contains many log events.
 		isSingleAddress := len(address) == 1
-		if !isSingleAddress && toBlockNum-fromBlockNum > maxBlockCountForResult {
-			return false
+		if !isSingleAddress && toBlockNum-fromBlockNum > blockRangeLimit {
+			return false, domain.NewRangeTooLarge(blockRangeLimit)
 		}
 	}
 
 	s.logger.Debug("Returning timestamp", zap.String("timestamp", timestamp))
 	params["timestamp"] = timestamp
 
-	return true
+	return true, nil
+}
+
+func blockTagIsLatestOrPending(tag *string) bool {
+	return tag == nil ||
+		*tag == "latest" ||
+		*tag == "pending" ||
+		*tag == "safe" ||
+		*tag == "finalized"
 }
 
 func (s *EthService) getLogsWithParams(address []string, params map[string]interface{}) ([]domain.Log, error) {
@@ -752,24 +786,35 @@ func (s *EthService) getLogsWithParams(address []string, params map[string]inter
 
 	var logs []domain.Log
 
-	if len(address) == 0 {
+	if address == nil {
 		logResults, err := s.mClient.GetContractResultsLogsWithRetry(params)
 		if err != nil {
 			s.logger.Error("Failed to get logs", zap.Error(err))
 			return nil, err
 		}
 
+		s.logger.Debug("Received logs", zap.Any("logs", logResults))
+
 		for _, logResult := range logResults {
+			if len(logResult.BlockHash) > 66 {
+				logResult.BlockHash = logResult.BlockHash[:66]
+			}
+			if len(logResult.TransactionHash) > 66 {
+				logResult.TransactionHash = logResult.TransactionHash[:66]
+			}
+
 			logs = append(logs, domain.Log{
 				Address:          logResult.Address,
 				BlockHash:        logResult.BlockHash,
-				BlockNumber:      "0x" + strconv.FormatInt(logResult.BlockNumber, 16),
-				Data:             logResult.Result,
-				TransactionHash:  logResult.Hash,
-				TransactionIndex: strconv.Itoa(logResult.TransactionIndex),
+				BlockNumber:      fmt.Sprintf("0x%x", *logResult.BlockNumber),
+				Data:             logResult.Data,
+				LogIndex:         fmt.Sprintf("0x%x", *logResult.Index),
+				Removed:          false,
+				Topics:           logResult.Topics,
+				TransactionHash:  logResult.TransactionHash,
+				TransactionIndex: fmt.Sprintf("0x%x", *logResult.TransactionIndex),
 			})
 		}
-
 	}
 
 	for _, addr := range addresses {
@@ -779,13 +824,22 @@ func (s *EthService) getLogsWithParams(address []string, params map[string]inter
 			return nil, err
 		}
 		for _, logResult := range logResults {
+			if len(logResult.BlockHash) > 66 {
+				logResult.BlockHash = logResult.BlockHash[:66]
+			}
+			if len(logResult.TransactionHash) > 66 {
+				logResult.TransactionHash = logResult.TransactionHash[:66]
+			}
 			logs = append(logs, domain.Log{
 				Address:          logResult.Address,
 				BlockHash:        logResult.BlockHash,
-				BlockNumber:      "0x" + strconv.FormatInt(logResult.BlockNumber, 16),
-				Data:             logResult.Result,
-				TransactionHash:  logResult.Hash,
-				TransactionIndex: strconv.Itoa(logResult.TransactionIndex),
+				BlockNumber:      fmt.Sprintf("0x%x", *logResult.BlockNumber),
+				Data:             logResult.Data,
+				LogIndex:         fmt.Sprintf("0x%x", *logResult.Index),
+				Removed:          false,
+				Topics:           logResult.Topics,
+				TransactionHash:  logResult.TransactionHash,
+				TransactionIndex: fmt.Sprintf("0x%x", *logResult.TransactionIndex),
 			})
 		}
 	}

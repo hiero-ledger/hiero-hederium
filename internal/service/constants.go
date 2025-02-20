@@ -54,6 +54,8 @@ const (
 	CreateNonFungibleTokenWithFeesV1 string = "0x5e9a79c9"
 	CreateNonFungibleTokenWithFeesV2 string = "0x5f99d676"
 	CreateNonFungibleTokenWithFeesV3 string = "0x5e0c7ee3"
+
+	MaxTimestampParamRange = 604800 // 7 days in seconds
 )
 
 var HTSCreateFuncSelectors = map[string]struct{}{

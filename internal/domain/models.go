@@ -196,10 +196,25 @@ type LogParams struct {
 }
 
 type ContractResultsLogResponse struct {
-	Logs  []ContractResults `json:"logs"`
+	Logs  []LogEntry `json:"logs"`
 	Links struct {
 		Next *string `json:"next"`
 	} `json:"links"`
+}
+
+type LogEntry struct {
+	Address          string   `json:"address"`
+	Bloom            string   `json:"bloom"`
+	ContractID       string   `json:"contract_id"`
+	Data             string   `json:"data"`
+	Index            *int     `json:"index"`
+	Topics           []string `json:"topics"`
+	BlockHash        string   `json:"block_hash"`
+	BlockNumber      *int64   `json:"block_number"`
+	RootContractID   string   `json:"root_contract_id"`
+	Timestamp        string   `json:"timestamp"`
+	TransactionHash  string   `json:"transaction_hash"`
+	TransactionIndex *int     `json:"transaction_index"`
 }
 
 type ContractResponse struct {

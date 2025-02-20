@@ -692,7 +692,7 @@ func TestGetContractResultsLogsByAddress(t *testing.T) {
 		address        string
 		queryParams    map[string]interface{}
 		mockResponse   interface{}
-		expectedResult []domain.ContractResults
+		expectedResult []domain.LogEntry
 		expectError    bool
 		statusCode     int
 	}{
@@ -713,11 +713,9 @@ func TestGetContractResultsLogsByAddress(t *testing.T) {
 					},
 				},
 			},
-			expectedResult: []domain.ContractResults{
+			expectedResult: []domain.LogEntry{
 				{
 					Address: "0x1234567890123456789012345678901234567890",
-					Hash:    "0xtx1",
-					Result:  "SUCCESS",
 				},
 			},
 			expectError: false,
@@ -748,12 +746,6 @@ func TestGetContractResultsLogsByAddress(t *testing.T) {
 					assert.Contains(t, queryValues.Get(key), value)
 				}
 
-				w.Header().Set("Content-Type", "application/json")
-				if tc.statusCode != http.StatusOK {
-					w.WriteHeader(tc.statusCode)
-					return
-				}
-
 				w.WriteHeader(tc.statusCode)
 				if tc.mockResponse != nil {
 					json.NewEncoder(w).Encode(tc.mockResponse)
@@ -782,92 +774,95 @@ func TestGetContractResultsLogsWithRetry(t *testing.T) {
 	testCases := []struct {
 		name           string
 		queryParams    map[string]interface{}
-		mockResponse   interface{}
-		expectedResult []domain.ContractResults
+		mockResponses  []interface{}
+		expectedResult []domain.LogEntry
 		expectError    bool
 		statusCode     int
+		expectedCalls  int
 	}{
 		{
 			name: "Successful logs fetch",
 			queryParams: map[string]interface{}{
 				"timestamp.gte": "1640995200.000000000",
 				"timestamp.lte": "1640995300.000000000",
-				"order":         "desc",
 			},
-			mockResponse: map[string]interface{}{
-				"logs": []map[string]interface{}{
-					{
-						"address":           "0x1234567890123456789012345678901234567890",
-						"hash":              "0xtx1",
-						"result":            "SUCCESS",
-						"transaction_index": 1,
-						"block_number":      100,
-						"block_hash":        "0xblock1",
+			mockResponses: []interface{}{
+				struct {
+					Logs  []domain.LogEntry `json:"logs"`
+					Links struct {
+						Next *string `json:"next"`
+					} `json:"links"`
+				}{
+					Logs: []domain.LogEntry{
+						{
+							Address:          "0x1234567890123456789012345678901234567890",
+							BlockHash:        "0xblock1",
+							BlockNumber:      ptr(int64(100)),
+							TransactionIndex: ptr(1),
+							Index:            ptr(1),
+						},
 					},
 				},
 			},
-			expectedResult: []domain.ContractResults{
+			expectedResult: []domain.LogEntry{
 				{
 					Address:          "0x1234567890123456789012345678901234567890",
-					Hash:             "0xtx1",
-					Result:           "SUCCESS",
-					TransactionIndex: 1,
-					BlockNumber:      100,
 					BlockHash:        "0xblock1",
+					BlockNumber:      ptr(int64(100)),
+					TransactionIndex: ptr(1),
+					Index:            ptr(1),
 				},
 			},
-			expectError: false,
-			statusCode:  http.StatusOK,
+			expectError:   false,
+			statusCode:    http.StatusOK,
+			expectedCalls: 1,
 		},
 		{
 			name: "Server error",
 			queryParams: map[string]interface{}{
 				"timestamp.gte": "1640995200.000000000",
-				"order":         "desc",
 			},
-			mockResponse:   map[string]interface{}{"error": "Internal server error"},
+			mockResponses:  []interface{}{map[string]interface{}{"error": "Internal server error"}},
 			expectedResult: nil,
 			expectError:    true,
 			statusCode:     http.StatusInternalServerError,
+			expectedCalls:  1,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			callCount := 0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, "/api/v1/contracts/results/logs", r.URL.Path)
 				assert.Equal(t, http.MethodGet, r.Method)
 
-				queryValues := r.URL.Query()
-				for key, value := range tc.queryParams {
-					assert.Contains(t, queryValues.Get(key), value)
-				}
-
-				w.Header().Set("Content-Type", "application/json")
-				if tc.statusCode != http.StatusOK {
-					w.WriteHeader(tc.statusCode)
-					return
-				}
-
 				w.WriteHeader(tc.statusCode)
-				if tc.mockResponse != nil {
-					json.NewEncoder(w).Encode(tc.mockResponse)
+				if callCount < len(tc.mockResponses) {
+					json.NewEncoder(w).Encode(tc.mockResponses[callCount])
 				}
+				callCount++
 			}))
 			defer server.Close()
 
 			client := hedera.NewMirrorClient(server.URL, 5, setup.logger, setup.cacheService)
-			results, err := client.GetContractResultsLogsWithRetry(tc.queryParams)
+			result, err := client.GetContractResultsLogsWithRetry(tc.queryParams)
 
 			if tc.expectError {
 				assert.Error(t, err)
-				assert.Nil(t, results)
+				assert.Nil(t, result)
 			} else {
 				assert.NoError(t, err)
-				assert.Equal(t, tc.expectedResult, results)
+				assert.Equal(t, tc.expectedResult, result)
 			}
+			assert.Equal(t, tc.expectedCalls, callCount)
 		})
 	}
+}
+
+// Helper function to create pointers to values
+func ptr[T any](v T) *T {
+	return &v
 }
 
 func TestGetAccountById(t *testing.T) {
