@@ -725,6 +725,21 @@ func (p *EthNewFilterParams) FromPositionalParams(params []interface{}) error {
 type EthNewBlockFilterParams struct{}
 
 func (p *EthNewBlockFilterParams) FromPositionalParams(params []interface{}) error {
-	// Ignore paramters
+	// Ignore params
 	return nil
+}
+
+type EthUninstallFilterParams struct {
+	FilterID string `json:"filterId" validate:"required,hexadecimal"`
+}
+
+func (p *EthUninstallFilterParams) FromPositionalParams(params []interface{}) error {
+	if len(params) < 1 {
+		return fmt.Errorf("missing filter ID parameter")
+	}
+	if filterId, ok := params[0].(string); ok {
+		p.FilterID = filterId
+		return nil
+	}
+	return fmt.Errorf("invalid filter ID parameter")
 }
