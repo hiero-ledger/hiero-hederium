@@ -786,7 +786,7 @@ func (s *EthService) getLogsWithParams(address []string, params map[string]inter
 
 	var logs []domain.Log
 
-	if len(address) == 0 {
+	if address == nil {
 		logResults, err := s.mClient.GetContractResultsLogsWithRetry(params)
 		if err != nil {
 			s.logger.Error("Failed to get logs", zap.Error(err))
