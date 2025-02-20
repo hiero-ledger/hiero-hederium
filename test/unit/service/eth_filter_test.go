@@ -178,3 +178,13 @@ func TestUninstallFilter(t *testing.T) {
 		})
 	}
 }
+
+func TestNewPendingTransactionFilter(t *testing.T) {
+	ctrl, _, _, _, filterService := setupFilterTest(t)
+	defer ctrl.Finish()
+
+	result, errRpc := filterService.NewPendingTransactionFilter()
+	assert.Nil(t, result)
+	assert.NotNil(t, errRpc)
+	assert.Equal(t, domain.MethodNotFound, errRpc.Code)
+}
