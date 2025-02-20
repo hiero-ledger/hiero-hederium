@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/LimeChain/Hederium/internal/domain"
@@ -103,6 +104,76 @@ func TestNewBlockFilter(t *testing.T) {
 				assert.Nil(t, errRpc)
 				assert.NotNil(t, result)
 				assert.Equal(t, 34, len(*result)) // "0x" + 16 bytes hex
+			}
+		})
+	}
+}
+
+func TestUninstallFilter(t *testing.T) {
+	ctrl, _, mockCache, _, filterService := setupFilterTest(t)
+	defer ctrl.Finish()
+
+	testCases := []struct {
+		name           string
+		filterID       string
+		mockSetup      func()
+		expectError    bool
+		expectedResult bool
+	}{
+		{
+			name:     "Success",
+			filterID: "0x123abc",
+			mockSetup: func() {
+				mockCache.EXPECT().
+					Get(gomock.Any(), fmt.Sprintf("filterId_%s", "0x123abc"), gomock.Any()).
+					Return(nil)
+
+				mockCache.EXPECT().
+					Delete(gomock.Any(), fmt.Sprintf("filterId_%s", "0x123abc")).
+					Return(nil)
+			},
+			expectError:    false,
+			expectedResult: true,
+		},
+		{
+			name:     "Filter not found",
+			filterID: "0xnonexistent",
+			mockSetup: func() {
+				mockCache.EXPECT().
+					Get(gomock.Any(), fmt.Sprintf("filterId_%s", "0xnonexistent"), gomock.Any()).
+					Return(fmt.Errorf("not found"))
+			},
+			expectError:    true,
+			expectedResult: false,
+		},
+		{
+			name:     "Error deleting filter",
+			filterID: "0x123abc",
+			mockSetup: func() {
+				mockCache.EXPECT().
+					Get(gomock.Any(), fmt.Sprintf("filterId_%s", "0x123abc"), gomock.Any()).
+					Return(nil)
+
+				mockCache.EXPECT().
+					Delete(gomock.Any(), fmt.Sprintf("filterId_%s", "0x123abc")).
+					Return(fmt.Errorf("delete error"))
+			},
+			expectError:    true,
+			expectedResult: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.mockSetup()
+
+			result, errRpc := filterService.UninstallFilter(tc.filterID)
+
+			if tc.expectError {
+				assert.NotNil(t, errRpc)
+			} else {
+				assert.Nil(t, errRpc)
+				assert.Equal(t, tc.expectedResult, result)
 			}
 		})
 	}
