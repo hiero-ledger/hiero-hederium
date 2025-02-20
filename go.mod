@@ -11,6 +11,7 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
+	github.com/thanhpk/randstr v1.0.6
 	go.uber.org/zap v1.27.0
 )
 

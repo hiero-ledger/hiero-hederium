@@ -297,3 +297,14 @@ type Amount struct {
 	Numerator   int `json:"numerator"`
 	Denominator int `json:"denominator"`
 }
+
+type Filter struct {
+	ID              string   `json:"id"`
+	Type            string   `json:"type"`
+	BlockAtCreation string   `json:"blockAtCreation"`
+	FromBlock       string   `json:"fromBlock"`
+	ToBlock         string   `json:"toBlock"`
+	Address         []string `json:"address"`
+	Topics          []string `json:"topics"`
+	LastQueried     string   `json:"lastQueried"`
+}

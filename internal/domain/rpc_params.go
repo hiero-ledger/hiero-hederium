@@ -684,3 +684,40 @@ func (p *EthChainIdParams) FromPositionalParams(params []interface{}) error {
 	}
 	return nil
 }
+
+type EthNewFilterParams struct {
+	FromBlock string   `json:"fromBlock" validate:"omitempty,hexadecimal"`
+	ToBlock   string   `json:"toBlock" validate:"omitempty,hexadecimal"`
+	Address   Address  `json:"address" validate:"omitempty,dive,eth_address"`
+	Topics    []string `json:"topics" validate:"omitempty,dive,hexadecimal"`
+}
+
+func (p *EthNewFilterParams) FromPositionalParams(params []interface{}) error {
+	if len(params) > 0 {
+		filterObj, ok := params[0].(map[string]interface{})
+		if !ok {
+			p.FromBlock = "latest"
+			p.ToBlock = "latest"
+			return nil
+		}
+		if fromBlock, ok := filterObj["fromBlock"].(string); ok {
+			p.FromBlock = fromBlock
+		}
+		if toBlock, ok := filterObj["toBlock"].(string); ok {
+			p.ToBlock = toBlock
+		}
+		if address, ok := filterObj["address"].([]string); ok {
+			p.Address = address
+		}
+		if topics, ok := filterObj["topics"].([]string); ok {
+			p.Topics = topics
+		}
+	}
+	if p.FromBlock == "" {
+		p.FromBlock = "latest"
+	}
+	if p.ToBlock == "" {
+		p.ToBlock = "latest"
+	}
+	return nil
+}
