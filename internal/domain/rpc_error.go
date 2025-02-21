@@ -22,6 +22,9 @@ const (
 	// Server error (-32000 to -32099): Implementation-defined server errors.
 	ServerError = -32000
 
+	// Filter not found (-32001): Filter not found
+	FilterNotFound = -32001
+
 	// Execution error (-32015): Transaction execution error
 	ExecutionError = -32015
 
@@ -110,7 +113,7 @@ func NewInvalidBlockRangeError() *RPCError {
 }
 
 func NewFilterNotFoundError() *RPCError {
-	return NewRPCError(MethodNotFound, "filter not found")
+	return NewRPCError(FilterNotFound, "Filter not found")
 }
 
 func NewTimeStampRangeTooLargeError(fromBlock, toBlock string, fromTimestamp, toTimestamp float64) *RPCError {

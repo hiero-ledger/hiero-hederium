@@ -16,6 +16,7 @@ type FilterService interface {
 	NewBlockFilter() (*string, *domain.RPCError)
 	UninstallFilter(filterID string) (interface{}, *domain.RPCError)
 	NewPendingTransactionFilter() (interface{}, *domain.RPCError)
+	GetFilterLogs(filterID string) ([]domain.Log, *domain.RPCError)
 }
 
 type filterService struct {
@@ -132,4 +133,39 @@ func (s *filterService) UninstallFilter(filterID string) (interface{}, *domain.R
 func (s *filterService) NewPendingTransactionFilter() (interface{}, *domain.RPCError) {
 	s.logger.Info("creating new pending transaction filter")
 	return nil, domain.NewUnsupportedJSONRPCMethodError()
+}
+
+func (s *filterService) GetFilterLogs(filterID string) ([]domain.Log, *domain.RPCError) {
+	s.logger.Info("getting filter logs", zap.String("filterID", filterID))
+	ctx := context.Background()
+
+	cacheKey := fmt.Sprintf("filterId_%s", filterID)
+	var filter domain.Filter
+	if err := s.cacheService.Get(ctx, cacheKey, &filter); err != nil {
+		return nil, domain.NewFilterNotFoundError()
+	}
+
+	if filter.Type != "log" {
+		return nil, domain.NewFilterNotFoundError()
+	}
+
+	s.logger.Info("getting logs for filter", zap.String("filterID", filterID), zap.Any("filter", filter))
+
+	logParams := domain.LogParams{
+		FromBlock: filter.FromBlock,
+		ToBlock:   filter.ToBlock,
+		Address:   filter.Address,
+		Topics:    filter.Topics,
+	}
+
+	logs, errRpc := s.commonService.GetLogs(logParams)
+	if errRpc != nil {
+		return nil, errRpc
+	}
+
+	if err := s.cacheService.Set(ctx, cacheKey, filter, DefaultExpiration); err != nil {
+		s.logger.Error("failed to set filter id to cache", zap.Error(err))
+	}
+
+	return logs, nil
 }
