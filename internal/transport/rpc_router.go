@@ -14,6 +14,7 @@ var ethService *service.EthService
 var web3Service *service.Web3Service
 var netService *service.NetService
 var logger *zap.Logger
+var commonService service.CommonService
 
 func SetupRouter(
 	hClient *hedera.HederaClient,
@@ -27,7 +28,8 @@ func SetupRouter(
 	cacheService cache.CacheService,
 ) *gin.Engine {
 	logger = log
-	ethService = service.NewEthService(hClient, mClient, log, tieredLimiter, chainId, cacheService)
+	commonService = service.NewCommonService(mClient, log, cacheService)
+	ethService = service.NewEthService(hClient, mClient, commonService, log, tieredLimiter, chainId, cacheService)
 	web3Service = service.NewWeb3Service(log, applicationVersion)
 	netService = service.NewNetService(log, chainId)
 
