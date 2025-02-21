@@ -17,6 +17,7 @@ import (
 
 type MirrorNodeClient interface {
 	GetLatestBlock() (map[string]interface{}, error)
+	GetBlocks(blockNumber string) ([]map[string]interface{}, error)
 	GetBlockByHashOrNumber(hashOrNumber string) *domain.BlockResponse
 	GetNetworkFees(timestampTo, order string) (int64, error)
 	GetContractResults(timestamp domain.Timestamp) []domain.ContractResults
@@ -80,6 +81,42 @@ func (m *MirrorClient) GetLatestBlock() (map[string]interface{}, error) {
 	}
 
 	return result.Blocks[0], nil
+}
+
+func (m *MirrorClient) GetBlocks(blockNumber string) ([]map[string]interface{}, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
+	defer cancel()
+
+	str := fmt.Sprintf("block.number=gt:%s&order=asc", blockNumber)
+
+	url := fmt.Sprintf("%s/api/v1/blocks?%s", m.BaseURL, str)
+
+	m.logger.Info("Gettting blocks", zap.String("url", url))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error getting blocks: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Blocks []map[string]interface{} `json:"blocks"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("no blocks returned by mirror node")
+	}
+
+	return result.Blocks, nil
 }
 
 func (m *MirrorClient) GetBlockByHashOrNumber(hashOrNumber string) *domain.BlockResponse {

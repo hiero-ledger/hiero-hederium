@@ -266,3 +266,18 @@ func (mr *MockMirrorClientMockRecorder) RepeatGetContractResult(transactionIdOrH
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RepeatGetContractResult", reflect.TypeOf((*MockMirrorClient)(nil).RepeatGetContractResult), transactionIdOrHash, retries)
 }
+
+// GetBlocks mocks base method
+func (m *MockMirrorClient) GetBlocks(blockHash string) ([]map[string]interface{}, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBlocks", blockHash)
+	ret0, _ := ret[0].([]map[string]interface{})
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBlocks indicates an expected call of GetBlocks.
+func (mr *MockMirrorClientMockRecorder) GetBlocks(blockHash string) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlocks", reflect.TypeOf((*MockMirrorClient)(nil).GetBlocks), blockHash)
+}
