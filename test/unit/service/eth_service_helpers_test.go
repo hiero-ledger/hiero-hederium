@@ -16,18 +16,19 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-func setupTest(t *testing.T) (*gomock.Controller, *mocks.MockMirrorClient, *zap.Logger, *mocks.MockCacheService) {
+func setupTest(t *testing.T) (*gomock.Controller, *mocks.MockMirrorClient, *zap.Logger, *mocks.MockCacheService, *mocks.MockCommonService) {
 	ctrl := gomock.NewController(t)
 	cfg := zap.NewDevelopmentConfig()
 	cfg.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
 	logger, _ := cfg.Build()
 	mockClient := mocks.NewMockMirrorClient(ctrl)
 	mockCacheService := mocks.NewMockCacheService(ctrl)
-	return ctrl, mockClient, logger, mockCacheService
+	mockCommonService := mocks.NewMockCommonService(ctrl)
+	return ctrl, mockClient, logger, mockCacheService, mockCommonService
 }
 
 func TestGetFeeWeibars_Success(t *testing.T) {
-	ctrl, mockClient, logger, cacheService := setupTest(t)
+	ctrl, mockClient, logger, cacheService, _ := setupTest(t)
 	defer ctrl.Finish()
 
 	expectedGasTinybars := int64(100000) // For now I am making it like this, but it should be checked!
@@ -38,6 +39,7 @@ func TestGetFeeWeibars_Success(t *testing.T) {
 	s := service.NewEthService(
 		nil,
 		mockClient,
+		nil,
 		logger,
 		nil,
 		defaultChainId,
@@ -54,7 +56,7 @@ func TestGetFeeWeibars_Success(t *testing.T) {
 }
 
 func TestGetFeeWeibars_Error(t *testing.T) {
-	ctrl, mockClient, logger, cacheService := setupTest(t)
+	ctrl, mockClient, logger, cacheService, _ := setupTest(t)
 	defer ctrl.Finish()
 
 	mockClient.EXPECT().
@@ -64,6 +66,7 @@ func TestGetFeeWeibars_Error(t *testing.T) {
 	s := service.NewEthService(
 		nil,
 		mockClient,
+		nil,
 		logger,
 		nil,
 		defaultChainId,
@@ -76,7 +79,7 @@ func TestGetFeeWeibars_Error(t *testing.T) {
 }
 
 func TestProcessBlock_Success(t *testing.T) {
-	ctrl, mockClient, logger, mockCacheService := setupTest(t)
+	ctrl, mockClient, logger, mockCacheService, _ := setupTest(t)
 	defer ctrl.Finish()
 
 	block := &domain.BlockResponse{
@@ -197,6 +200,7 @@ func TestProcessBlock_Success(t *testing.T) {
 	s := service.NewEthService(
 		nil,
 		mockClient,
+		nil,
 		logger,
 		nil,
 		defaultChainId,
@@ -221,7 +225,7 @@ func TestProcessBlock_Success(t *testing.T) {
 }
 
 func TestProcessBlock_WithLongHashes(t *testing.T) {
-	ctrl, mockClient, logger, cacheService := setupTest(t)
+	ctrl, mockClient, logger, cacheService, _ := setupTest(t)
 	defer ctrl.Finish()
 
 	longHash := "0x123abc" + strings.Repeat("0", 100) // Hash longer than 66 chars
@@ -244,6 +248,7 @@ func TestProcessBlock_WithLongHashes(t *testing.T) {
 	s := service.NewEthService(
 		nil,
 		mockClient,
+		nil,
 		logger,
 		nil,
 		defaultChainId,
@@ -394,10 +399,11 @@ func TestProcessTransaction_UnknownType(t *testing.T) {
 }
 
 func TestFormatTransactionCallObject(t *testing.T) {
-	ctrl, _, logger, cacheService := setupTest(t)
+	ctrl, _, logger, cacheService, _ := setupTest(t)
 	defer ctrl.Finish()
 
 	s := service.NewEthService(
+		nil,
 		nil,
 		nil,
 		logger,
@@ -783,7 +789,7 @@ func TestProcessTransactionResponse(t *testing.T) {
 					return nil
 				}).AnyTimes()
 
-			s := service.NewEthService(mockHederaClient, mockMirrorClient, logger, tieredLimiter, defaultChainId, mockCacheService)
+			s := service.NewEthService(mockHederaClient, mockMirrorClient, nil, logger, tieredLimiter, defaultChainId, mockCacheService)
 
 			result := s.ProcessTransactionResponse(tc.input)
 

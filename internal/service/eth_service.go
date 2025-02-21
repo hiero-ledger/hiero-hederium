@@ -28,6 +28,7 @@ const (
 type EthService struct {
 	hClient       infrahedera.HederaNodeClient
 	mClient       infrahedera.MirrorNodeClient
+	commonService CommonService
 	logger        *zap.Logger
 	tieredLimiter *limiter.TieredLimiter
 	chainId       string
@@ -39,6 +40,7 @@ type EthService struct {
 func NewEthService(
 	hClient infrahedera.HederaNodeClient,
 	mClient infrahedera.MirrorNodeClient,
+	commonService CommonService,
 	log *zap.Logger,
 	l *limiter.TieredLimiter,
 	chainId string,
@@ -47,6 +49,7 @@ func NewEthService(
 	return &EthService{
 		hClient:       hClient,
 		mClient:       mClient,
+		commonService: commonService,
 		logger:        log,
 		tieredLimiter: l,
 		chainId:       chainId,
@@ -64,27 +67,7 @@ func NewEthService(
 //   - map[string]interface{}: Error details if the operation fails, nil on success.
 //     Error format follows Ethereum JSON-RPC error specifications.
 func (s *EthService) GetBlockNumber() (interface{}, *domain.RPCError) {
-	s.logger.Info("Getting block number")
-	block, err := s.mClient.GetLatestBlock()
-	if err != nil {
-		s.logger.Error("Failed to fetch latest block", zap.Error(err))
-		return nil, domain.NewRPCError(domain.ServerError, "Failed to fetch block data: "+err.Error())
-	}
-
-	s.logger.Debug("Received block data", zap.Any("block", block))
-
-	if blockNumber, ok := block["number"].(float64); ok {
-		s.logger.Debug("Found block number", zap.Float64("blockNumber", blockNumber))
-
-		blockNum := uint64(blockNumber)
-		hexBlockNum := "0x" + strconv.FormatUint(blockNum, 16)
-		s.logger.Debug("Successfully converted to hex", zap.String("hexBlockNum", hexBlockNum))
-		s.logger.Info("Successfully returned block number", zap.String("blockNumber", hexBlockNum))
-		return hexBlockNum, nil
-	}
-
-	s.logger.Error("Block number not found or invalid type", zap.Any("block", block))
-	return nil, domain.NewRPCError(domain.ServerError, "Invalid block data")
+	return s.commonService.GetBlockNumber()
 }
 
 // GetGasPrice returns the current gas price in wei with a 10% buffer added.
@@ -178,7 +161,7 @@ func (s *EthService) GetBlockByHash(hash string, showDetails bool) (interface{},
 func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting block by number", zap.String("numberOrTag", numberOrTag), zap.Bool("showDetails", showDetails))
 
-	blockNumberInt, errRpc := s.getBlockNumberByNumberOrTag(numberOrTag)
+	blockNumberInt, errRpc := s.commonService.GetBlockNumberByNumberOrTag(numberOrTag)
 	if errRpc != nil {
 		return nil, errRpc
 	}
@@ -262,7 +245,7 @@ func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) str
 func (s *EthService) GetTransactionCount(address string, blockNumberOrTag string) string {
 	s.logger.Info("Getting transaction count", zap.String("address", address), zap.String("blockNumberOrTag", blockNumberOrTag))
 
-	blockNumberInt, errRpc := s.getBlockNumberByNumberOrTag(blockNumberOrTag)
+	blockNumberInt, errRpc := s.commonService.GetBlockNumberByNumberOrTag(blockNumberOrTag)
 	if errRpc != nil {
 		return "0x0"
 	}
@@ -500,7 +483,7 @@ func (s *EthService) FeeHistory(blockCount string, newestBlock string, rewardPer
 	if err != nil {
 		return nil, domain.NewRPCError(domain.ServerError, fmt.Sprintf("Failed to parse latest block number: %s", err.Error()))
 	}
-	newestBlockInt, errRpc := s.getBlockNumberByNumberOrTag(newestBlock)
+	newestBlockInt, errRpc := s.commonService.GetBlockNumberByNumberOrTag(newestBlock)
 	if errRpc != nil {
 		return nil, errRpc
 	}
@@ -553,7 +536,7 @@ func (s *EthService) FeeHistory(blockCount string, newestBlock string, rewardPer
 
 func (s *EthService) GetStorageAt(address, slot, blockNumberOrHash string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting storage at", zap.String("address", address), zap.String("slot", slot), zap.String("blockNumberOrHash", blockNumberOrHash))
-	blockInt, errRpc := s.getBlockNumberByNumberOrTag(blockNumberOrHash)
+	blockInt, errRpc := s.commonService.GetBlockNumberByNumberOrTag(blockNumberOrHash)
 	if errRpc != nil {
 		return nil, errRpc
 	}
@@ -582,35 +565,8 @@ func (s *EthService) GetStorageAt(address, slot, blockNumberOrHash string) (inte
 
 func (s *EthService) GetLogs(logParams domain.LogParams) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting logs", zap.Any("logParams", logParams))
-	params := make(map[string]interface{})
 
-	if logParams.BlockHash != "" {
-		if err := s.validateBlockHashAndAddTimestampToParams(params, logParams.BlockHash); err != nil {
-			return []domain.Log{}, nil
-		}
-	} else {
-		if ok, errRpc := s.validateBlockRangeAndAddTimestampToParams(params, logParams.FromBlock, logParams.ToBlock, logParams.Address); errRpc != nil {
-			return nil, errRpc
-		} else if !ok {
-			return []domain.Log{}, nil
-		}
-	}
-
-	if logParams.Topics != nil {
-		for i, topic := range logParams.Topics {
-			if topic != "" {
-				params[fmt.Sprintf("topic%d", i)] = topic
-			}
-		}
-	}
-
-	logs, err := s.getLogsWithParams(logParams.Address, params)
-	if err != nil {
-		s.logger.Error("Failed to get logs", zap.Error(err))
-		return nil, domain.NewRPCError(domain.ServerError, "Failed to get logs")
-	}
-
-	return logs, nil
+	return s.commonService.GetLogs(logParams)
 }
 
 func (s *EthService) GetBlockTransactionCountByHash(blockHash string) (interface{}, *domain.RPCError) {
@@ -642,7 +598,7 @@ func (s *EthService) GetBlockTransactionCountByHash(blockHash string) (interface
 
 func (s *EthService) GetBlockTransactionCountByNumber(blockNumberOrTag string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting block transaction count by number", zap.String("blockNumber", blockNumberOrTag))
-	blockNumberInt, errRpc := s.getBlockNumberByNumberOrTag(blockNumberOrTag)
+	blockNumberInt, errRpc := s.commonService.GetBlockNumberByNumberOrTag(blockNumberOrTag)
 	if errRpc != nil {
 		return nil, errRpc
 	}
@@ -709,7 +665,7 @@ func (s *EthService) GetTransactionByBlockHashAndIndex(blockHash string, txIndex
 func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string, txIndex string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting transaction by block number and index", zap.String("blockNumberOrTag", blockNumberOrTag), zap.String("txIndex", txIndex))
 
-	blockNumberInt, errRpc := s.getBlockNumberByNumberOrTag(blockNumberOrTag)
+	blockNumberInt, errRpc := s.commonService.GetBlockNumberByNumberOrTag(blockNumberOrTag)
 	if errRpc != nil {
 		return nil, errRpc
 	}
