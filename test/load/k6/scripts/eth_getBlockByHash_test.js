@@ -7,7 +7,7 @@ export let options = {
   duration: config.duration,
 };
 
-export default function () {
+export function getBlockByHash() {
   const payload = JSON.stringify({
     jsonrpc: "2.0",
     method: "eth_getBlockByHash",

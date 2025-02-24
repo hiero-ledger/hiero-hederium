@@ -1,12 +1,16 @@
-import { config } from "../common.js";
+import { getBlockByHash } from "../scripts/eth_getBlockByHash_test.js";
 
 export const options = {
   scenarios: {
-    eth_getBlockByHash_constant: {
+    constant_load: {
       executor: "constant-vus",
-      vus: config.vus,
-      duration: config.duration,
-      exec: "eth_getBlockByHash",
+      vus: 50,
+      duration: "30s",
+      gracefulStop: "5s",
     },
   },
 };
+
+export default function () {
+  getBlockByHash();
+}

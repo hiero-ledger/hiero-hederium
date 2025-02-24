@@ -33,6 +33,4 @@ export function getTransactionByHash() {
   if (!success) {
     errors.add(1);
   }
-
-  sleep(1);
 }
