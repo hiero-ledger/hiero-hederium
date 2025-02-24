@@ -1,4 +1,4 @@
-# Benchmark Results (Work in progress)
+# Benchmark Results
 
 This document summarizes the performance benchmarking results between the **Go** and other implementations of the json-rpc-relay. Tests were performed using [k6](https://k6.io/) for load testing and custom end-to-end (E2E) integration tests. The goal is to provide an objective comparison and highlight areas for optimization in each implementation.
 
@@ -79,7 +79,7 @@ Below are details about the testing environment and how each test was set up.
 | **RAM Usage (avg)**    | 340MB       | 30MB        | Go uses ~11x less memory on average         |
 | **RAM Peak**           | 1360MB       | 40MB        | Go has significantly lower memory spikes (~34x less) |
 | **Disk Read (avg)**    | 133 MB   | 246 KB    | Go performs ~550x less disk reads   |
-| **Disk Write (avg)**    | 152 KB   | 0 B    | Go performs no disk writes vs Other's minimal writes   |
+| **Disk Write (avg)**    | 152 KB   | 0 B    | Go performs no disk writes   |
 
 
 ### k6 Load Test Results by Endpoint
