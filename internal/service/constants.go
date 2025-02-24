@@ -5,6 +5,7 @@ import "time"
 // Constants for the Ethereum JSON-RPC API methods + other constants
 // Temporary place for these constants until we have a better place for them
 const (
+	GetBlockNumber                      = "eth_blockNumber"
 	GetBlockByHash                      = "eth_getBlockByHash"
 	GetBlockByNumber                    = "eth_getBlockByNumber"
 	GetBlockTransactionCount            = "eth_getBlockTransactionCount"
@@ -38,6 +39,7 @@ const (
 	NetPeerCount                        = "net_peerCount"
 
 	DefaultExpiration = 1 * time.Hour
+	ShortExpiration   = 1 * time.Second
 
 	// Fungible token creation selectors
 	CreateFungibleTokenV1         string = "0x83062e38"

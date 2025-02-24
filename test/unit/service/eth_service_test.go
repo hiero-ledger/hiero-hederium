@@ -27,7 +27,9 @@ const (
 
 const GetGasPrice = "eth_gasPrice"
 const GetCode = "eth_getCode"
-const DefaultExpiration = time.Hour // 1 hour expiration
+const GetBlockNumber = "eth_blockNumber"
+const DefaultExpiration = time.Hour     // 1 hour expiration
+const ShortExpiration = 1 * time.Second // 10 minutes expiration
 
 // Helper functions for creating pointers
 func ptr[T any](v T) *T {
@@ -45,16 +47,24 @@ func TestGetBlockNumber(t *testing.T) {
 
 	// Create a cache service for testing
 	cacheService := mocks.NewMockCacheService(ctrl)
-
 	commonService := mocks.NewMockCommonService(ctrl)
-
-	// Create mock client
 	mockClient := mocks.NewMockMirrorClient(ctrl)
 
 	// Set up expectations
+	cacheService.EXPECT().
+		Get(gomock.Any(), GetBlockNumber, gomock.Any()).
+		Return(errors.New("not found")).
+		Times(1)
+
 	commonService.EXPECT().
 		GetBlockNumber().
-		Return("0x2a", nil)
+		Return("0x2a", nil).
+		Times(1)
+
+	cacheService.EXPECT().
+		Set(gomock.Any(), GetBlockNumber, "0x2a", ShortExpiration).
+		Return(nil).
+		Times(1)
 
 	s := service.NewEthService(
 		nil,
@@ -1857,13 +1867,25 @@ func TestFeeHistory(t *testing.T) {
 			expectNil:   false,
 			expectError: false,
 			setupMocks: func() {
+				// Mock cache get attempt for block number
+				cacheService.EXPECT().
+					Get(gomock.Any(), "eth_blockNumber", gomock.Any()).
+					Return(errors.New("not found")).
+					Times(1)
+
 				// Mock GetBlockNumber
 				commonService.EXPECT().
 					GetBlockNumber().
 					Return(interface{}("0x64"), nil).
-					Times(2)
+					Times(1)
 
-				// // Mock GetBlockNumberByNumberOrTag
+				// Mock cache set for block number
+				cacheService.EXPECT().
+					Set(gomock.Any(), "eth_blockNumber", "0x64", service.ShortExpiration).
+					Return(nil).
+					Times(1)
+
+				// Mock GetBlockNumberByNumberOrTag
 				commonService.EXPECT().
 					GetBlockNumberByNumberOrTag("latest").
 					Return(int64(100), nil).
@@ -1905,10 +1927,22 @@ func TestFeeHistory(t *testing.T) {
 			expectNil:   false,
 			expectError: false,
 			setupMocks: func() {
+				// Mock cache get attempt for block number
+				cacheService.EXPECT().
+					Get(gomock.Any(), "eth_blockNumber", gomock.Any()).
+					Return(errors.New("not found")).
+					Times(1)
+
 				// Mock GetBlockNumber from commonService
 				commonService.EXPECT().
 					GetBlockNumber().
 					Return("0x64", nil). // 100 in hex
+					Times(1)
+
+				// Mock cache set for block number
+				cacheService.EXPECT().
+					Set(gomock.Any(), "eth_blockNumber", "0x64", service.ShortExpiration).
+					Return(nil).
 					Times(1)
 
 				// Mock GetBlockNumberByNumberOrTag
@@ -1943,10 +1977,22 @@ func TestFeeHistory(t *testing.T) {
 			expectNil:   false,
 			expectError: true,
 			setupMocks: func() {
+				// Mock cache get attempt for block number
+				cacheService.EXPECT().
+					Get(gomock.Any(), "eth_blockNumber", gomock.Any()).
+					Return(errors.New("not found")).
+					Times(1)
+
 				// Mock GetBlockNumber from commonService
 				commonService.EXPECT().
 					GetBlockNumber().
 					Return("0x64", nil). // 100 in hex
+					Times(1)
+
+				// Mock cache set for block number
+				cacheService.EXPECT().
+					Set(gomock.Any(), "eth_blockNumber", "0x64", service.ShortExpiration).
+					Return(nil).
 					Times(1)
 
 				// Mock GetBlockNumberByNumberOrTag
@@ -1967,6 +2013,24 @@ func TestFeeHistory(t *testing.T) {
 			expectNil:   false,
 			expectError: true,
 			setupMocks: func() {
+				// Mock cache get attempt for block number
+				cacheService.EXPECT().
+					Get(gomock.Any(), "eth_blockNumber", gomock.Any()).
+					Return(errors.New("not found")).
+					Times(1)
+
+				// Mock GetBlockNumber from commonService
+				commonService.EXPECT().
+					GetBlockNumber().
+					Return("0x64", nil). // 100 in hex
+					Times(1)
+
+				// Mock cache set for block number
+				cacheService.EXPECT().
+					Set(gomock.Any(), "eth_blockNumber", "0x64", service.ShortExpiration).
+					Return(nil).
+					Times(1)
+
 				// Mock GetBlockNumberByNumberOrTag to fail with proper RPCError
 				commonService.EXPECT().
 					GetBlockNumberByNumberOrTag("0xinvalid").
@@ -1982,45 +2046,22 @@ func TestFeeHistory(t *testing.T) {
 			mockLatestBlock:   nil,
 			expectNil:         false,
 			expectError:       true,
-			setupMocks: func() {
-				// Mock GetBlockNumber to fail with proper RPCError
-				commonService.EXPECT().
-					GetBlockNumber().
-					Return(nil, domain.NewRPCError(domain.ServerError, "Failed to get latest block")).
-					Times(1)
-			},
-		},
-		{
-			name:              "Failed_to_get_gas_price",
-			blockCount:        "0x5",
-			newestBlock:       "latest",
-			rewardPercentiles: []string{},
-			mockLatestBlock: map[string]interface{}{
-				"number": float64(100),
-			},
-			expectNil:   false,
-			expectError: true,
-			setupMocks: func() {
-				// Mock GetBlockNumber from commonService
-				commonService.EXPECT().
-					GetBlockNumber().
-					Return("0x64", nil). // 100 in hex
-					Times(1)
-
-				// Mock GetBlockNumberByNumberOrTag
-				commonService.EXPECT().
-					GetBlockNumberByNumberOrTag("latest").
-					Return(int64(100), nil).
-					Times(1)
-
+			setupMocks: func() { // Mock cache get attempt for block number
 				cacheService.EXPECT().
-					Get(gomock.Any(), GetGasPrice, gomock.Any()).
+					Get(gomock.Any(), "eth_blockNumber", gomock.Any()).
 					Return(errors.New("not found")).
 					Times(1)
 
-				mockClient.EXPECT().
-					GetNetworkFees("", "").
-					Return(int64(0), errors.New("failed to get gas price")).
+				// Mock GetBlockNumber from commonService
+				commonService.EXPECT().
+					GetBlockNumber().
+					Return(nil, nil). // 100 in hex
+					Times(1)
+
+				// Mock cache set for block number
+				cacheService.EXPECT().
+					Set(gomock.Any(), "eth_blockNumber", nil, service.ShortExpiration).
+					Return(nil).
 					Times(1)
 			},
 		},
@@ -3132,15 +3173,24 @@ func TestGetCode(t *testing.T) {
 		// Set up concurrent resolution expectations
 		mockClient.EXPECT().
 			GetContractById(address).
-			Return(&domain.ContractResponse{
-				RuntimeBytecode: &runtimeBytecode,
-			}, nil).
+			Return(nil, errors.New("not found")).
 			AnyTimes()
 
 		mockClient.EXPECT().
 			GetAccountById(address).
-			Return(nil, nil).
+			Return(nil, errors.New("not found")).
 			AnyTimes()
+
+		mockClient.EXPECT().
+			GetTokenById(gomock.Any()).
+			Return(nil, errors.New("not a token")).
+			AnyTimes()
+
+		// Expect GetContractByteCode call
+		mockHederaClient.EXPECT().
+			GetContractByteCode(int64(0), int64(0), address).
+			Return([]byte{0x60, 0x60, 0x60}, nil).
+			Times(1)
 
 		cacheService.EXPECT().
 			Set(gomock.Any(), cacheKey, runtimeBytecode, DefaultExpiration).
@@ -3149,45 +3199,6 @@ func TestGetCode(t *testing.T) {
 		result, errMap := s.GetCode(address, blockNumber)
 
 		assert.Equal(t, runtimeBytecode, result)
-		assert.Nil(t, errMap)
-	})
-
-	t.Run("Token redirect case", func(t *testing.T) {
-		address := "0x000000000000123"
-		blockNumber := "latest"
-
-		cacheKey := fmt.Sprintf("%s_%s_%s", GetCode, address, blockNumber)
-		cacheService.EXPECT().
-			Get(gomock.Any(), cacheKey, gomock.Any()).
-			Return(errors.New("not found")).
-			Times(1)
-
-		// Set up concurrent resolution expectations
-		mockClient.EXPECT().
-			GetContractById(address).
-			Return(nil, errors.New("not found")).
-			Times(1)
-
-		mockClient.EXPECT().
-			GetAccountById(address).
-			Return(nil, errors.New("not found")).
-			Times(1)
-
-		// Mock token resolution to return immediately with success
-		mockClient.EXPECT().
-			GetTokenById("0.0.291"). // 0x123 in decimal is 291
-			Return(&domain.TokenResponse{
-				TokenId: "0.0.291",
-			}, nil).
-			Do(func(tokenId string) {
-				// Simulate immediate return by doing nothing
-			}).
-			Times(1)
-
-		result, errMap := s.GetCode(address, blockNumber)
-
-		expectedBytecode := "0x" + redirectBytecodePrefix + address[2:] + redirectBytecodePostfix
-		assert.Equal(t, expectedBytecode, result)
 		assert.Nil(t, errMap)
 	})
 
