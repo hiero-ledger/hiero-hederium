@@ -9,5 +9,5 @@ FROM alpine:3.17
 WORKDIR /app
 COPY --from=builder /app/hederium .
 COPY --from=builder /app/configs ./configs
-EXPOSE 8080
+EXPOSE 7546
 ENTRYPOINT ["./hederium"]

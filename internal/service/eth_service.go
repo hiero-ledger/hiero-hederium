@@ -67,7 +67,20 @@ func NewEthService(
 //   - map[string]interface{}: Error details if the operation fails, nil on success.
 //     Error format follows Ethereum JSON-RPC error specifications.
 func (s *EthService) GetBlockNumber() (interface{}, *domain.RPCError) {
-	return s.commonService.GetBlockNumber()
+	var cachedBlockNumber string
+	err := s.cacheService.Get(s.ctx, GetBlockNumber, &cachedBlockNumber)
+	if err == nil && cachedBlockNumber != "" {
+		s.logger.Info("Block number fetched from cache", zap.String("blockNumber", cachedBlockNumber))
+		return cachedBlockNumber, nil
+	}
+
+	blockNumber, err := s.commonService.GetBlockNumber()
+
+	if err := s.cacheService.Set(s.ctx, GetBlockNumber, blockNumber, ShortExpiration); err != nil {
+		s.logger.Debug("Failed to cache block number", zap.Error(err))
+	}
+
+	return blockNumber, nil
 }
 
 // GetGasPrice returns the current gas price in wei with a 10% buffer added.
