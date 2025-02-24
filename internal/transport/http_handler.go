@@ -50,6 +50,7 @@ var methodParamsMap = map[string]func() domain.RPCParams{
 	"eth_getUncleCountByBlockNumber":          func() domain.RPCParams { return &domain.EthGetUncleCountByBlockNumberParams{} },
 	"eth_getUncleByBlockHashAndIndex":         func() domain.RPCParams { return &domain.EthGetUncleByBlockHashAndIndexParams{} },
 	"eth_getUncleByBlockNumberAndIndex":       func() domain.RPCParams { return &domain.EthGetUncleByBlockNumberAndIndexParams{} },
+	"eth_newFilter":                           func() domain.RPCParams { return &domain.EthNewFilterParams{} },
 }
 
 func init() {
@@ -196,6 +197,9 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 	case "eth_getUncleByBlockNumberAndIndex":
 		params := rpcParams.(*domain.EthGetUncleByBlockNumberAndIndexParams)
 		return ethService.GetUncleByBlockNumberAndIndex(params.BlockNumber, params.Index)
+	case "eth_newFilter":
+		params := rpcParams.(*domain.EthNewFilterParams)
+		return filterService.NewFilter(params.FromBlock, params.ToBlock, params.Address, params.Topics)
 	default:
 		return nil, unsupportedMethodError(methodName)
 	}
