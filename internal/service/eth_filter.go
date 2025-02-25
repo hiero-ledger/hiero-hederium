@@ -14,6 +14,7 @@ import (
 type FilterService interface {
 	NewFilter(fromBlock, toBlock string, address, topics []string) (*string, *domain.RPCError)
 	NewBlockFilter() (*string, *domain.RPCError)
+	UninstallFilter(filterID string) (interface{}, *domain.RPCError)
 }
 
 type filterService struct {
@@ -103,4 +104,26 @@ func (s *filterService) NewBlockFilter() (*string, *domain.RPCError) {
 	filterId := s.createFilter("new_block", "", "", fmt.Sprintf("0x%x", blockAtCreation), nil, nil)
 
 	return filterId, nil
+}
+
+func (s *filterService) UninstallFilter(filterID string) (interface{}, *domain.RPCError) {
+	ctx := context.Background()
+
+	if err := s.requireFilterEnabled(); err != nil {
+		return false, domain.NewUnsupportedMethodError("eth_newFilter")
+	}
+
+	cacheKey := fmt.Sprintf("filterId_%s", filterID)
+
+	var filter domain.Filter
+	if err := s.cacheService.Get(ctx, cacheKey, &filter); err != nil {
+		return false, domain.NewFilterNotFoundError()
+	}
+
+	if err := s.cacheService.Delete(ctx, cacheKey); err != nil {
+		s.logger.Error("failed to delete filter id from cache", zap.Error(err))
+		return false, domain.NewInternalError("failed to delete filter id from cache")
+	}
+
+	return true, nil
 }

@@ -52,6 +52,7 @@ var methodParamsMap = map[string]func() domain.RPCParams{
 	"eth_getUncleByBlockNumberAndIndex":       func() domain.RPCParams { return &domain.EthGetUncleByBlockNumberAndIndexParams{} },
 	"eth_newFilter":                           func() domain.RPCParams { return &domain.EthNewFilterParams{} },
 	"eth_newBlockFilter":                      func() domain.RPCParams { return &domain.EthNewBlockFilterParams{} },
+	"eth_uninstallFilter":                     func() domain.RPCParams { return &domain.EthUninstallFilterParams{} },
 }
 
 func init() {
@@ -203,6 +204,9 @@ func dispatchMethod(ctx *gin.Context, methodName string, params interface{}) (in
 		return filterService.NewFilter(params.FromBlock, params.ToBlock, params.Address, params.Topics)
 	case "eth_newBlockFilter":
 		return filterService.NewBlockFilter()
+	case "eth_uninstallFilter":
+		params := rpcParams.(*domain.EthUninstallFilterParams)
+		return filterService.UninstallFilter(params.FilterID)
 	default:
 		return nil, unsupportedMethodError(methodName)
 	}
