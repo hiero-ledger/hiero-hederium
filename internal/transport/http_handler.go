@@ -51,9 +51,9 @@ var methodParamsMap = map[string]func() domain.RPCParams{
 	"eth_getUncleByBlockHashAndIndex":         func() domain.RPCParams { return &domain.EthGetUncleByBlockHashAndIndexParams{} },
 	"eth_getUncleByBlockNumberAndIndex":       func() domain.RPCParams { return &domain.EthGetUncleByBlockNumberAndIndexParams{} },
 	"eth_newFilter":                           func() domain.RPCParams { return &domain.EthNewFilterParams{} },
-	"eth_newBlockFilter":                      func() domain.RPCParams { return &domain.EthNewBlockFilterParams{} },
+	"eth_newBlockFilter":                      func() domain.RPCParams { return &domain.NoParameters{} },
 	"eth_uninstallFilter":                     func() domain.RPCParams { return &domain.EthUninstallFilterParams{} },
-	"eth_newPendingTransactionFilter":         func() domain.RPCParams { return &domain.EthNewPendingTransactionFilterParams{} },
+	"eth_newPendingTransactionFilter":         func() domain.RPCParams { return &domain.NoParameters{} },
 	"eth_getFilterLogs":                       func() domain.RPCParams { return &domain.EthGetFilterLogsParams{} },
 	"eth_getFilterChanges":                    func() domain.RPCParams { return &domain.EthGetFilterChangesParams{} },
 }

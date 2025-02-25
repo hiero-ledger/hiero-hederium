@@ -74,26 +74,8 @@ type EthGetStorageAtParams struct {
 	BlockNumber     string `json:"blockNumber" binding:"omitempty,block_number_or_tag"`
 }
 
-// Address represents an Ethereum address or an array of addresses
-type Address []string
-
-func (a *Address) UnmarshalJSON(data []byte) error {
-	if len(data) > 0 && data[0] == '"' {
-		var singleAddress string
-		if err := json.Unmarshal(data, &singleAddress); err != nil {
-			return err
-		}
-		*a = Address{singleAddress}
-		return nil
-	}
-
-	var addressArray []string
-	if err := json.Unmarshal(data, &addressArray); err != nil {
-		return err
-	}
-	*a = Address(addressArray)
-	return nil
-}
+// NoParameters represents a struct with no parameters for endpoints that do not have input parameters
+type NoParameters struct{}
 
 // FilterObject represents the filter object for eth_getLogs
 type FilterObject struct {
@@ -168,13 +150,9 @@ type EthGetUncleByBlockNumberAndIndexParams struct {
 	Index       string `json:"index" binding:"required,hexadecimal,startswith=0x"`
 }
 
-// EthBlockNumberParams represents parameters for eth_blockNumber
-type EthBlockNumberParams struct{}
-
-func (p *EthBlockNumberParams) FromPositionalParams(params []interface{}) error {
-	if len(params) != 0 {
-		return fmt.Errorf("eth_blockNumber expects no parameters")
-	}
+// FromPositionalParams implements parameter conversion for NoParameters
+func (p *NoParameters) FromPositionalParams(params []interface{}) error {
+	// No parameters expected
 	return nil
 }
 
@@ -665,26 +643,6 @@ func (p *EthGetUncleByBlockNumberAndIndexParams) FromPositionalParams(params []i
 	return nil
 }
 
-// EthGasPriceParams represents parameters for eth_gasPrice
-type EthGasPriceParams struct{}
-
-func (p *EthGasPriceParams) FromPositionalParams(params []interface{}) error {
-	if len(params) != 0 {
-		return fmt.Errorf("eth_gasPrice expects no parameters")
-	}
-	return nil
-}
-
-// EthChainIdParams represents parameters for eth_chainId
-type EthChainIdParams struct{}
-
-func (p *EthChainIdParams) FromPositionalParams(params []interface{}) error {
-	if len(params) != 0 {
-		return fmt.Errorf("eth_chainId expects no parameters")
-	}
-	return nil
-}
-
 type EthNewFilterParams struct {
 	FromBlock string   `json:"fromBlock" validate:"omitempty,hexadecimal"`
 	ToBlock   string   `json:"toBlock" validate:"omitempty,hexadecimal"`
@@ -722,13 +680,6 @@ func (p *EthNewFilterParams) FromPositionalParams(params []interface{}) error {
 	return nil
 }
 
-type EthNewBlockFilterParams struct{}
-
-func (p *EthNewBlockFilterParams) FromPositionalParams(params []interface{}) error {
-	// Ignore params
-	return nil
-}
-
 type EthUninstallFilterParams struct {
 	FilterID string `json:"filterId" validate:"required,hexadecimal"`
 }
@@ -742,13 +693,6 @@ func (p *EthUninstallFilterParams) FromPositionalParams(params []interface{}) er
 		return nil
 	}
 	return fmt.Errorf("invalid filter ID parameter")
-}
-
-type EthNewPendingTransactionFilterParams struct{}
-
-func (p *EthNewPendingTransactionFilterParams) FromPositionalParams(params []interface{}) error {
-	// Ignore params
-	return nil
 }
 
 type EthGetFilterLogsParams struct {

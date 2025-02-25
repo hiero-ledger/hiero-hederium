@@ -1,5 +1,7 @@
 package domain
 
+import "encoding/json"
+
 type FeeResponse struct {
 	Fees      []Fee  `json:"fees"`
 	Timestamp string `json:"timestamp"`
@@ -307,4 +309,24 @@ type Filter struct {
 	Address         []string `json:"address"`
 	Topics          []string `json:"topics"`
 	LastQueried     string   `json:"lastQueried"`
+}
+
+type Address []string
+
+func (a *Address) UnmarshalJSON(data []byte) error {
+	if len(data) > 0 && data[0] == '"' {
+		var singleAddress string
+		if err := json.Unmarshal(data, &singleAddress); err != nil {
+			return err
+		}
+		*a = Address{singleAddress}
+		return nil
+	}
+
+	var addressArray []string
+	if err := json.Unmarshal(data, &addressArray); err != nil {
+		return err
+	}
+	*a = Address(addressArray)
+	return nil
 }
