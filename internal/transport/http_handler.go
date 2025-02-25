@@ -26,9 +26,9 @@ type JSONRPCResponse struct {
 }
 
 var methodParamsMap = map[string]func() domain.RPCParams{
-	"eth_blockNumber":                         func() domain.RPCParams { return &domain.EthBlockNumberParams{} },
-	"eth_gasPrice":                            func() domain.RPCParams { return &domain.EthGasPriceParams{} },
-	"eth_chainId":                             func() domain.RPCParams { return &domain.EthChainIdParams{} },
+	"eth_blockNumber":                         func() domain.RPCParams { return &domain.NoParameters{} },
+	"eth_gasPrice":                            func() domain.RPCParams { return &domain.NoParameters{} },
+	"eth_chainId":                             func() domain.RPCParams { return &domain.NoParameters{} },
 	"eth_getBlockByHash":                      func() domain.RPCParams { return &domain.EthGetBlockByHashParams{} },
 	"eth_getBlockByNumber":                    func() domain.RPCParams { return &domain.EthGetBlockByNumberParams{} },
 	"eth_getLogs":                             func() domain.RPCParams { return &domain.EthGetLogsParams{} },
@@ -36,6 +36,14 @@ var methodParamsMap = map[string]func() domain.RPCParams{
 	"eth_getTransactionCount":                 func() domain.RPCParams { return &domain.EthGetTransactionCountParams{} },
 	"eth_estimateGas":                         func() domain.RPCParams { return &domain.EthEstimateGasParams{} },
 	"eth_call":                                func() domain.RPCParams { return &domain.EthCallParams{} },
+	"web3_clientVersion":                      func() domain.RPCParams { return &domain.NoParameters{} },
+	"net_listening":                           func() domain.RPCParams { return &domain.NoParameters{} },
+	"net_version":                             func() domain.RPCParams { return &domain.NoParameters{} },
+	"eth_syncing":                             func() domain.RPCParams { return &domain.NoParameters{} },
+	"eth_mining":                              func() domain.RPCParams { return &domain.NoParameters{} },
+	"eth_maxPriorityFeePerGas":                func() domain.RPCParams { return &domain.NoParameters{} },
+	"eth_hashrate":                            func() domain.RPCParams { return &domain.NoParameters{} },
+	"eth_accounts":                            func() domain.RPCParams { return &domain.NoParameters{} },
 	"eth_getTransactionByHash":                func() domain.RPCParams { return &domain.EthGetTransactionByHashParams{} },
 	"eth_getTransactionReceipt":               func() domain.RPCParams { return &domain.EthGetTransactionReceiptParams{} },
 	"eth_getBlockTransactionCountByHash":      func() domain.RPCParams { return &domain.EthGetBlockTransactionCountByHashParams{} },
