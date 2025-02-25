@@ -1,0 +1,11 @@
+apiVersion: v2
+appVersion: "0.0.1"
+type: application
+version: 0.1.0
+name: hederium
+description: A Helm chart for Hederium
+home: https://github.com/LimeChain/Hederium
+keywords:
+- hederium
+- json-rpc-relay
+- hedera
