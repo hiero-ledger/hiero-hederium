@@ -53,3 +53,57 @@ func TestNewFilter(t *testing.T) {
 		assert.Equal(t, "Invalid block range", err.Message)
 	})
 }
+
+func TestNewBlockFilter(t *testing.T) {
+	ctrl, _, mockCache, mockCommon, filterService := setupFilterTest(t)
+	defer ctrl.Finish()
+
+	testCases := []struct {
+		name           string
+		mockSetup      func()
+		expectError    bool
+		expectedResult bool
+	}{
+		{
+			name: "Success",
+			mockSetup: func() {
+				mockCommon.EXPECT().
+					GetBlockNumberByNumberOrTag("latest").
+					Return(int64(100), nil)
+
+				mockCache.EXPECT().
+					Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					Return(nil)
+			},
+			expectError:    false,
+			expectedResult: true,
+		},
+		{
+			name: "Error getting block number",
+			mockSetup: func() {
+				mockCommon.EXPECT().
+					GetBlockNumberByNumberOrTag("latest").
+					Return(int64(0), domain.NewRPCError(domain.ServerError, "failed to get block"))
+			},
+			expectError:    true,
+			expectedResult: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.mockSetup()
+
+			result, errRpc := filterService.NewBlockFilter()
+
+			if tc.expectError {
+				assert.NotNil(t, errRpc)
+				assert.Nil(t, result)
+			} else {
+				assert.Nil(t, errRpc)
+				assert.NotNil(t, result)
+				assert.Equal(t, 34, len(*result)) // "0x" + 16 bytes hex
+			}
+		})
+	}
+}

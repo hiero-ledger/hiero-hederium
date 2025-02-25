@@ -721,3 +721,10 @@ func (p *EthNewFilterParams) FromPositionalParams(params []interface{}) error {
 	}
 	return nil
 }
+
+type EthNewBlockFilterParams struct{}
+
+func (p *EthNewBlockFilterParams) FromPositionalParams(params []interface{}) error {
+	// Ignore paramters
+	return nil
+}

@@ -13,6 +13,7 @@ import (
 
 type FilterService interface {
 	NewFilter(fromBlock, toBlock string, address, topics []string) (*string, *domain.RPCError)
+	NewBlockFilter() (*string, *domain.RPCError)
 }
 
 type filterService struct {
@@ -85,6 +86,21 @@ func (s *filterService) NewFilter(fromBlock, toBlock string, address, topics []s
 	}
 
 	filterId := s.createFilter("log", fromBlock, toBlock, "", address, topics)
+
+	return filterId, nil
+}
+
+func (s *filterService) NewBlockFilter() (*string, *domain.RPCError) {
+	if err := s.requireFilterEnabled(); err != nil {
+		return nil, domain.NewUnsupportedMethodError("eth_newFilter")
+	}
+
+	blockAtCreation, errRpc := s.commonService.GetBlockNumberByNumberOrTag("latest")
+	if errRpc != nil {
+		return nil, errRpc
+	}
+
+	filterId := s.createFilter("new_block", "", "", fmt.Sprintf("0x%x", blockAtCreation), nil, nil)
 
 	return filterId, nil
 }
