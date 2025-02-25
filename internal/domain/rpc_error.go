@@ -120,3 +120,7 @@ func NewTimeStampRangeTooLargeError(fromBlock, toBlock string, fromTimestamp, to
 func NewRangeTooLarge(blockRange int) *RPCError {
 	return NewRPCError(ServerError, fmt.Sprintf("Exceeded maximum block range: %d", blockRange))
 }
+
+func NewUnsupportedJSONRPCMethodError() *RPCError {
+	return NewRPCError(MethodNotFound, "Unsupported JSON-RPC method")
+}

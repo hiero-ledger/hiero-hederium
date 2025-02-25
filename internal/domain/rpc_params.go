@@ -743,3 +743,9 @@ func (p *EthUninstallFilterParams) FromPositionalParams(params []interface{}) er
 	}
 	return fmt.Errorf("invalid filter ID parameter")
 }
+
+type EthNewPendingTransactionFilterParams struct{}
+
+func (p *EthNewPendingTransactionFilterParams) FromPositionalParams(params []interface{}) error {
+	return nil
+}
