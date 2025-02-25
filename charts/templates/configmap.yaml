@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hederium.fullname" . }}-config
+  labels:
+    {{- include "hederium.labels" . | nindent 4 }}
+data:
+  config.yaml: |-
+    environment: {{ .Values.config.environment | quote }}
+    
+    application:
+      version: {{ .Values.config.application.version | quote }}
+    
+    server:
+      port: {{ .Values.config.server.port }}
+    
+    hedera:
+      network: {{ .Values.config.hedera.network | quote }}
+      operatorId: {{ .Values.config.hedera.operatorId | quote }}
+      operatorKey: {{ .Values.config.hedera.operatorKey | quote }}
+      chainId: {{ .Values.config.hedera.chainId | quote }}
+      hbarBudget: {{ .Values.config.hedera.hbarBudget | quote }}
+    
+    mirrorNode:
+      baseUrl: {{ .Values.config.mirrorNode.baseUrl | quote }}
+      timeoutSeconds: {{ .Values.config.mirrorNode.timeoutSeconds | quote }}
+    
+    limiter:
+      free:
+        requestsPerMinute: {{ .Values.config.limiter.free.requestsPerMinute | quote }}
+        hbarLimit: {{ .Values.config.limiter.free.hbarLimit | quote }}
+      premium:
+        requestsPerMinute: {{ .Values.config.limiter.premium.requestsPerMinute | quote }}
+        hbarLimit: {{ .Values.config.limiter.premium.hbarLimit | quote }}
+    
+    logging:
+      level: {{ .Values.config.logging.level | quote }}
+      DisableCaller: {{ .Values.config.logging.DisableCaller | quote }}
+    
+    apiKeys:
+      {{- range .Values.config.apiKeys }}
+      - key: {{ .key | quote }}
+        tier: {{ .tier | quote }}
+      {{- end }}
+    
+    features:
+      enforceApiKey: {{ .Values.config.features.enforceApiKey }}
+    
+    cache:
+      defaultExpiration: {{ .Values.config.cache.defaultExpiration | quote }}
+      cleanupInterval: {{ .Values.config.cache.cleanupInterval | quote }}
