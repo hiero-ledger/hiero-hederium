@@ -15,6 +15,7 @@ type FilterService interface {
 	NewFilter(fromBlock, toBlock string, address, topics []string) (*string, *domain.RPCError)
 	NewBlockFilter() (*string, *domain.RPCError)
 	UninstallFilter(filterID string) (interface{}, *domain.RPCError)
+	NewPendingTransactionFilter() (interface{}, *domain.RPCError)
 }
 
 type filterService struct {
@@ -126,4 +127,9 @@ func (s *filterService) UninstallFilter(filterID string) (interface{}, *domain.R
 	}
 
 	return true, nil
+}
+
+func (s *filterService) NewPendingTransactionFilter() (interface{}, *domain.RPCError) {
+	s.logger.Info("creating new pending transaction filter")
+	return nil, domain.NewUnsupportedJSONRPCMethodError()
 }
