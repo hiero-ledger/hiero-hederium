@@ -17,6 +17,7 @@ type FilterService interface {
 	UninstallFilter(filterID string) (interface{}, *domain.RPCError)
 	NewPendingTransactionFilter() (interface{}, *domain.RPCError)
 	GetFilterLogs(filterID string) ([]domain.Log, *domain.RPCError)
+	GetFilterChanges(filterID string) (interface{}, *domain.RPCError)
 }
 
 type filterService struct {
@@ -168,4 +169,102 @@ func (s *filterService) GetFilterLogs(filterID string) ([]domain.Log, *domain.RP
 	}
 
 	return logs, nil
+}
+
+func (s *filterService) GetFilterChanges(filterID string) (interface{}, *domain.RPCError) {
+	s.logger.Info("getting filter changes", zap.String("filterID", filterID))
+
+	if err := s.requireFilterEnabled(); err != nil {
+		return nil, domain.NewUnsupportedMethodError("eth_getFiltetChanges")
+	}
+
+	ctx := context.Background()
+
+	cacheKey := fmt.Sprintf("filterId_%s", filterID)
+	var filter domain.Filter
+	if err := s.cacheService.Get(ctx, cacheKey, &filter); err != nil {
+		return nil, domain.NewFilterNotFoundError()
+	}
+
+	var blockResult []string
+	var result interface{}
+
+	if filter.Type == "log" {
+		logParams := domain.LogParams{
+			FromBlock: filter.FromBlock,
+			ToBlock:   filter.ToBlock,
+			Address:   filter.Address,
+			Topics:    filter.Topics,
+		}
+
+		logResult, errRpc := s.commonService.GetLogs(logParams)
+		if errRpc != nil {
+			return nil, errRpc
+		}
+
+		var latestBlock int64
+		var err error
+		if len(logResult) > 0 {
+			latestBlock, err = HexToDec(logResult[len(logResult)-1].BlockNumber)
+			if err != nil {
+				s.logger.Error("failed to convert block number to int64", zap.Error(err))
+				return nil, domain.NewInternalError("unexpected error")
+			}
+		} else {
+			latestBlock, errRpc = s.commonService.GetBlockNumberByNumberOrTag("latest")
+			if errRpc != nil {
+				return nil, errRpc
+			}
+		}
+		latestBlock++
+		filter.LastQueried = fmt.Sprintf("0x%x", latestBlock)
+
+		result = logResult
+	} else if filter.Type == "new_block" {
+
+		var blockNum string
+		if filter.LastQueried != "" {
+			blockNum = filter.LastQueried
+		} else if filter.BlockAtCreation != "" {
+			blockNum = filter.BlockAtCreation
+		}
+
+		blocks, err := s.mirrorClient.GetBlocks(blockNum)
+		if err != nil {
+			s.logger.Error("failed to get blocks from mirror node", zap.Error(err))
+			return nil, domain.NewInternalError("unexpected error")
+		}
+
+		var latestBlock int64
+		var errRpc *domain.RPCError
+		if len(blocks) > 0 {
+
+			if blockNumFloat, ok := blocks[len(blocks)-1]["number"].(float64); ok {
+				latestBlock = int64(blockNumFloat)
+			} else {
+				s.logger.Error("failed to convert block number to int64")
+				return nil, domain.NewInternalError("unexpected error")
+			}
+		} else {
+			latestBlock, errRpc = s.commonService.GetBlockNumberByNumberOrTag("latest")
+			if errRpc != nil {
+				return nil, errRpc
+			}
+		}
+		filter.LastQueried = fmt.Sprintf("0x%x", latestBlock)
+		for _, b := range blocks {
+			blockResult = append(blockResult, b["hash"].(string))
+		}
+
+		result = blockResult
+
+	} else {
+		return nil, domain.NewUnsupportedMethodError("eth_getFilterChanges")
+	}
+
+	if err := s.cacheService.Set(ctx, cacheKey, filter, DefaultExpiration); err != nil {
+		s.logger.Error("failed to set filter id to cache", zap.Error(err))
+	}
+
+	return result, nil
 }

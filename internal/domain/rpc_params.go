@@ -747,6 +747,7 @@ func (p *EthUninstallFilterParams) FromPositionalParams(params []interface{}) er
 type EthNewPendingTransactionFilterParams struct{}
 
 func (p *EthNewPendingTransactionFilterParams) FromPositionalParams(params []interface{}) error {
+	// Ignore params
 	return nil
 }
 
@@ -755,6 +756,21 @@ type EthGetFilterLogsParams struct {
 }
 
 func (p *EthGetFilterLogsParams) FromPositionalParams(params []interface{}) error {
+	if len(params) < 1 {
+		return fmt.Errorf("missing filter ID parameter")
+	}
+	if filterId, ok := params[0].(string); ok {
+		p.FilterID = filterId
+		return nil
+	}
+	return fmt.Errorf("invalid filter ID parameter")
+}
+
+type EthGetFilterChangesParams struct {
+	FilterID string `json:"filterId" validate:"required,hexadecimal"`
+}
+
+func (p *EthGetFilterChangesParams) FromPositionalParams(params []interface{}) error {
 	if len(params) < 1 {
 		return fmt.Errorf("missing filter ID parameter")
 	}
