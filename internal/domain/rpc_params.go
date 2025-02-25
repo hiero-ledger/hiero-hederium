@@ -749,3 +749,18 @@ type EthNewPendingTransactionFilterParams struct{}
 func (p *EthNewPendingTransactionFilterParams) FromPositionalParams(params []interface{}) error {
 	return nil
 }
+
+type EthGetFilterLogsParams struct {
+	FilterID string `json:"filterId" validate:"required,hexadecimal"`
+}
+
+func (p *EthGetFilterLogsParams) FromPositionalParams(params []interface{}) error {
+	if len(params) < 1 {
+		return fmt.Errorf("missing filter ID parameter")
+	}
+	if filterId, ok := params[0].(string); ok {
+		p.FilterID = filterId
+		return nil
+	}
+	return fmt.Errorf("invalid filter ID parameter")
+}
