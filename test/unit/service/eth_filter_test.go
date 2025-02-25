@@ -186,5 +186,122 @@ func TestNewPendingTransactionFilter(t *testing.T) {
 	result, errRpc := filterService.NewPendingTransactionFilter()
 	assert.Nil(t, result)
 	assert.NotNil(t, errRpc)
-	assert.Equal(t, domain.MethodNotFound, errRpc.Code)
+	assert.Equal(t, -32601, errRpc.Code)
+}
+
+func TestGetFilterLogs(t *testing.T) {
+	ctrl, _, mockCache, mockCommon, filterService := setupFilterTest(t)
+	defer ctrl.Finish()
+
+	testCases := []struct {
+		name           string
+		filterID       string
+		mockSetup      func()
+		expectError    bool
+		expectedResult []domain.Log
+	}{
+		{
+			name:     "Success",
+			filterID: "0x123abc",
+			mockSetup: func() {
+				filter := domain.Filter{
+					ID:        "0x123abc",
+					Type:      "log",
+					FromBlock: "0x1",
+					ToBlock:   "0x2",
+					Address:   []string{"0xaddress1"},
+					Topics:    []string{"0xtopic1"},
+				}
+
+				mockCache.EXPECT().
+					Get(gomock.Any(), fmt.Sprintf("filterId_%s", "0x123abc"), gomock.Any()).
+					DoAndReturn(func(ctx interface{}, key string, value interface{}) error {
+						f := value.(*domain.Filter)
+						*f = filter
+						return nil
+					})
+
+				expectedLogs := []domain.Log{
+					{
+						Address:          "0xaddress1",
+						BlockHash:        "0xblockhash1",
+						BlockNumber:      "0x1",
+						Data:             "0xdata1",
+						LogIndex:         "0x0",
+						Topics:           []string{"0xtopic1"},
+						TransactionHash:  "0xtxhash1",
+						TransactionIndex: "0x0",
+					},
+				}
+
+				mockCommon.EXPECT().
+					GetLogs(gomock.Any()).
+					Return(expectedLogs, nil)
+
+				mockCache.EXPECT().
+					Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					Return(nil)
+			},
+			expectError: false,
+			expectedResult: []domain.Log{
+				{
+					Address:          "0xaddress1",
+					BlockHash:        "0xblockhash1",
+					BlockNumber:      "0x1",
+					Data:             "0xdata1",
+					LogIndex:         "0x0",
+					Topics:           []string{"0xtopic1"},
+					TransactionHash:  "0xtxhash1",
+					TransactionIndex: "0x0",
+				},
+			},
+		},
+		{
+			name:     "Filter not found",
+			filterID: "0xnonexistent",
+			mockSetup: func() {
+				mockCache.EXPECT().
+					Get(gomock.Any(), fmt.Sprintf("filterId_%s", "0xnonexistent"), gomock.Any()).
+					Return(fmt.Errorf("not found"))
+			},
+			expectError:    true,
+			expectedResult: nil,
+		},
+		{
+			name:     "Invalid filter type",
+			filterID: "0x123abc",
+			mockSetup: func() {
+				filter := domain.Filter{
+					ID:   "0x123abc",
+					Type: "block", // Not a log filter
+				}
+
+				mockCache.EXPECT().
+					Get(gomock.Any(), fmt.Sprintf("filterId_%s", "0x123abc"), gomock.Any()).
+					DoAndReturn(func(ctx interface{}, key string, value interface{}) error {
+						f := value.(*domain.Filter)
+						*f = filter
+						return nil
+					})
+			},
+			expectError:    true,
+			expectedResult: nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.mockSetup()
+
+			result, errRpc := filterService.GetFilterLogs(tc.filterID)
+
+			if tc.expectError {
+				assert.NotNil(t, errRpc)
+				assert.Nil(t, result)
+			} else {
+				assert.Nil(t, errRpc)
+				assert.Equal(t, tc.expectedResult, result)
+			}
+		})
+	}
 }
