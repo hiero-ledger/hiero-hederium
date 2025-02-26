@@ -58,6 +58,14 @@ const (
 	CreateNonFungibleTokenWithFeesV3 string = "0x5e0c7ee3"
 
 	MaxTimestampParamRange = 604800 // 7 days in seconds
+
+	maxBlockCountForResult  = 10
+	defaultUsedGasRatio     = 0.5
+	zeroHex32Bytes          = "0x0000000000000000000000000000000000000000000000000000000000000000"
+	blockRangeLimit         = 1000
+	redirectBytecodePrefix  = "6080604052348015600f57600080fd5b506000610167905077618dc65e"
+	redirectBytecodePostfix = "600052366000602037600080366018016008845af43d806000803e8160008114605857816000f35b816000fdfea2646970667358221220d8378feed472ba49a0005514ef7087017f707b45fb9bf56bb81bb93ff19a238b64736f6c634300080b0033"
+	iHTSAddress             = "0x0000000000000000000000000000000000000167"
 )
 
 var HTSCreateFuncSelectors = map[string]struct{}{

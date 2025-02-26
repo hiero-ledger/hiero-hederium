@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type FilterService interface {
+type FilterServicer interface {
 	NewFilter(fromBlock, toBlock string, address, topics []string) (*string, *domain.RPCError)
 	NewBlockFilter() (*string, *domain.RPCError)
 	UninstallFilter(filterID string) (interface{}, *domain.RPCError)
@@ -27,7 +27,7 @@ type filterService struct {
 	commonService CommonService
 }
 
-func NewFilterService(mirrorClient infrahedera.MirrorNodeClient, cacheService cache.CacheService, logger *zap.Logger, commonService CommonService) FilterService {
+func NewFilterService(mirrorClient infrahedera.MirrorNodeClient, cacheService cache.CacheService, logger *zap.Logger, commonService CommonService) FilterServicer {
 	return &filterService{
 		mirrorClient:  mirrorClient,
 		cacheService:  cacheService,

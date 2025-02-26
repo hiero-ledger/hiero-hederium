@@ -15,15 +15,41 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	maxBlockCountForResult  = 10
-	defaultUsedGasRatio     = 0.5
-	zeroHex32Bytes          = "0x0000000000000000000000000000000000000000000000000000000000000000"
-	blockRangeLimit         = 1000
-	redirectBytecodePrefix  = "6080604052348015600f57600080fd5b506000610167905077618dc65e"
-	redirectBytecodePostfix = "600052366000602037600080366018016008845af43d806000803e8160008114605857816000f35b816000fdfea2646970667358221220d8378feed472ba49a0005514ef7087017f707b45fb9bf56bb81bb93ff19a238b64736f6c634300080b0033"
-	iHTSAddress             = "0x0000000000000000000000000000000000000167"
-)
+// TODO: Refactor the EthService struct.
+// Decide which methods should be private, public,
+// and if any should be helper functions.
+type EthServicer interface {
+	Call(transaction interface{}, blockParam interface{}) (interface{}, *domain.RPCError)
+	EstimateGas(transaction interface{}, blockParam interface{}) (string, *domain.RPCError)
+	FeeHistory(blockCount string, newestBlock string, rewardPercentiles []string) (interface{}, *domain.RPCError)
+	GetAccounts() (interface{}, *domain.RPCError)
+	GetBalance(address string, blockNumberTagOrHash string) string
+	GetBlockByHash(hash string, showDetails bool) (interface{}, *domain.RPCError)
+	GetBlockByNumber(numberOrTag string, showDetails bool) (interface{}, *domain.RPCError)
+	GetBlockNumber() (interface{}, *domain.RPCError)
+	GetBlockTransactionCountByHash(blockHash string) (interface{}, *domain.RPCError)
+	GetBlockTransactionCountByNumber(blockNumberOrTag string) (interface{}, *domain.RPCError)
+	GetChainId() (interface{}, *domain.RPCError)
+	GetCode(address string, blockNumberOrTag string) (interface{}, *domain.RPCError)
+	GetGasPrice() (interface{}, *domain.RPCError)
+	GetLogs(logParams domain.LogParams) (interface{}, *domain.RPCError)
+	GetStorageAt(address string, slot string, blockNumberOrHash string) (interface{}, *domain.RPCError)
+	GetTransactionByBlockHashAndIndex(blockHash string, txIndex string) (interface{}, *domain.RPCError)
+	GetTransactionByBlockNumberAndIndex(blockNumberOrTag string, txIndex string) (interface{}, *domain.RPCError)
+	GetTransactionByHash(hash string) (interface{}, *domain.RPCError)
+	GetTransactionCount(address string, blockNumberOrTag string) string
+	GetTransactionReceipt(hash string) (interface{}, *domain.RPCError)
+	GetUncleByBlockHashAndIndex(blockHash string, index string) (interface{}, *domain.RPCError)
+	GetUncleByBlockNumberAndIndex(blockNumber string, index string) (interface{}, *domain.RPCError)
+	GetUncleCountByBlockHash(blockHash string) (interface{}, *domain.RPCError)
+	GetUncleCountByBlockNumber(blockNumber string) (interface{}, *domain.RPCError)
+	Hashrate() (interface{}, *domain.RPCError)
+	MaxPriorityFeePerGas() (interface{}, *domain.RPCError)
+	Mining() (interface{}, *domain.RPCError)
+	ProcessTransactionResponse(contractResult domain.ContractResultResponse) interface{}
+	SendRawTransaction(data string) (interface{}, *domain.RPCError)
+	Syncing() (interface{}, *domain.RPCError)
+}
 
 type EthService struct {
 	hClient       infrahedera.HederaNodeClient
