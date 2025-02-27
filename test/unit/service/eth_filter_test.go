@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func setupFilterTest(t *testing.T) (*gomock.Controller, *mocks.MockMirrorClient, *mocks.MockCacheService, *mocks.MockCommonService, service.FilterService) {
+func setupFilterTest(t *testing.T) (*gomock.Controller, *mocks.MockMirrorClient, *mocks.MockCacheService, *mocks.MockCommonService, service.FilterServicer) {
 	ctrl := gomock.NewController(t)
 	logger, _ := zap.NewDevelopment()
 	mockClient := mocks.NewMockMirrorClient(ctrl)

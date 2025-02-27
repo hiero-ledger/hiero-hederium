@@ -11,7 +11,7 @@ import (
 	"github.com/LimeChain/Hederium/internal/infrastructure/hedera"
 	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
 	"github.com/LimeChain/Hederium/internal/infrastructure/logger"
-	"github.com/LimeChain/Hederium/internal/transport"
+	"github.com/LimeChain/Hederium/internal/transport/http_server"
 )
 
 func main() {
@@ -42,10 +42,10 @@ func main() {
 
 	enforceAPIKey := viper.GetBool("features.enforceApiKey")
 
-	router := transport.SetupRouter(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, cacheService)
 	port := viper.GetString("server.port")
-	log.Info("Starting Hederium server", zap.String("port", port))
-	if err := router.Run(":" + port); err != nil {
-		log.Fatal("Failed to run server", zap.Error(err))
+
+	server := http_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, cacheService, port)
+	if err := server.Start(); err != nil {
+		log.Fatal("Failed to start server", zap.Error(err))
 	}
 }
