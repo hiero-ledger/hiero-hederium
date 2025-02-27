@@ -3,17 +3,17 @@ package service
 import "go.uber.org/zap"
 
 // Web3 interface remains the same.
-type Web3 interface {
+type Web3Servicer interface {
 	ClientVersion() string
 }
 
-type Web3Service struct {
+type web3Service struct {
 	log                *zap.Logger
 	applicationVersion string
 }
 
-func NewWeb3Service(log *zap.Logger, applicationVersion string) *Web3Service {
-	return &Web3Service{
+func NewWeb3Service(log *zap.Logger, applicationVersion string) Web3Servicer {
+	return &web3Service{
 		log:                log,
 		applicationVersion: applicationVersion,
 	}
@@ -21,7 +21,7 @@ func NewWeb3Service(log *zap.Logger, applicationVersion string) *Web3Service {
 
 // ClientVersion returns "relay/<version>" where version is read from application.version in config.
 // If application.version is not set, returns "relay/unknown".
-func (w *Web3Service) ClientVersion() string {
+func (w *web3Service) ClientVersion() string {
 	w.log.Debug("Getting client version")
 
 	version := w.applicationVersion

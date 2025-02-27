@@ -1,12 +1,19 @@
-package transport
+package rpc
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
 )
+
+func init() {
+	if err := RegisterCustomValidators(); err != nil {
+		panic(fmt.Sprintf("Failed to register custom validators: %v", err))
+	}
+}
 
 func RegisterCustomValidators() error {
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
