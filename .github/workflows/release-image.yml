@@ -1,4 +1,4 @@
-name: Build and Push Relase Image
+name: Build and Push Release Image
 
 on:
   release:
@@ -32,17 +32,19 @@ jobs:
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
-        
+
       - name: Build and push image
         uses: docker/build-push-action@v4
         with:
           context: .
-          platform: linux/amd64, linux/arm64
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            gcr.io/&{{ secrets.GCP_PROJECT_ID }}/hederium:&{{ steps.version.outputs.VERSION }}
-            gcr.io/&{{ secrets.GCP_PROJECT_ID }}/hederium:latest
+            gcr.io/${{ secrets.GCP_PROJECT_ID }}/hederium:${{ steps.version.outputs.VERSION }}
+            gcr.io/${{ secrets.GCP_PROJECT_ID }}/hederium:latest
           build-args: |
             BUILD_DATE=${{ steps.date.outputs.DATE }}
             BUILD_VERSION=${{ steps.version.outputs.VERSION }}
             COMMIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
