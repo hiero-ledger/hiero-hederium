@@ -1,0 +1,48 @@
+name: Build and Push Relase Image
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-and-push:
+    name: Build and Push to GCR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Extract release version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - name: Authenticate Docker to GCR
+        run: gcloud auth configure-docker gcr.io  
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+        
+      - name: Build and push image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          platform: linux/amd64, linux/arm64
+          push: true
+          tags: |
+            gcr.io/&{{ secrets.GCP_PROJECT_ID }}/hederium:&{{ steps.version.outputs.VERSION }}
+            gcr.io/&{{ secrets.GCP_PROJECT_ID }}/hederium:latest
+          build-args: |
+            BUILD_DATE=${{ steps.date.outputs.DATE }}
+            BUILD_VERSION=${{ steps.version.outputs.VERSION }}
+            COMMIT_SHA=${{ github.sha }}

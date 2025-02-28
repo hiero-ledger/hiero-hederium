@@ -1,0 +1,51 @@
+name: Deploy Release with Helm
+
+on:
+  workflow_run:
+    workflows: ["Build and Push Release Image"]
+    types: 
+      - completed
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'latest'
+
+      - name: Extract release version
+        id: version
+        run: |
+          RELEASE_TAG=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name)
+          echo "VERSION=${RELEASE_TAG#v}" >> $GITHUB_OUTPUT
+
+      # TODO: Uncomment this when we have a production cluster
+      # - name: Set up Google Cloud SDK
+      #   uses: google-github-actions/setup-gcloud@v1
+      #   with:
+      #     project_id: ${{ secrets.GCP_PROJECT_ID }}
+      #     service_account_key: ${{ secrets.GCP_SA_KEY }}
+      #     export_default_credentials: true
+
+      # - name: Get GKE credentials
+      #   uses: google-github-actions/get-gke-credentials@v1
+      #   with:
+      #     cluster_name: unknown-for-now
+      #     location: unknown-for-now
+
+      - name: Update Helm Charts
+        run: |
+          sed -i "s/^appVersion:.*/appVersion: \"${{ steps.version.outputs.VERSION }}\"/" charts/Chart.yaml
+
+      # TODO: Uncomment this when we have a production cluster
+      # - name: Deploy to GKE
+      #   run: |
+      #     helm upgrade --install hederium ./charts \
+      #     -f charts/production-values.yaml \
+      #     --set image.tag=v${{ steps.version.outputs.VERSION}}
