@@ -40,6 +40,7 @@ type wsServer struct {
 	upgrader        websocket.Upgrader
 	connectionCount int
 	connectionMutex sync.Mutex
+	subHandler      *SubscriptionHandler
 }
 
 func NewServer(
@@ -83,6 +84,7 @@ func NewServer(
 		upgrader:        upgrader,
 		connectionCount: 0,
 		connectionMutex: sync.Mutex{},
+		subHandler:      NewSubscriptionHandler(logger, serviceProvider.EthService(), cacheService),
 	}
 
 	if enforceAPIKey {
@@ -183,6 +185,7 @@ func (s *wsServer) handleWebSocket(c *gin.Context) {
 		zap.Int("active_connections", currentConnections))
 
 	defer func() {
+		s.subHandler.CleanupConnection(conn)
 		conn.Close()
 		remainingConnections := s.decrementConnectionCount()
 		s.logger.Info("WebSocket connection closed", zap.Int("active_connections", remainingConnections))
@@ -218,7 +221,13 @@ func (s *wsServer) handleWebSocket(c *gin.Context) {
 			continue
 		}
 
-		resp := s.rpcHandler.HandleRequest(ctx, &req)
+		// TODO: Think of better way to handle this
+		var resp *rpc.JSONRPCResponse
+		if req.Method == "eth_subscribe" || req.Method == "eth_unsubscribe" {
+			resp = s.subHandler.HandleRequest(conn, &req)
+		} else {
+			resp = s.rpcHandler.HandleRequest(ctx, &req)
+		}
 
 		s.sendResponse(conn, resp)
 	}
