@@ -5,6 +5,7 @@ application:
 
 server:
   port: 7546
+  type: "http"
 
 hedera:
   network: "testnet"
