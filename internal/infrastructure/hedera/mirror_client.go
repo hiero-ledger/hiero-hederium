@@ -598,7 +598,7 @@ func (m *MirrorClient) fetchLogsPages(url string) (*domain.ContractResultsLogRes
 
 	if resp.StatusCode != http.StatusOK {
 		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
-		return nil, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
+		return nil, nil
 	}
 
 	var result domain.ContractResultsLogResponse
@@ -619,7 +619,7 @@ func (m *MirrorClient) getPaginatedResults(url string) ([]domain.LogEntry, error
 			return nil, err
 		}
 
-		if len(result.Logs) == 0 {
+		if result == nil || len(result.Logs) == 0 {
 			break
 		}
 
@@ -661,7 +661,7 @@ func (m *MirrorClient) GetContractResultWithRetry(queryParams map[string]interfa
 
 		if resp.StatusCode != http.StatusOK {
 			m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
-			return nil, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
+			return nil, nil
 		}
 
 		// Should make struct for this
