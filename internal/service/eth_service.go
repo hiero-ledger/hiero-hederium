@@ -835,8 +835,9 @@ func (s *EthService) GetCode(address string, blockNumberOrTag string) (interface
 		}
 	case *domain.TokenResponse:
 		s.logger.Debug("Token redirect case, returning redirectBytecode")
-		redirectBytecode := redirectBytecodePrefix + address[2:] + redirectBytecodePostfix
-		return "0x" + redirectBytecode, nil
+
+		redirectBytecode := fmt.Sprintf("%s%s%s", redirectBytecodePrefix, address[2:], redirectBytecodePostfix)
+		return redirectBytecode, nil
 	}
 
 	result, err = s.hClient.GetContractByteCode(0, 0, address)
