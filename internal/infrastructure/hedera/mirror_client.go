@@ -37,14 +37,16 @@ type MirrorNodeClient interface {
 
 type MirrorClient struct {
 	BaseURL      string
+	Web3URL      string
 	Timeout      time.Duration
 	logger       *zap.Logger
 	cacheService cache.CacheService
 }
 
-func NewMirrorClient(baseURL string, timeoutSeconds int, logger *zap.Logger, cacheService cache.CacheService) *MirrorClient {
+func NewMirrorClient(baseURL string, web3Url string, timeoutSeconds int, logger *zap.Logger, cacheService cache.CacheService) *MirrorClient {
 	return &MirrorClient{
 		BaseURL:      baseURL,
+		Web3URL:      web3Url,
 		Timeout:      time.Duration(timeoutSeconds) * time.Second,
 		logger:       logger,
 		cacheService: cacheService,
@@ -431,14 +433,15 @@ func (m *MirrorClient) RepeatGetContractResult(transactionIdOrHash string, retri
 func (m *MirrorClient) PostCall(callObject map[string]interface{}) interface{} {
 	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
 	defer cancel()
-
 	jsonBody, err := json.Marshal(callObject)
 	if err != nil {
 		m.logger.Error("Error marshaling call object", zap.Error(err))
 		return nil
 	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.BaseURL+"/api/v1/contracts/call", bytes.NewBuffer(jsonBody))
+	url := fmt.Sprintf("%s/api/v1/contracts/call", m.Web3URL)
+	m.logger.Info("Posting contract call", zap.String("url", url))
+	m.logger.Info("Body", zap.String("body", string(jsonBody)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		m.logger.Error("Error creating request for contract call", zap.Error(err))
 		return nil
