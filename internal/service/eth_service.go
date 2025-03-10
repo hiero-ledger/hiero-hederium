@@ -912,3 +912,8 @@ func (s *EthService) GetUncleByBlockHashAndIndex(blockHash string, index string)
 	s.logger.Debug("Returning nil as per specification")
 	return nil, nil
 }
+
+func (s *EthService) SubmitWork() (interface{}, *domain.RPCError) {
+	s.logger.Debug("Returning nil as per specification")
+	return false, nil
+}
