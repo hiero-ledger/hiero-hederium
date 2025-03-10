@@ -260,6 +260,11 @@ func (s *commonService) GetLogsWithParams(address []string, params map[string]in
 
 func (s *commonService) GetBlockNumberByNumberOrTag(blockNumberOrTag string) (int64, *domain.RPCError) {
 	s.logger.Debug("Getting block number by hash or tag", zap.String("blockHashOrTag", blockNumberOrTag))
+
+	if blockTagIsLatestOrPending(&blockNumberOrTag) {
+		blockNumberOrTag = "latest"
+	}
+
 	switch blockNumberOrTag {
 	case "latest", "pending":
 		latestBlock, errMap := s.GetBlockNumber()
