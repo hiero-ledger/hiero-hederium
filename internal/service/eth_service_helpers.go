@@ -140,7 +140,7 @@ func ProcessTransaction(contractResult domain.ContractResults) interface{} {
 	hexBlockNumber := hexify(contractResult.BlockNumber)
 	hexGasUsed := hexify(contractResult.GasUsed)
 	hexTransactionIndex := hexify(int64(contractResult.TransactionIndex))
-	hexValue := hexify(int64(contractResult.Amount))
+	hexValue := fmt.Sprintf("0x%x", uint64(contractResult.Amount))
 	hexV := hexify(int64(contractResult.V))
 
 	// Safe string slicing with length checks
@@ -233,7 +233,14 @@ func (s *EthService) ProcessTransactionResponse(contractResult domain.ContractRe
 	hexBlockNumber := hexify(contractResult.BlockNumber)
 	hexGasUsed := hexify(contractResult.GasUsed)
 	hexTransactionIndex := hexify(int64(contractResult.TransactionIndex))
-	hexValue := hexify(int64(contractResult.Amount))
+	value, err := s.tinybarsToWeibars(int64(contractResult.Amount), true)
+	if err != nil {
+		// TODO: If allowNegative in tinybarsToWeibars can be false - this should return error and be handled in properly
+		// return domain.NewRPCError(domain.InternalError, "Invalid value - cannot pass negative number")
+		s.logger.Error("Invalid value - cannot pass negative number", zap.Error(err))
+		return nil
+	}
+	hexValue := hexify(value)
 	hexV := hexify(int64(contractResult.V))
 
 	// Safe string slicing with length checks
@@ -337,6 +344,25 @@ func (s *EthService) ProcessTransactionResponse(contractResult domain.ContractRe
 	default:
 		return commonFields // Default to legacy transaction
 	}
+}
+
+func (s *EthService) tinybarsToWeibars(tinybars int64, allowNegative bool) (int64, error) {
+	if tinybars == 0 {
+		return 0, nil
+	}
+
+	if allowNegative && tinybars < 0 {
+		return tinybars, nil
+	}
+
+	if tinybars < 0 {
+		return 0, fmt.Errorf("tinybars cannot be negative")
+	}
+
+	coefBigInt := big.NewInt(TINYBAR_TO_WEIBAR_COEF)
+	weiBigInt := new(big.Int).Mul(big.NewInt(tinybars), coefBigInt)
+
+	return weiBigInt.Int64(), nil
 }
 
 func ParseTransactionCallObject(s *EthService, transaction interface{}) (*domain.TransactionCallObject, error) {
