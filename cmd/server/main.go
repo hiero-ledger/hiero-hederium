@@ -27,6 +27,8 @@ func main() {
 		viper.GetString("hedera.network"),
 		viper.GetString("hedera.operatorId"),
 		viper.GetString("hedera.operatorKey"),
+		viper.GetString("hedera.operatorKeyFormat"),
+		viper.GetStringMapString("hedera.networkConfig"),
 	)
 	if err != nil {
 		log.Fatal("Failed to initialize Hedera client", zap.Error(err))
@@ -39,7 +41,7 @@ func main() {
 
 	cacheService := cache.NewMemoryCache(viper.GetDuration("cache.defaultExpiration"), viper.GetDuration("cache.cleanupInterval"))
 
-	mClient := hedera.NewMirrorClient(viper.GetString("mirrorNode.baseUrl"), viper.GetInt("mirrorNode.timeoutSeconds"), log, cacheService)
+	mClient := hedera.NewMirrorClient(viper.GetString("mirrorNode.baseUrl"), viper.GetString("mirrorNode.web3Url"), viper.GetInt("mirrorNode.timeoutSeconds"), log, cacheService)
 
 	enforceAPIKey := viper.GetBool("features.enforceApiKey")
 

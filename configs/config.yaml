@@ -9,18 +9,22 @@ server:
 
 hedera:
   network: "testnet"
-  operatorId: "0.0.1466"
-  operatorKey: "302e020100300506032b6570042204206bb5ca5c9a33b8a12e2d962fe14587fa40e92306e9c39bcd2bb62951100d7248"
+  networkConfig:
+    "127.0.0.1:50211": "0.0.3"
+  operatorId: "0.0.5425484"
+  operatorKey: "3030020100300706052b8104000a042204209d674f6e14d913487b4c3f43aa372a3b81dc7708b76a6d082c37c1ea5cbeb064"
+  operatorKeyFormat: "DER"
   chainId: "0x128" # always pass this as a hex
-  hbarBudget: 1000
+  hbarBudget: 5000000000
 
 mirrorNode:
   baseUrl: "https://testnet.mirrornode.hedera.com"
-  timeoutSeconds: 10
+  web3Url: "https://testnet.mirrornode.hedera.com"
+  timeoutSeconds: 90000
 limiter:
   free:
-    requestsPerMinute: 100
-    hbarLimit: 10
+    requestsPerMinute: 1000000
+    hbarLimit: 5000000000
   premium:
     requestsPerMinute: 1000
     hbarLimit: 10000
