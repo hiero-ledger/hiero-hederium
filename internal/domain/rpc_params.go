@@ -11,7 +11,7 @@ import (
 // RPCParams interface defines methods that all RPC parameter structs should implement
 type RPCParams interface {
 	// FromPositionalParams converts positional parameters (array) to struct fields
-	FromPositionalParams(params []interface{}) error
+	FromPositionalParams(params []interface{}) *RPCError
 }
 
 // EthGetBlockByHashParams represents parameters for eth_getBlockByHash
@@ -40,14 +40,23 @@ type EthGetTransactionCountParams struct {
 
 // EthEstimateGasParams represents parameters for eth_estimateGas
 type EthEstimateGasParams struct {
-	CallObject     map[string]interface{} `json:"callObject" binding:"required"`
-	BlockParameter string                 `json:"blockParameter" binding:"omitempty,block_number_or_tag"`
+	CallObject     CallObject `json:"callObject" binding:"required"`
+	BlockParameter string     `json:"blockParameter" binding:"omitempty,block_number_or_tag"`
+}
+
+type CallObject struct {
+	From     string `json:"from" binding:"omitempty,eth_address"`
+	To       string `json:"to" binding:"omitempty,eth_address"`
+	Gas      string `json:"gas" binding:"omitempty,hexadecimal"`
+	GasPrice string `json:"gasPrice" binding:"omitempty,hexadecimal"`
+	Value    string `json:"value" binding:"omitempty,hexadecimal"`
+	Data     string `json:"data" binding:"omitempty,data"`
 }
 
 // EthCallParams represents parameters for eth_call
 type EthCallParams struct {
-	CallObject map[string]interface{} `json:"callObject" binding:"required"`
-	Block      string                 `json:"block" binding:"required,block_number_or_tag"`
+	CallObject CallObject `json:"callObject" binding:"required"`
+	Block      string     `json:"block" binding:"required,block_number_or_tag"`
 }
 
 // EthGetTransactionByHashParams represents parameters for eth_getTransactionByHash
@@ -128,49 +137,27 @@ type EthGetCodeParams struct {
 	BlockNumber string `json:"blockNumber" binding:"required,block_number_or_tag"`
 }
 
-// EthGetUncleCountByBlockHashParams represents parameters for eth_getUncleCountByBlockHash
-type EthGetUncleCountByBlockHashParams struct {
-	BlockHash string `json:"blockHash" binding:"required,len=66,hexadecimal,startswith=0x"`
-}
-
-// EthGetUncleCountByBlockNumberParams represents parameters for eth_getUncleCountByBlockNumber
-type EthGetUncleCountByBlockNumberParams struct {
-	BlockNumber string `json:"blockNumber" binding:"required,block_number_or_tag"`
-}
-
-// EthGetUncleByBlockHashAndIndexParams represents parameters for eth_getUncleByBlockHashAndIndex
-type EthGetUncleByBlockHashAndIndexParams struct {
-	BlockHash string `json:"blockHash" binding:"required,len=66,hexadecimal,startswith=0x"`
-	Index     string `json:"index" binding:"required,hexadecimal,startswith=0x"`
-}
-
-// EthGetUncleByBlockNumberAndIndexParams represents parameters for eth_getUncleByBlockNumberAndIndex
-type EthGetUncleByBlockNumberAndIndexParams struct {
-	BlockNumber string `json:"blockNumber" binding:"required,block_number_or_tag"`
-	Index       string `json:"index" binding:"required,hexadecimal,startswith=0x"`
-}
-
 // FromPositionalParams implements parameter conversion for NoParameters
-func (p *NoParameters) FromPositionalParams(params []interface{}) error {
+func (p *NoParameters) FromPositionalParams(params []interface{}) *RPCError {
 	// No parameters expected
 	return nil
 }
 
 // FromPositionalParams implements parameter conversion for EthGetBlockByHashParams
-func (p *EthGetBlockByHashParams) FromPositionalParams(params []interface{}) error {
+func (p *EthGetBlockByHashParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) != 2 {
-		return fmt.Errorf("expected 2 parameters, got %d", len(params))
+		return NewInvalidParamsError(fmt.Sprintf("Expected 2 parameters, got %d", len(params)))
 	}
 
 	blockHash, ok := params[0].(string)
 	if !ok {
-		return fmt.Errorf("blockHash must be a string")
+		return NewInvalidParamsError("blockHash must be a string")
 	}
 	p.BlockHash = blockHash
 
 	showDetails, ok := params[1].(bool)
 	if !ok {
-		return fmt.Errorf("showDetails must be a boolean")
+		return NewInvalidParamsError("showDetails must be a boolean")
 	}
 	p.ShowDetails = showDetails
 
@@ -178,34 +165,34 @@ func (p *EthGetBlockByHashParams) FromPositionalParams(params []interface{}) err
 }
 
 // FromPositionalParams implements parameter conversion for EthGetBlockByNumberParams
-func (p *EthGetBlockByNumberParams) FromPositionalParams(params []interface{}) error {
+func (p *EthGetBlockByNumberParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) != 2 {
-		return fmt.Errorf("expected 2 parameters, got %d", len(params))
+		return NewInvalidParamsError(fmt.Sprintf("Expected 2 parameters, got %d", len(params)))
 	}
 
 	blockNumber, ok := params[0].(string)
 	if !ok {
-		return fmt.Errorf("blockNumber must be a string")
+		return NewInvalidParamsError("blockNumber must be a string")
 	}
 	p.BlockNumber = blockNumber
 
 	showDetails, ok := params[1].(bool)
 	if !ok {
-		return fmt.Errorf("showDetails must be a boolean")
+		return NewInvalidParamsError("showDetails must be a boolean")
 	}
 	p.ShowDetails = showDetails
 
 	return nil
 }
 
-func (p *EthGetLogsParams) FromPositionalParams(params []interface{}) error {
+func (p *EthGetLogsParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) != 1 {
-		return fmt.Errorf("eth_getLogs expects exactly one parameter object")
+		return NewInvalidParamsError("eth_getLogs expects exactly one parameter object")
 	}
 
 	filterObj, ok := params[0].(map[string]interface{})
 	if !ok {
-		return fmt.Errorf("eth_getLogs expects a filter object parameter")
+		return NewInvalidParamsError("eth_getLogs expects a filter object parameter")
 	}
 
 	validFields := map[string]bool{
@@ -218,23 +205,23 @@ func (p *EthGetLogsParams) FromPositionalParams(params []interface{}) error {
 
 	for field := range filterObj {
 		if !validFields[field] {
-			return fmt.Errorf("'%s' is not a valid parameter for eth_getLogs", field)
+			return NewInvalidParamsError(fmt.Sprintf("'%s' is not a valid parameter for eth_getLogs", field))
 		}
 	}
 
 	var filter FilterObject
 	filterBytes, err := json.Marshal(filterObj)
 	if err != nil {
-		return fmt.Errorf("failed to marshal filter object: %v", err)
+		return NewInvalidParamsError(fmt.Sprintf("failed to marshal filter object: %v", err))
 	}
 
 	if err := json.Unmarshal(filterBytes, &filter); err != nil {
-		return fmt.Errorf("failed to unmarshal filter object: %v", err)
+		return NewInvalidParamsError(fmt.Sprintf("failed to unmarshal filter object: %v", err))
 	}
 
 	validate := binding.Validator.Engine().(*validator.Validate)
 	if err := validate.Struct(&filter); err != nil {
-		return fmt.Errorf("invalid filter parameters: %v", err)
+		return NewInvalidParamsError(fmt.Sprintf("invalid filter parameters: %v", err))
 	}
 
 	p.Address = filter.Address
@@ -245,14 +232,11 @@ func (p *EthGetLogsParams) FromPositionalParams(params []interface{}) error {
 
 	if p.BlockHash != "" {
 		if p.FromBlock != "" || p.ToBlock != "" {
-			return fmt.Errorf("can't use both blockHash and toBlock/fromBlock")
+			return NewInvalidParamsError("can't use both blockHash and toBlock/fromBlock")
 		}
 	} else {
 		if p.ToBlock == "" {
 			p.ToBlock = "latest"
-		}
-		if p.FromBlock == "" {
-			p.FromBlock = "latest"
 		}
 	}
 
@@ -271,21 +255,21 @@ func (p *EthGetLogsParams) ToLogParams() LogParams {
 }
 
 // FromPositionalParams implements parameter conversion for EthGetBalanceParams
-func (p *EthGetBalanceParams) FromPositionalParams(params []interface{}) error {
+func (p *EthGetBalanceParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) < 1 || len(params) > 2 {
-		return fmt.Errorf("expected 1 or 2 parameters, got %d", len(params))
+		return NewInvalidParamsError(fmt.Sprintf("Expected 1 or 2 parameters, got %d", len(params)))
 	}
 
 	address, ok := params[0].(string)
 	if !ok {
-		return fmt.Errorf("address must be a string")
+		return NewInvalidParamsError("address must be a string")
 	}
 	p.Address = address
 
 	if len(params) > 1 {
 		blockNumber, ok := params[1].(string)
 		if !ok {
-			return fmt.Errorf("blockNumber must be a string")
+			return NewInvalidParamsError("blockNumber must be a string")
 		}
 		p.BlockNumber = blockNumber
 	} else {
@@ -296,21 +280,21 @@ func (p *EthGetBalanceParams) FromPositionalParams(params []interface{}) error {
 }
 
 // FromPositionalParams implements parameter conversion for EthGetTransactionCountParams
-func (p *EthGetTransactionCountParams) FromPositionalParams(params []interface{}) error {
+func (p *EthGetTransactionCountParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) < 1 || len(params) > 2 {
-		return fmt.Errorf("expected 1 or 2 parameters, got %d", len(params))
+		return NewInvalidParamsError(fmt.Sprintf("Expected 1 or 2 parameters, got %d", len(params)))
 	}
 
 	address, ok := params[0].(string)
 	if !ok {
-		return fmt.Errorf("address must be a string")
+		return NewInvalidParamsError("address must be a string")
 	}
 	p.Address = address
 
 	if len(params) > 1 {
 		blockNumber, ok := params[1].(string)
 		if !ok {
-			return fmt.Errorf("blockNumber must be a string")
+			return NewInvalidParamsError("blockNumber must be a string")
 		}
 		p.BlockNumber = blockNumber
 	} else {
@@ -321,21 +305,80 @@ func (p *EthGetTransactionCountParams) FromPositionalParams(params []interface{}
 }
 
 // FromPositionalParams implements parameter conversion for EthEstimateGasParams
-func (p *EthEstimateGasParams) FromPositionalParams(params []interface{}) error {
+func (p *EthEstimateGasParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) == 0 || len(params) > 2 {
-		return fmt.Errorf("expected 1 or 2 parameters, got %d", len(params))
+		return NewInvalidParamsError(fmt.Sprintf("Missing value for required parameter 0, expected 1 or 2 parameters, got %d", len(params)))
 	}
 
-	callObject, ok := params[0].(map[string]interface{})
+	callObj, ok := params[0].(map[string]interface{})
 	if !ok {
-		return fmt.Errorf("callObject must be an object")
+		return NewInvalidParamsError("callObject must be an object")
 	}
+
+	var callObject CallObject
+
+	if from, exists := callObj["from"]; exists {
+		strFrom, ok := from.(string)
+		if !ok {
+			return NewInvalidParamsError(fmt.Sprintf("Expected 0x prefixed string representing the address (20 bytes), value: %v", from))
+		}
+		callObject.From = strFrom
+	}
+
+	if to, exists := callObj["to"]; exists {
+		if strTo, ok := to.(string); ok {
+			callObject.To = strTo
+		} else if to == nil {
+			callObject.To = ""
+		} else {
+			return NewInvalidParamsError(fmt.Sprintf("Expected 0x prefixed string representing the address (20 bytes), value: %v", to))
+		}
+	}
+
+	if gas, exists := callObj["gas"]; exists {
+		strGas, ok := gas.(string)
+		if !ok {
+			return NewInvalidParamsError(fmt.Sprintf("Expected 0x prefixed hexadecimal value, value: %v", gas))
+		}
+		callObject.Gas = strGas
+	}
+
+	if gasPrice, exists := callObj["gasPrice"]; exists {
+		strGasPrice, ok := gasPrice.(string)
+		if !ok {
+			return NewInvalidParamsError(fmt.Sprintf("Expected 0x prefixed hexadecimal value, value: %v", gasPrice))
+		}
+		callObject.GasPrice = strGasPrice
+	}
+
+	if value, exists := callObj["value"]; exists {
+		strValue, ok := value.(string)
+		if !ok {
+			return NewInvalidParamsError(fmt.Sprintf("Expected 0x prefixed hexadecimal value, value: %v", value))
+		}
+		callObject.Value = strValue
+	}
+
+	if data, exists := callObj["data"]; exists {
+		strData, ok := data.(string)
+		if !ok {
+			return NewInvalidParamsError(fmt.Sprintf("Expected 0x prefixed hexadecimal value with even length, value: %v", data))
+		}
+		callObject.Data = strData
+	}
+
+	validate := binding.Validator.Engine().(*validator.Validate)
+	if err := validate.Struct(&callObject); err != nil {
+		message, tag := translateValidationErrors(err)
+		return NewInvalidParamsError(fmt.Sprintf("Invalid parameter '%s' for TransactionObject: %s", tag, message))
+	}
+
 	p.CallObject = callObject
 
 	if len(params) > 1 {
 		blockParam, ok := params[1].(string)
 		if !ok {
-			return fmt.Errorf("blockParameter must be a string")
+			return NewInvalidParamsError("blockParameter must be a string")
 		}
 		p.BlockParameter = blockParam
 	}
@@ -344,20 +387,77 @@ func (p *EthEstimateGasParams) FromPositionalParams(params []interface{}) error 
 }
 
 // FromPositionalParams implements parameter conversion for EthCallParams
-func (p *EthCallParams) FromPositionalParams(params []interface{}) error {
+func (p *EthCallParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) != 2 {
-		return fmt.Errorf("expected 2 parameters, got %d", len(params))
+		return NewInvalidParamsError(fmt.Sprintf("Expected 2 parameters, got %d", len(params)))
 	}
 
-	callObject, ok := params[0].(map[string]interface{})
+	callObj, ok := params[0].(map[string]interface{})
 	if !ok {
-		return fmt.Errorf("callObject must be an object")
+		return NewInvalidParamsError("callObject must be an object")
 	}
+
+	var callObject CallObject
+
+	if from, exists := callObj["from"]; exists {
+		strFrom, ok := from.(string)
+		if !ok {
+			return NewInvalidParamsError(fmt.Sprintf("Expected 0x prefixed string representing the address (20 bytes), value: %v", from))
+		}
+		callObject.From = strFrom
+	}
+
+	if to, exists := callObj["to"]; exists {
+		strTo, ok := to.(string)
+		if !ok {
+			return NewInvalidParamsError(fmt.Sprintf("Expected 0x prefixed string representing the address (20 bytes), value: %v", to))
+		}
+		callObject.To = strTo
+	}
+
+	if gas, exists := callObj["gas"]; exists {
+		strGas, ok := gas.(string)
+		if !ok {
+			return NewInvalidParamsError(fmt.Sprintf("Expected 0x prefixed hexadecimal value, value: %v", gas))
+		}
+		callObject.Gas = strGas
+	}
+
+	if gasPrice, exists := callObj["gasPrice"]; exists {
+		strGasPrice, ok := gasPrice.(string)
+		if !ok {
+			return NewInvalidParamsError(fmt.Sprintf("Expected 0x prefixed hexadecimal value, value: %v", gasPrice))
+		}
+		callObject.GasPrice = strGasPrice
+	}
+
+	if value, exists := callObj["value"]; exists {
+		strValue, ok := value.(string)
+		if !ok {
+			return NewInvalidParamsError(fmt.Sprintf("Expected 0x prefixed hexadecimal value, value: %v", value))
+		}
+		callObject.Value = strValue
+	}
+
+	if data, exists := callObj["data"]; exists {
+		strData, ok := data.(string)
+		if !ok {
+			return NewInvalidParamsError(fmt.Sprintf("Expected 0x prefixed hexadecimal value with even length, value: %v", data))
+		}
+		callObject.Data = strData
+	}
+
+	validate := binding.Validator.Engine().(*validator.Validate)
+	if err := validate.Struct(&callObject); err != nil {
+		message, tag := translateValidationErrors(err)
+		return NewInvalidParamsError(fmt.Sprintf("Invalid parameter '%s' for TransactionObject: %s", tag, message))
+	}
+
 	p.CallObject = callObject
 
 	block, ok := params[1].(string)
 	if !ok {
-		return fmt.Errorf("block must be a string")
+		return NewInvalidParamsError("block must be a string")
 	}
 	p.Block = block
 
@@ -365,14 +465,14 @@ func (p *EthCallParams) FromPositionalParams(params []interface{}) error {
 }
 
 // FromPositionalParams implements parameter conversion for EthGetTransactionByHashParams
-func (p *EthGetTransactionByHashParams) FromPositionalParams(params []interface{}) error {
+func (p *EthGetTransactionByHashParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) != 1 {
-		return fmt.Errorf("expected 1 parameter, got %d", len(params))
+		return NewInvalidParamsError(fmt.Sprintf("Expected 1 parameter, got %d", len(params)))
 	}
 
 	txHash, ok := params[0].(string)
 	if !ok {
-		return fmt.Errorf("transactionHash must be a string")
+		return NewInvalidParamsError("transactionHash must be a string")
 	}
 	p.TransactionHash = txHash
 
@@ -380,14 +480,14 @@ func (p *EthGetTransactionByHashParams) FromPositionalParams(params []interface{
 }
 
 // FromPositionalParams implements parameter conversion for EthGetTransactionReceiptParams
-func (p *EthGetTransactionReceiptParams) FromPositionalParams(params []interface{}) error {
+func (p *EthGetTransactionReceiptParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) != 1 {
-		return fmt.Errorf("expected 1 parameter, got %d", len(params))
+		return NewInvalidParamsError(fmt.Sprintf("Expected 1 parameter, got %d", len(params)))
 	}
 
 	txHash, ok := params[0].(string)
 	if !ok {
-		return fmt.Errorf("transactionHash must be a string")
+		return NewInvalidParamsError("transactionHash must be a string")
 	}
 	p.TransactionHash = txHash
 
@@ -395,14 +495,14 @@ func (p *EthGetTransactionReceiptParams) FromPositionalParams(params []interface
 }
 
 // FromPositionalParams implements parameter conversion for EthGetBlockTransactionCountByHashParams
-func (p *EthGetBlockTransactionCountByHashParams) FromPositionalParams(params []interface{}) error {
+func (p *EthGetBlockTransactionCountByHashParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) != 1 {
-		return fmt.Errorf("expected 1 parameter, got %d", len(params))
+		return NewInvalidParamsError(fmt.Sprintf("Expected 1 parameter, got %d", len(params)))
 	}
 
 	blockHash, ok := params[0].(string)
 	if !ok {
-		return fmt.Errorf("blockHash must be a string")
+		return NewInvalidParamsError("blockHash must be a string")
 	}
 	p.BlockHash = blockHash
 
@@ -410,14 +510,14 @@ func (p *EthGetBlockTransactionCountByHashParams) FromPositionalParams(params []
 }
 
 // FromPositionalParams implements parameter conversion for EthGetBlockTransactionCountByNumberParams
-func (p *EthGetBlockTransactionCountByNumberParams) FromPositionalParams(params []interface{}) error {
+func (p *EthGetBlockTransactionCountByNumberParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) != 1 {
-		return fmt.Errorf("expected 1 parameter, got %d", len(params))
+		return NewInvalidParamsError(fmt.Sprintf("Expected 1 parameter, got %d", len(params)))
 	}
 
 	blockNumber, ok := params[0].(string)
 	if !ok {
-		return fmt.Errorf("blockNumber must be a string")
+		return NewInvalidParamsError("blockNumber must be a string")
 	}
 	p.BlockNumber = blockNumber
 
@@ -425,20 +525,20 @@ func (p *EthGetBlockTransactionCountByNumberParams) FromPositionalParams(params 
 }
 
 // FromPositionalParams implements parameter conversion for EthGetTransactionByBlockHashAndIndexParams
-func (p *EthGetTransactionByBlockHashAndIndexParams) FromPositionalParams(params []interface{}) error {
+func (p *EthGetTransactionByBlockHashAndIndexParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) != 2 {
-		return fmt.Errorf("expected 2 parameters, got %d", len(params))
+		return NewInvalidParamsError(fmt.Sprintf("Expected 2 parameters, got %d", len(params)))
 	}
 
 	blockHash, ok := params[0].(string)
 	if !ok {
-		return fmt.Errorf("blockHash must be a string")
+		return NewInvalidParamsError("blockHash must be a string")
 	}
 	p.BlockHash = blockHash
 
 	transactionIndex, ok := params[1].(string)
 	if !ok {
-		return fmt.Errorf("transactionIndex must be a string")
+		return NewInvalidParamsError("transactionIndex must be a string")
 	}
 	p.TransactionIndex = transactionIndex
 
@@ -446,20 +546,20 @@ func (p *EthGetTransactionByBlockHashAndIndexParams) FromPositionalParams(params
 }
 
 // FromPositionalParams implements parameter conversion for EthGetTransactionByBlockNumberAndIndexParams
-func (p *EthGetTransactionByBlockNumberAndIndexParams) FromPositionalParams(params []interface{}) error {
+func (p *EthGetTransactionByBlockNumberAndIndexParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) != 2 {
-		return fmt.Errorf("expected 2 parameters, got %d", len(params))
+		return NewInvalidParamsError(fmt.Sprintf("Expected 2 parameters, got %d", len(params)))
 	}
 
 	blockNumber, ok := params[0].(string)
 	if !ok {
-		return fmt.Errorf("blockNumber must be a string")
+		return NewInvalidParamsError("blockNumber must be a string")
 	}
 	p.BlockNumber = blockNumber
 
 	transactionIndex, ok := params[1].(string)
 	if !ok {
-		return fmt.Errorf("transactionIndex must be a string")
+		return NewInvalidParamsError("transactionIndex must be a string")
 	}
 	p.TransactionIndex = transactionIndex
 
@@ -467,14 +567,14 @@ func (p *EthGetTransactionByBlockNumberAndIndexParams) FromPositionalParams(para
 }
 
 // FromPositionalParams implements parameter conversion for EthSendRawTransactionParams
-func (p *EthSendRawTransactionParams) FromPositionalParams(params []interface{}) error {
+func (p *EthSendRawTransactionParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) != 1 {
-		return fmt.Errorf("expected 1 parameter, got %d", len(params))
+		return NewInvalidParamsError(fmt.Sprintf("Expected 1 parameter, got %d", len(params)))
 	}
 
 	signedTx, ok := params[0].(string)
 	if !ok {
-		return fmt.Errorf("signedTransaction must be a string")
+		return NewInvalidParamsError("signedTransaction must be a string")
 	}
 	p.SignedTransaction = signedTx
 
@@ -482,20 +582,20 @@ func (p *EthSendRawTransactionParams) FromPositionalParams(params []interface{})
 }
 
 // FromPositionalParams implements parameter conversion for EthGetCodeParams
-func (p *EthGetCodeParams) FromPositionalParams(params []interface{}) error {
+func (p *EthGetCodeParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) != 2 {
-		return fmt.Errorf("expected 2 parameters, got %d", len(params))
+		return NewInvalidParamsError(fmt.Sprintf("Expected 2 parameters, got %d", len(params)))
 	}
 
 	address, ok := params[0].(string)
 	if !ok {
-		return fmt.Errorf("address must be a string")
+		return NewInvalidParamsError("address must be a string")
 	}
 	p.Address = address
 
 	blockNumber, ok := params[1].(string)
 	if !ok {
-		return fmt.Errorf("blockNumber must be a string")
+		return NewInvalidParamsError("blockNumber must be a string")
 	}
 	p.BlockNumber = blockNumber
 
@@ -503,27 +603,27 @@ func (p *EthGetCodeParams) FromPositionalParams(params []interface{}) error {
 }
 
 // FromPositionalParams implements parameter conversion for EthGetStorageAtParams
-func (p *EthGetStorageAtParams) FromPositionalParams(params []interface{}) error {
+func (p *EthGetStorageAtParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) < 2 || len(params) > 3 {
-		return fmt.Errorf("expected 2 or 3 parameters, got %d", len(params))
+		return NewInvalidParamsError(fmt.Sprintf("Expected 2 or 3 parameters, got %d", len(params)))
 	}
 
 	address, ok := params[0].(string)
 	if !ok {
-		return fmt.Errorf("address must be a string")
+		return NewInvalidParamsError("address must be a string")
 	}
 	p.Address = address
 
 	storagePosition, ok := params[1].(string)
 	if !ok {
-		return fmt.Errorf("storagePosition must be a string")
+		return NewInvalidParamsError("storagePosition must be a string")
 	}
 	p.StoragePosition = storagePosition
 
 	if len(params) > 2 {
 		blockNumber, ok := params[2].(string)
 		if !ok {
-			return fmt.Errorf("blockNumber must be a string")
+			return NewInvalidParamsError("blockNumber must be a string")
 		}
 		p.BlockNumber = blockNumber
 	} else {
@@ -534,111 +634,38 @@ func (p *EthGetStorageAtParams) FromPositionalParams(params []interface{}) error
 }
 
 // FromPositionalParams implements parameter conversion for EthFeeHistoryParams
-func (p *EthFeeHistoryParams) FromPositionalParams(params []interface{}) error {
+func (p *EthFeeHistoryParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) < 2 || len(params) > 3 {
-		return fmt.Errorf("expected 2 or 3 parameters, got %d", len(params))
+		return NewInvalidParamsError(fmt.Sprintf("Expected 2 or 3 parameters, got %d", len(params)))
 	}
 
 	blockCount, ok := params[0].(string)
 	if !ok {
-		return fmt.Errorf("blockCount must be a string")
+		return NewInvalidParamsError("blockCount must be a string")
 	}
 	p.BlockCount = blockCount
 
 	newestBlock, ok := params[1].(string)
 	if !ok {
-		return fmt.Errorf("newestBlock must be a string")
+		return NewInvalidParamsError("newestBlock must be a string")
 	}
 	p.NewestBlock = newestBlock
-
 	if len(params) > 2 {
 		rawPercentiles, ok := params[2].([]interface{})
 		if !ok {
-			return fmt.Errorf("rewardPercentiles must be an array")
+			return NewInvalidParamsError("rewardPercentiles must be an array")
 		}
 
 		rewardPercentiles := make([]string, 0, len(rawPercentiles))
 		for _, rawPercentile := range rawPercentiles {
 			percentile, ok := rawPercentile.(string)
 			if !ok {
-				return fmt.Errorf("each reward percentile must be a string")
+				return NewInvalidParamsError("each reward percentile must be a string")
 			}
 			rewardPercentiles = append(rewardPercentiles, percentile)
 		}
 		p.RewardPercentiles = rewardPercentiles
 	}
-
-	return nil
-}
-
-// FromPositionalParams implements parameter conversion for EthGetUncleCountByBlockHashParams
-func (p *EthGetUncleCountByBlockHashParams) FromPositionalParams(params []interface{}) error {
-	if len(params) != 1 {
-		return fmt.Errorf("expected 1 parameter, got %d", len(params))
-	}
-
-	blockHash, ok := params[0].(string)
-	if !ok {
-		return fmt.Errorf("blockHash must be a string")
-	}
-	p.BlockHash = blockHash
-
-	return nil
-}
-
-// FromPositionalParams implements parameter conversion for EthGetUncleCountByBlockNumberParams
-func (p *EthGetUncleCountByBlockNumberParams) FromPositionalParams(params []interface{}) error {
-	if len(params) != 1 {
-		return fmt.Errorf("expected 1 parameter, got %d", len(params))
-	}
-
-	blockNumber, ok := params[0].(string)
-	if !ok {
-		return fmt.Errorf("blockNumber must be a string")
-	}
-	p.BlockNumber = blockNumber
-
-	return nil
-}
-
-// FromPositionalParams implements parameter conversion for EthGetUncleByBlockHashAndIndexParams
-func (p *EthGetUncleByBlockHashAndIndexParams) FromPositionalParams(params []interface{}) error {
-	if len(params) != 2 {
-		return fmt.Errorf("expected 2 parameters, got %d", len(params))
-	}
-
-	blockHash, ok := params[0].(string)
-	if !ok {
-		return fmt.Errorf("blockHash must be a string")
-	}
-	p.BlockHash = blockHash
-
-	index, ok := params[1].(string)
-	if !ok {
-		return fmt.Errorf("index must be a string")
-	}
-	p.Index = index
-
-	return nil
-}
-
-// FromPositionalParams implements parameter conversion for EthGetUncleByBlockNumberAndIndexParams
-func (p *EthGetUncleByBlockNumberAndIndexParams) FromPositionalParams(params []interface{}) error {
-	if len(params) != 2 {
-		return fmt.Errorf("expected 2 parameters, got %d", len(params))
-	}
-
-	blockNumber, ok := params[0].(string)
-	if !ok {
-		return fmt.Errorf("blockNumber must be a string")
-	}
-	p.BlockNumber = blockNumber
-
-	index, ok := params[1].(string)
-	if !ok {
-		return fmt.Errorf("index must be a string")
-	}
-	p.Index = index
 
 	return nil
 }
@@ -650,7 +677,7 @@ type EthNewFilterParams struct {
 	Topics    []string `json:"topics" validate:"omitempty,dive,hexadecimal"`
 }
 
-func (p *EthNewFilterParams) FromPositionalParams(params []interface{}) error {
+func (p *EthNewFilterParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) > 0 {
 		filterObj, ok := params[0].(map[string]interface{})
 		if !ok {
@@ -684,45 +711,45 @@ type EthUninstallFilterParams struct {
 	FilterID string `json:"filterId" validate:"required,hexadecimal"`
 }
 
-func (p *EthUninstallFilterParams) FromPositionalParams(params []interface{}) error {
+func (p *EthUninstallFilterParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) < 1 {
-		return fmt.Errorf("missing filter ID parameter")
+		return NewInvalidParamsError("missing filter ID parameter")
 	}
 	if filterId, ok := params[0].(string); ok {
 		p.FilterID = filterId
 		return nil
 	}
-	return fmt.Errorf("invalid filter ID parameter")
+	return NewInvalidParamsError("invalid filter ID parameter")
 }
 
 type EthGetFilterLogsParams struct {
 	FilterID string `json:"filterId" validate:"required,hexadecimal"`
 }
 
-func (p *EthGetFilterLogsParams) FromPositionalParams(params []interface{}) error {
+func (p *EthGetFilterLogsParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) < 1 {
-		return fmt.Errorf("missing filter ID parameter")
+		return NewInvalidParamsError("missing filter ID parameter")
 	}
 	if filterId, ok := params[0].(string); ok {
 		p.FilterID = filterId
 		return nil
 	}
-	return fmt.Errorf("invalid filter ID parameter")
+	return NewInvalidParamsError("invalid filter ID parameter")
 }
 
 type EthGetFilterChangesParams struct {
 	FilterID string `json:"filterId" validate:"required,hexadecimal"`
 }
 
-func (p *EthGetFilterChangesParams) FromPositionalParams(params []interface{}) error {
+func (p *EthGetFilterChangesParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) < 1 {
-		return fmt.Errorf("missing filter ID parameter")
+		return NewInvalidParamsError("missing filter ID parameter")
 	}
 	if filterId, ok := params[0].(string); ok {
 		p.FilterID = filterId
 		return nil
 	}
-	return fmt.Errorf("invalid filter ID parameter")
+	return NewInvalidParamsError("invalid filter ID parameter")
 }
 
 // EthSubscribeParams represents parameters for eth_subscribe
@@ -744,14 +771,14 @@ type EthUnsubscribeParams struct {
 }
 
 // FromPositionalParams converts positional parameters to EthSubscribeParams
-func (p *EthSubscribeParams) FromPositionalParams(params []interface{}) error {
+func (p *EthSubscribeParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) < 1 {
-		return fmt.Errorf("expected at least 1 parameter, got %d", len(params))
+		return NewInvalidParamsError(fmt.Sprintf("Expected at least 1 parameter, got %d", len(params)))
 	}
 
 	subscriptionType, ok := params[0].(string)
 	if !ok {
-		return fmt.Errorf("subscription type must be a string")
+		return NewInvalidParamsError("subscription type must be a string")
 	}
 	p.SubscriptionType = subscriptionType
 
@@ -797,14 +824,14 @@ func (p *EthSubscribeParams) FromPositionalParams(params []interface{}) error {
 }
 
 // FromPositionalParams converts positional parameters to EthUnsubscribeParams
-func (p *EthUnsubscribeParams) FromPositionalParams(params []interface{}) error {
+func (p *EthUnsubscribeParams) FromPositionalParams(params []interface{}) *RPCError {
 	if len(params) != 1 {
-		return fmt.Errorf("expected 1 parameter, got %d", len(params))
+		return NewInvalidParamsError(fmt.Sprintf("Expected 1 parameter, got %d", len(params)))
 	}
 
 	subscriptionID, ok := params[0].(string)
 	if !ok {
-		return fmt.Errorf("subscription ID must be a string")
+		return NewInvalidParamsError("subscription ID must be a string")
 	}
 	p.SubscriptionID = subscriptionID
 

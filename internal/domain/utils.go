@@ -1,4 +1,4 @@
-package rpc
+package domain
 
 import (
 	"regexp"
@@ -9,11 +9,11 @@ func IsValidAddress(address string) bool {
 }
 
 func IsValidBlockNumberOrTag(blockNumber string) bool {
-	return blockNumber == "latest" || blockNumber == "earliest" || blockNumber == "pending" || IsValidHexNumber(blockNumber) || blockNumber == "finalized" || blockNumber == "safe"
+	return blockNumber == "latest" || blockNumber == "earliest" || blockNumber == "pending" || IsValidBlockNumber(blockNumber) || blockNumber == "finalized" || blockNumber == "safe"
 }
 
 func IsValidHexNumber(hexNumber string) bool {
-	return regexp.MustCompile("^0x[a-fA-F0-9]+$").MatchString(hexNumber)
+	return regexp.MustCompile("^0x[a-fA-F0-9]*$").MatchString(hexNumber)
 }
 
 func IsValidBlockHashOrTag(blockHash string) bool {
@@ -30,4 +30,8 @@ func IsValidBlockHash(blockHash string) bool {
 
 func IsValidBlock(block string) bool {
 	return IsValidBlockNumberOrTag(block) || IsValidBlockHash(block)
+}
+
+func IsValidBlockNumber(blockNumber string) bool {
+	return regexp.MustCompile("^0x[a-fA-F0-9]+$").MatchString(blockNumber)
 }
