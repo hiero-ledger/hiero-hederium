@@ -575,15 +575,20 @@ func (s *EthService) FeeHistory(blockCount string, newestBlock string, rewardPer
 
 func (s *EthService) GetStorageAt(address, slot, blockNumberOrHash string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting storage at", zap.String("address", address), zap.String("slot", slot), zap.String("blockNumberOrHash", blockNumberOrHash))
-	blockInt, errRpc := s.commonService.GetBlockNumberByNumberOrTag(blockNumberOrHash)
-	if errRpc != nil {
-		return nil, errRpc
+	var block string
+	if len(blockNumberOrHash) == 66 {
+		block = blockNumberOrHash
+	} else {
+		blockInt, errRpc := s.commonService.GetBlockNumberByNumberOrTag(blockNumberOrHash)
+		if errRpc != nil {
+			return nil, errRpc
+		}
+		block = strconv.FormatInt(blockInt, 10)
 	}
-
-	blockResponse := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockInt, 10))
+	blockResponse := s.mClient.GetBlockByHashOrNumber(block)
 
 	if blockResponse == nil {
-		return nil, domain.NewRPCError(domain.ServerError, "Failed to get block data")
+		return nil, domain.NewRPCError(domain.NotFound, "Requested resource not found")
 	}
 
 	timestampTo := blockResponse.Timestamp.To

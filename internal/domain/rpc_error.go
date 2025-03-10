@@ -22,8 +22,11 @@ const (
 	// Server error (-32000 to -32099): Implementation-defined server errors.
 	ServerError = -32000
 
-	// Filter not found (-32001): Filter not found
-	FilterNotFound = -32001
+	// Not found (-32001): Not found
+	NotFound = -32001
+
+	// Gas price too low (-32009): Gas price is too low
+	GasPriceTooLow = -32009
 
 	// Execution error (-32015): Transaction execution error
 	ExecutionError = -32015
