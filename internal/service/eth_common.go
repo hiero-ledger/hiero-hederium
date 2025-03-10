@@ -70,7 +70,7 @@ func (s *commonService) ValidateBlockHashAndAddTimestampToParams(params map[stri
 	block := s.mClient.GetBlockByHashOrNumber(blockHash)
 	if block == nil {
 		s.logger.Debug("Failed to get block data")
-		return nil
+		return fmt.Errorf("block not found")
 	}
 	s.logger.Debug("Received block data", zap.Any("block", block))
 
@@ -105,7 +105,7 @@ func (s *commonService) ValidateBlockRangeAndAddTimestampToParams(params map[str
 		// - If `toBlock` is explicitly provided and does not equals to `latestBlockNumber`, it establishes a solid upper bound.
 		// - If `fromBlock` is missing, indicating the absence of a lower bound, throw the `MISSING_FROM_BLOCK_PARAM` error.
 		if toBlockNum != latestBlockNum && fromBlock == "" {
-			return false, domain.NewRPCError(domain.InvalidParams, "Provided toBlock parameter without specifying fromBlock")
+			return false, domain.NewRPCError(domain.MissingFromBlockParam, "Provided toBlock parameter without specifying fromBlock")
 		}
 	}
 
