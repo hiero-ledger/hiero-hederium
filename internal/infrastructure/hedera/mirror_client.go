@@ -24,7 +24,7 @@ type MirrorNodeClient interface {
 	GetBalance(address string, timestampTo string) string
 	GetAccount(address string, timestampTo string) interface{}
 	GetContractResult(transactionId string) interface{}
-	PostCall(callObject map[string]interface{}) interface{}
+	PostCall(callObject map[string]interface{}) (interface{}, error)
 	GetContractStateByAddressAndSlot(address string, slot string, timestampTo string) (*domain.ContractStateResponse, error)
 	GetContractResultsLogsByAddress(address string, queryParams map[string]interface{}) ([]domain.LogEntry, error)
 	GetContractResultsLogsWithRetry(queryParams map[string]interface{}) ([]domain.LogEntry, error)
@@ -430,13 +430,13 @@ func (m *MirrorClient) RepeatGetContractResult(transactionIdOrHash string, retri
 	return nil
 }
 
-func (m *MirrorClient) PostCall(callObject map[string]interface{}) interface{} {
+func (m *MirrorClient) PostCall(callObject map[string]interface{}) (interface{}, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
 	defer cancel()
 	jsonBody, err := json.Marshal(callObject)
 	if err != nil {
 		m.logger.Error("Error marshaling call object", zap.Error(err))
-		return nil
+		return nil, nil
 	}
 	url := fmt.Sprintf("%s/api/v1/contracts/call", m.Web3URL)
 	m.logger.Info("Posting contract call", zap.String("url", url))
@@ -444,20 +444,20 @@ func (m *MirrorClient) PostCall(callObject map[string]interface{}) interface{} {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		m.logger.Error("Error creating request for contract call", zap.Error(err))
-		return nil
+		return nil, nil
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		m.logger.Error("Error making contract call", zap.Error(err))
-		return nil
+		return nil, nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		m.logger.Error("Mirror node returned non-OK status", zap.Int("status", resp.StatusCode))
-		return nil
+		return nil, fmt.Errorf("mirror node returned %d", resp.StatusCode)
 	}
 
 	var result struct {
@@ -465,10 +465,10 @@ func (m *MirrorClient) PostCall(callObject map[string]interface{}) interface{} {
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		m.logger.Error("Error decoding response body", zap.Error(err))
-		return nil
+		return nil, nil
 	}
 
-	return result.Result
+	return result.Result, nil
 }
 
 func (m *MirrorClient) GetContractStateByAddressAndSlot(address string, slot string, timestampTo string) (*domain.ContractStateResponse, error) {

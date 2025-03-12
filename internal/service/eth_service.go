@@ -331,14 +331,20 @@ func (s *EthService) EstimateGas(transaction interface{}, blockParam interface{}
 		s.logger.Error("Failed to parse transaction call object", zap.Error(err))
 		return "0x0", domain.NewRPCError(domain.ServerError, "Failed to parse transaction call object")
 	}
-
+	
 	formatResult, err := FormatTransactionCallObject(s, txObj, blockParam, true)
 	if err != nil {
 		s.logger.Error("Failed to format transaction call object", zap.Error(err))
 		return "0x0", domain.NewRPCError(domain.ServerError, "Failed to format transaction call object")
 	}
 
-	callResult := s.mClient.PostCall(formatResult)
+	callResult, err := s.mClient.PostCall(formatResult)
+	if err != nil {
+		s.logger.Error("Mirror node failed to return gas estimate", zap.Error(err))
+		predefinedGas := s.PredifinedGasForTransaction(txObj)
+		return predefinedGas, nil
+	}
+
 	if callResult == nil {
 		s.logger.Error("Failed to post call", zap.Error(err))
 		return "0x0", domain.NewRPCError(domain.ServerError, "Failed to post call")
@@ -366,7 +372,12 @@ func (s *EthService) Call(transaction interface{}, blockParam interface{}) (inte
 		return nil, domain.NewRPCError(domain.ServerError, "Failed to format transaction call object")
 	}
 
-	callResult := s.mClient.PostCall(result)
+	callResult, err := s.mClient.PostCall(result)
+	if err != nil {
+		s.logger.Error("Mirror node failed to return gas estimate", zap.Error(err))
+		predefinedGas := s.PredifinedGasForTransaction(txObj)
+		return predefinedGas, nil
+	}
 	if callResult == nil {
 		s.logger.Error("Failed to post call", zap.Error(err))
 		return "0x0", domain.NewRPCError(domain.ServerError, "Failed to post call")

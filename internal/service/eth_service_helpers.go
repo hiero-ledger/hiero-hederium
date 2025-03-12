@@ -455,7 +455,12 @@ func FormatTransactionCallObject(s *EthService, transactionCallObject *domain.Tr
 		if transactionCallObject.From != "" {
 			result["from"] = transactionCallObject.From
 		} else {
-			result["from"] = s.hClient.GetOperatorPublicKey()
+			operatorPublicKey := s.hClient.GetOperatorPublicKey()
+			evmAddress, err := s.resolveEvmAddress(operatorPublicKey)
+			if err != nil {
+				return nil, err
+			}
+			result["from"] = *evmAddress
 		}
 	}
 
@@ -476,10 +481,12 @@ func FormatTransactionCallObject(s *EthService, transactionCallObject *domain.Tr
 		result["block"] = blockParam
 	}
 
-	// Copy any remaining non-empty fields
 	if transactionCallObject.To != "" {
 		result["to"] = transactionCallObject.To
+	} else {
+		result["to"] = nil
 	}
+
 	if transactionCallObject.Nonce != "" && transactionCallObject.Nonce != "0x" {
 		result["nonce"] = transactionCallObject.Nonce
 	}
@@ -488,8 +495,67 @@ func FormatTransactionCallObject(s *EthService, transactionCallObject *domain.Tr
 	return result, nil
 }
 
-// Helper function to convert weibar hex to tinybar int
-const TINYBAR_TO_WEIBAR_COEF = 10000000000 // 10^10
+func (s *EthService) PredifinedGasForTransaction(callObject *domain.TransactionCallObject) string {
+	s.logger.Info("Predifined gas for transaction", zap.Any("callObject", callObject))
+	// Check if it's a simple transfer (has 'to' address and no data or empty data)
+	isSimpleTransfer := callObject.To != "" && (callObject.Data == "" || callObject.Data == "0x")
+
+	// Check if it's a contract call (has 'to' address and data with at least function selector length)
+	isContractCall := callObject.To != "" && callObject.Data != "" && len(callObject.Data) >= FunctionSelectorCharLength
+
+	// Check if it's a contract creation (no 'to' address and has data that's not empty)
+	isContractCreate := callObject.To == "" && callObject.Data != "" && callObject.Data != "0x"
+
+	if isSimpleTransfer {
+		_, err := s.mClient.GetAccountById(callObject.From)
+		if err == nil {
+			s.logger.Warn("Returning predefined gas for simple transfer:")
+			return fmt.Sprintf("0x%x", TxBaseCost)
+		}
+		s.logger.Warn("Returning predefined gas for hollow account creation:")
+		return fmt.Sprintf("0x%x", MinTxHollowAccountCreationGas)
+	} else if isContractCreate {
+		gasCost := calculateIntrinsicGasCost(callObject.Data)
+		return fmt.Sprintf("0x%x", gasCost)
+	} else if isContractCall {
+		return fmt.Sprintf("0x%x", TxContractCallAverageGas)
+	} else {
+		return fmt.Sprintf("0x%x", TxDefaultGas)
+	}
+}
+
+func calculateIntrinsicGasCost(data string) int64 {
+	fmt.Println("Calculating intrinsic gas cost for data:", data)
+
+	if data == "" || data == "0x" {
+		return TxBaseCost
+	}
+	cleanData := strings.TrimPrefix(data, "0x")
+
+	dataLength := len(cleanData) / 2
+	zeroBytes := 0
+	nonZeroBytes := 0
+
+	for i := 0; i < dataLength; i++ {
+		byteIndex := i * 2
+		if byteIndex+1 < len(cleanData) {
+			byteValue := cleanData[byteIndex : byteIndex+2]
+			if byteValue == "00" {
+				zeroBytes++
+			} else {
+				nonZeroBytes++
+			}
+		}
+	}
+
+	gasCost := TxBaseCost + int64(zeroBytes)*TxDataZeroCost + int64(nonZeroBytes)*TxDataNonZeroCost
+
+	if data != "" && data != "0x" {
+		gasCost += TxCreateExtra
+	}
+
+	return gasCost
+}
 
 func WeibarHexToTinyBarInt(value string) (int64, error) {
 	// Handle "0x" case
@@ -510,17 +576,16 @@ func WeibarHexToTinyBarInt(value string) (int64, error) {
 			return 0, fmt.Errorf("failed to parse value: %s", value)
 		}
 	}
-
 	// Create coefficient as big.Int
 	coefBigInt := big.NewInt(TINYBAR_TO_WEIBAR_COEF)
 
 	// Calculate tinybar value
 	tinybarValue := new(big.Int).Div(weiBigInt, coefBigInt)
-
 	// Only round up if the value is significant enough
 	remainder := new(big.Int).Mod(weiBigInt, coefBigInt)
-	if tinybarValue.Cmp(big.NewInt(0)) == 0 && remainder.Cmp(big.NewInt(TINYBAR_TO_WEIBAR_COEF/2)) > 0 {
-		return 1, nil // Round up to the smallest unit of tinybar only if remainder is significant
+
+	if tinybarValue.Cmp(big.NewInt(0)) == 0 && remainder.Cmp(big.NewInt(0)) > 0 {
+		return 1, nil
 	}
 
 	// Convert to int64 and check if it fits
