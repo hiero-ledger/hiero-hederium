@@ -188,7 +188,8 @@ func (s *server) handleRPCRequest(ctx *gin.Context) {
 
 			resp := s.rpcHandler.HandleRequest(ctx.Request.Context(), &req)
 			responses = append(responses, *resp)
-			if resp.Error != nil {
+
+			if resp.Error != nil && resp.Error.Code != domain.ContractRevertError {
 				hasErrors = true
 			}
 		}
@@ -216,7 +217,7 @@ func (s *server) handleRPCRequest(ctx *gin.Context) {
 	s.logger.Debug("Processing single request", zap.String("method", req.Method))
 	resp := s.rpcHandler.HandleRequest(ctx.Request.Context(), &req)
 
-	if resp.Error != nil {
+	if resp.Error != nil && resp.Error.Code != domain.ContractRevertError {
 		ctx.JSON(http.StatusBadRequest, resp)
 	} else {
 		ctx.JSON(http.StatusOK, resp)
