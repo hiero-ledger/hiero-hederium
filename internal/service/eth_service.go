@@ -200,6 +200,8 @@ func (s *EthService) GetBlockByHash(hash string, showDetails bool) (interface{},
 func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting block by number", zap.String("numberOrTag", numberOrTag), zap.Bool("showDetails", showDetails))
 
+	isLatest := BlockTagIsLatestOrPending(&numberOrTag)
+
 	blockNumberInt, errRpc := s.commonService.GetBlockNumberByNumberOrTag(numberOrTag)
 	if errRpc != nil {
 		return nil, errRpc
@@ -430,7 +432,7 @@ func (s *EthService) EstimateGas(transaction interface{}, blockParam interface{}
 		s.logger.Error("Failed to parse transaction call object", zap.Error(err))
 		return "0x0", domain.NewRPCError(domain.ServerError, "Failed to parse transaction call object")
 	}
-	
+
 	formatResult, err := FormatTransactionCallObject(s, txObj, blockParam, true)
 	if err != nil {
 		s.logger.Error("Failed to format transaction call object", zap.Error(err))

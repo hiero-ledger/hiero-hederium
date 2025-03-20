@@ -91,7 +91,7 @@ func (s *commonService) ValidateBlockRangeAndAddTimestampToParams(params map[str
 
 	var toBlockNum int64
 
-	if blockTagIsLatestOrPending(&toBlock) {
+	if BlockTagIsLatestOrPending(&toBlock) {
 		toBlock = "latest"
 		toBlockNum = latestBlockNum
 	} else {
@@ -111,7 +111,7 @@ func (s *commonService) ValidateBlockRangeAndAddTimestampToParams(params map[str
 
 	var fromBlockNum int64
 
-	if blockTagIsLatestOrPending(&fromBlock) {
+	if BlockTagIsLatestOrPending(&fromBlock) {
 		fromBlock = "latest"
 		fromBlockNum = latestBlockNum
 	} else {
@@ -261,7 +261,7 @@ func (s *commonService) GetLogsWithParams(address []string, params map[string]in
 func (s *commonService) GetBlockNumberByNumberOrTag(blockNumberOrTag string) (int64, *domain.RPCError) {
 	s.logger.Debug("Getting block number by hash or tag", zap.String("blockHashOrTag", blockNumberOrTag))
 
-	if blockTagIsLatestOrPending(&blockNumberOrTag) {
+	if BlockTagIsLatestOrPending(&blockNumberOrTag) {
 		blockNumberOrTag = "latest"
 	}
 
@@ -333,7 +333,7 @@ func (s *commonService) ValidateBlockRange(fromBlock, toBlock string) *domain.RP
 		return errRpc
 	}
 
-	if blockTagIsLatestOrPending(&toBlock) {
+	if BlockTagIsLatestOrPending(&toBlock) {
 		toBlockNum = latestBlockNum
 	} else {
 		toBlockNum, errRpc = s.GetBlockNumberByNumberOrTag(toBlock)
@@ -350,7 +350,7 @@ func (s *commonService) ValidateBlockRange(fromBlock, toBlock string) *domain.RP
 		}
 	}
 
-	if blockTagIsLatestOrPending(&fromBlock) {
+	if BlockTagIsLatestOrPending(&fromBlock) {
 		fromBlockNum = latestBlockNum
 	} else {
 		fromBlockNum, errRpc = s.GetBlockNumberByNumberOrTag(fromBlock)
@@ -366,7 +366,7 @@ func (s *commonService) ValidateBlockRange(fromBlock, toBlock string) *domain.RP
 	return nil
 }
 
-func blockTagIsLatestOrPending(tag *string) bool {
+func BlockTagIsLatestOrPending(tag *string) bool {
 	return tag == nil ||
 		*tag == "latest" ||
 		*tag == "pending" ||
