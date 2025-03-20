@@ -1064,3 +1064,24 @@ func parseFee(fee string) string {
 	}
 	return removeLeadingZeroes(fee)
 }
+
+// Helper function to parse timestamp seconds from a string like "1234567890.123456789"
+func parseTimestampSeconds(timestamp string) (int64, error) {
+	parts := strings.Split(timestamp, ".")
+	if len(parts) == 0 {
+		return 0, fmt.Errorf("invalid timestamp format: %s", timestamp)
+	}
+
+	seconds, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("could not parse timestamp seconds: %s", err)
+	}
+
+	return seconds, nil
+}
+
+func convertToWeibars(balance int64) string {
+	weibars := big.NewInt(balance)
+	weibars = weibars.Mul(weibars, big.NewInt(TinybarToWeibarCoef))
+	return fmt.Sprintf("0x%x", weibars)
+}

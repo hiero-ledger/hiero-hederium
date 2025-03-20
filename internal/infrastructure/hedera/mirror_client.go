@@ -33,6 +33,8 @@ type MirrorNodeClient interface {
 	GetAccountById(idOrAliasOrEvmAddress string) (*domain.AccountResponse, error)
 	GetTokenById(tokenId string) (*domain.TokenResponse, error)
 	RepeatGetContractResult(transactionIdOrHash string, retries int) *domain.ContractResultResponse
+	GetAccountTransactionsById(idOrAliasOrEvmAddress string) (*domain.AccountResponse, error)
+	GetPaginatedAccountTransactions(url string, maxPages int) ([]domain.AccountResponse, error)
 }
 
 type MirrorClient struct {
@@ -281,11 +283,14 @@ func (m *MirrorClient) GetBalance(address string, timestampTo string) string {
 	defer cancel()
 
 	var reqUrl string
+	url := fmt.Sprintf("%s/api/v1/balances?account.id=%s", m.BaseURL, address)
 	if timestampTo == "0" {
-		reqUrl = m.BaseURL + "/api/v1/balances?account.id=" + address
+		reqUrl = url
 	} else {
-		reqUrl = m.BaseURL + "/api/v1/balances?account.id=" + address + "&timestamp=lte:" + timestampTo
+		reqUrl = fmt.Sprintf("%s&timestamp=lte:%s", url, timestampTo)
 	}
+
+	m.logger.Debug("Getting balance", zap.String("url", reqUrl))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqUrl, nil)
 	if err != nil {
@@ -330,14 +335,15 @@ func (m *MirrorClient) GetBalance(address string, timestampTo string) string {
 
 	// Convert tinybars to weibars
 	balance := result.Balances[0].Balance.Mul(result.Balances[0].Balance, big.NewInt(10000000000))
-	return "0x" + fmt.Sprintf("%x", balance)
+	return fmt.Sprintf("0x%x", balance)
 }
 
 func (m *MirrorClient) GetAccount(address string, timestampTo string) interface{} {
 	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
 	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BaseURL+"/api/v1/accounts/"+address+"?limit=1&order=desc&timestamp=lte:"+timestampTo+"&transactiontype=ETHEREUMTRANSACTION&transactions=true", nil)
+	m.logger.Info("Getting account", zap.String("address", address), zap.String("timestampTo", timestampTo))
+	url := fmt.Sprintf("%s/api/v1/accounts/%s?limit=1&order=desc&timestamp=lte:%s&transactiontype=ETHEREUMTRANSACTION&transactions=true", m.BaseURL, address, timestampTo)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		m.logger.Error("Error creating request to get account", zap.Error(err))
 		return nil
@@ -855,4 +861,95 @@ func (m *MirrorClient) GetTokenById(tokenId string) (*domain.TokenResponse, erro
 	}
 
 	return &result, nil
+}
+
+func (m *MirrorClient) GetAccountTransactionsById(idOrAliasOrEvmAddress string) (*domain.AccountResponse, error) {
+	url := fmt.Sprintf("%s/api/v1/accounts/%s?limit=100", m.BaseURL, idOrAliasOrEvmAddress)
+
+	m.logger.Info("Getting account by id", zap.String("url", url))
+
+	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		m.logger.Error("Error creating request", zap.Error(err))
+		return nil, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		m.logger.Error("Error making request", zap.Error(err))
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
+		return nil, nil
+	}
+
+	var result domain.AccountResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		m.logger.Error("Error decoding response", zap.Error(err))
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+func (m *MirrorClient) fetchAccountTransactionsPages(url string) (*domain.AccountResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		m.logger.Error("Error creating request", zap.Error(err))
+		return nil, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		m.logger.Error("Error making request", zap.Error(err))
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
+		return nil, nil
+	}
+
+	var result domain.AccountResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		m.logger.Error("Error decoding response", zap.Error(err))
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+func (m *MirrorClient) GetPaginatedAccountTransactions(url string, maxPages int) ([]domain.AccountResponse, error) {
+	var accounts []domain.AccountResponse
+	for page := 1; page <= maxPages; page++ {
+		m.logger.Info("Fetching page", zap.Int("page", page))
+		result, err := m.fetchAccountTransactionsPages(url)
+		if err != nil {
+			return nil, err
+		}
+
+		if result == nil || len(result.Transactions) == 0 {
+			break
+		}
+
+		accounts = append(accounts, *result)
+
+		if result.Links.Next == nil {
+			break
+		}
+
+		url = fmt.Sprintf("%s%s", m.BaseURL, *result.Links.Next)
+	}
+
+	return accounts, nil
 }

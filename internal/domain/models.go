@@ -177,7 +177,7 @@ type AccountResponse struct {
 		ValidStartTimestamp  string `json:"valid_start_timestamp"`
 	} `json:"transactions"`
 	Links struct {
-		Next string `json:"next"`
+		Next *string `json:"next"`
 	} `json:"links"`
 }
 

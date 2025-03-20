@@ -224,60 +224,159 @@ func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (int
 		return nil, domain.NewRPCError(domain.ServerError, "Failed to process block")
 	}
 
-	if err := s.cacheService.Set(s.ctx, cachedKey, &processedBlock, DefaultExpiration); err != nil {
+	if err := s.cacheService.Set(s.ctx, cachedKey, &processedBlock, DefaultExpiration); err != nil && !isLatest {
 		s.logger.Debug("Failed to cache block", zap.Error(err))
 	}
 
 	return processedBlock, nil
 }
 
-// TODO: Add error handling
-func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) string {
-	s.logger.Info("Getting balance", zap.String("address", address), zap.String("blockNumberTagOrHash", blockNumberTagOrHash))
+func (s *EthService) GetBalance(address string, blockNumberOrTagOrHash string) string {
+	s.logger.Debug("Getting balance", zap.String("address", address), zap.String("blockNumberOrTagOrHash", blockNumberOrTagOrHash))
 
+	// Check if blockNumberOrTagOrHash is latest or pending
+	isLatestOrPending := BlockTagIsLatestOrPending(&blockNumberOrTagOrHash)
+
+	latestBlockNumber, errRpc := s.commonService.GetBlockNumberByNumberOrTag("latest")
+	if errRpc != nil {
+		return zeroHex
+	}
+
+	latestBlock := s.mClient.GetBlockByHashOrNumber(fmt.Sprintf("%d", latestBlockNumber))
+	if latestBlock == nil {
+		s.logger.Error("Could not get latest block")
+		return zeroHex
+	}
+
+	// Get the block to use for the balance calculation
 	var block *domain.BlockResponse
-
-	switch blockNumberTagOrHash {
-	case "latest", "pending":
-		balance := s.mClient.GetBalance(address, "0")
-		return balance
-	case "earliest":
-		block = s.mClient.GetBlockByHashOrNumber("0")
+	if isLatestOrPending {
+		block = latestBlock
+	} else if len(blockNumberOrTagOrHash) > 32 {
+		block = s.mClient.GetBlockByHashOrNumber(blockNumberOrTagOrHash)
 		if block == nil {
-			s.logger.Debug("Earliest block not found")
-			return "0x0"
+			s.logger.Error("Could not get block by hash", zap.String("hash", blockNumberOrTagOrHash))
+			block = latestBlock
 		}
-	default:
-		// Check if it's a 32 byte hash (0x + 64 hex chars)
-		if len(blockNumberTagOrHash) == 66 && strings.HasPrefix(blockNumberTagOrHash, "0x") {
-			block = s.mClient.GetBlockByHashOrNumber(blockNumberTagOrHash)
-			if block == nil {
-				s.logger.Debug("Block not found for hash", zap.String("hash", blockNumberTagOrHash))
-				return "0x0"
-			}
-		} else if strings.HasPrefix(blockNumberTagOrHash, "0x") {
-			// If it's a hex number, convert it to decimal
-			num, err := strconv.ParseInt(blockNumberTagOrHash[2:], 16, 64)
+	} else {
+		blockNum, err := s.commonService.GetBlockNumberByNumberOrTag(blockNumberOrTagOrHash)
+		if err != nil {
+			s.logger.Error("Could not get block number", zap.Error(err))
+			return zeroHex
+		}
+		block = s.mClient.GetBlockByHashOrNumber(fmt.Sprintf("%d", blockNum))
+		if block == nil {
+			s.logger.Error("Could not get block by number", zap.Int64("number", blockNum))
+			return zeroHex
+		}
+	}
+
+	blockNumber := int64(block.Number)
+	if latestBlockNumber-blockNumber <= LatestBlockTolerance {
+		isLatestOrPending = true
+	}
+
+	cacheKey := fmt.Sprintf("%s_%s_%s", GetBalance, address, block.Hash)
+
+	var cachedBalance string
+	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedBalance); err == nil && cachedBalance != "" && !isLatestOrPending {
+		s.logger.Info("Balance fetched from cache", zap.String("balance", cachedBalance))
+		return cachedBalance
+	}
+
+	var weibars string
+
+	if !isLatestOrPending {
+		// A blockNumberOrTag has been provided. If it is `latest` or `pending` retrieve the balance from /accounts/{account.id}
+		// If the parsed blockNumber is the same as the one from the latest block retrieve the balance from /accounts/{account.id}
+		if blockNumber != latestBlockNumber {
+			latestTimestamp, err := parseTimestampSeconds(latestBlock.Timestamp.To)
 			if err != nil {
-				s.logger.Debug("Failed to parse block number", zap.Error(err))
-				return "0x0"
+				s.logger.Error("Could not parse latest timestamp", zap.Error(err))
+				return zeroHex
 			}
-			block = s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(num, 10))
-			if block == nil {
-				s.logger.Debug("Block not found for number", zap.String("number", blockNumberTagOrHash))
-				return "0x0"
+			blockTimestamp, err := parseTimestampSeconds(block.Timestamp.From)
+			if err != nil {
+				s.logger.Error("Could not parse block timestamp", zap.Error(err))
+				return zeroHex
 			}
-		} else {
-			block = s.mClient.GetBlockByHashOrNumber(blockNumberTagOrHash)
-			if block == nil {
-				s.logger.Debug("Block not found for number", zap.String("number", blockNumberTagOrHash))
-				return "0x0"
+			timeDiff := latestTimestamp - blockTimestamp
+			s.logger.Info("Time difference", zap.Int64("timeDiff", timeDiff), zap.Any("blockTimestamp", blockTimestamp), zap.Any("latestTimestamp", latestTimestamp))
+			// The block is NOT from the last 15 minutes, use /balances rest API
+			if timeDiff > BalancesUpdateInterval {
+				weibars = s.mClient.GetBalance(address, block.Timestamp.From)
+			} else {
+				// The block is from the last 15 minutes, therefore the historical balance hasn't been imported in the Mirror Node yet
+				currentBalance := int64(0)
+				balanceFromTxs := int64(0)
+				accountResponse, err := s.mClient.GetAccountTransactionsById(address)
+				if err != nil {
+					s.logger.Error("Could not get account transactions by id", zap.Error(err))
+					return zeroHex
+				}
+
+				s.logger.Info("Account response", zap.Any("accountResponse", accountResponse))
+
+				if accountResponse != nil {
+					accountResponses := []domain.AccountResponse{*accountResponse}
+					if accountResponse.Balance.Balance != 0 {
+						currentBalance = accountResponse.Balance.Balance
+					}
+					s.logger.Info("Current balance", zap.Int64("currentBalance", currentBalance))
+					blockTimestamp, err := strconv.ParseFloat(block.Timestamp.To, 64)
+					if err != nil {
+						s.logger.Error("Could not parse block timestamp", zap.Error(err))
+						return zeroHex
+					}
+					// The balance in the account is real time, so we simply subtract the transactions to the block.timestamp.to to get a block relevant balance.
+					if nextPage := accountResponse.Links.Next; nextPage != nil {
+						nextPageTimestamp := strings.Split(*nextPage, ":")[1]
+						timestamp, err := strconv.ParseFloat(nextPageTimestamp, 64)
+
+						if err == nil && timestamp >= blockTimestamp {
+							pagedAccountResponse, err := s.mClient.GetPaginatedAccountTransactions(*nextPage, 20)
+							if err != nil {
+								s.logger.Error("Could not get paginated account transactions", zap.Error(err))
+								return zeroHex
+							}
+							accountResponses = append(accountResponses, pagedAccountResponse...)
+						}
+					}
+
+					for _, accountResponse := range accountResponses {
+						for _, tx := range accountResponse.Transactions {
+							if timestamp, err := strconv.ParseFloat(tx.ConsensusTimestamp, 64); err == nil && timestamp >= blockTimestamp {
+								for _, transfer := range tx.Transfers {
+									if transfer.Account == accountResponse.Account && !transfer.IsApproval {
+										balanceFromTxs += transfer.Amount
+										s.logger.Info("Balance from txs", zap.Int64("balanceFromTxs", balanceFromTxs))
+									}
+								}
+							}
+						}
+					}
+
+					weibars = convertToWeibars(currentBalance - balanceFromTxs)
+				}
 			}
 		}
 	}
-	balance := s.mClient.GetBalance(address, block.Timestamp.To)
 
-	return balance
+	if weibars == "" {
+		accountResponse, err := s.mClient.GetAccountTransactionsById(address)
+		if err != nil || accountResponse == nil {
+			s.logger.Error("Could not get account by id", zap.Error(err))
+			return zeroHex
+		}
+
+		weibars = convertToWeibars(accountResponse.Balance.Balance)
+	}
+
+	if err := s.cacheService.Set(s.ctx, cacheKey, weibars, DefaultExpiration); err != nil {
+		s.logger.Debug("Failed to cache balance", zap.Error(err))
+	}
+
+	return weibars
 }
 
 // TODO: Add error handling
