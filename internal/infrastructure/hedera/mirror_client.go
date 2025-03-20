@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"net/http"
 	"strings"
@@ -446,7 +447,9 @@ func (m *MirrorClient) PostCall(callObject map[string]interface{}) (interface{},
 	}
 	url := fmt.Sprintf("%s/api/v1/contracts/call", m.Web3URL)
 	m.logger.Info("Posting contract call", zap.String("url", url))
+
 	m.logger.Info("Body", zap.String("body", string(jsonBody)))
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		m.logger.Error("Error creating request for contract call", zap.Error(err))
@@ -461,17 +464,66 @@ func (m *MirrorClient) PostCall(callObject map[string]interface{}) (interface{},
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		m.logger.Error("Mirror node returned non-OK status", zap.Int("status", resp.StatusCode))
-		return nil, fmt.Errorf("mirror node returned %d", resp.StatusCode)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		m.logger.Error("Error reading response body", zap.Error(err))
+		return nil, fmt.Errorf("error reading response body: %v", err)
 	}
 
+	// Check for error response structure
+	var errorResp struct {
+		Status struct {
+			Messages []struct {
+				Message string `json:"message"`
+				Detail  string `json:"detail"`
+				Data    string `json:"data"`
+			} `json:"messages"`
+		} `json:"_status"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &errorResp); err == nil && len(errorResp.Status.Messages) > 0 {
+		errorMsg := errorResp.Status.Messages[0].Message
+		errorDetail := errorResp.Status.Messages[0].Detail
+		errorData := errorResp.Status.Messages[0].Data
+
+		m.logger.Error("Contract call error",
+			zap.String("message", errorMsg),
+			zap.String("detail", errorDetail),
+			zap.String("data", errorData))
+
+		if strings.Contains(errorMsg, "RATE_LIMIT_EXCEEDED") {
+			return nil, fmt.Errorf("rate limit exceeded: %s", errorDetail)
+		}
+		if strings.Contains(errorMsg, "CONTRACT_REVERT") {
+			m.logger.Debug("Contract reverted", zap.String("details", errorDetail))
+			if errorDetail != "" {
+				return nil, domain.NewContractRevertError(errorDetail)
+			}
+			return nil, domain.NewContractRevertError(errorMsg)
+		}
+		if strings.Contains(errorMsg, "NOT_SUPPORTED") {
+			m.logger.Warn("Unsupported operation detected, retrying with consensus node")
+			// Retry with consensus node (NOT IMPLEMENTED)
+			return nil, nil
+		}
+
+		return nil, fmt.Errorf("contract error: %s, detail: %s, data: %s", errorMsg, errorDetail, errorData)
+	}
+
+	// If status is not OK and we didn't parse an error structure, return generic error
+	if resp.StatusCode != http.StatusOK {
+		m.logger.Error("Mirror node returned non-OK status", zap.Int("status", resp.StatusCode))
+		return nil, fmt.Errorf("mirror node returned %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	// Try to parse as success response
 	var result struct {
 		Result string `json:"result"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		m.logger.Error("Error decoding response body", zap.Error(err))
-		return nil, nil
+		return nil, fmt.Errorf("error decoding response: %v", err)
 	}
 
 	return result.Result, nil
