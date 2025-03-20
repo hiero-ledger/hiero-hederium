@@ -459,12 +459,21 @@ func (s *EthService) EstimateGas(transaction interface{}, blockParam interface{}
 }
 
 func (s *EthService) Call(transaction interface{}, blockParam interface{}) (interface{}, *domain.RPCError) {
-	s.logger.Info("Performing eth_call", zap.Any("transaction", transaction))
+	s.logger.Info("Performing eth_call", zap.Any("transaction", transaction), zap.Any("blockParam", blockParam))
 
 	txObj, err := ParseTransactionCallObject(s, transaction)
 	if err != nil {
 		s.logger.Error("Failed to parse transaction call object", zap.Error(err))
 		return nil, domain.NewRPCError(domain.ServerError, "Failed to parse transaction call object")
+	}
+
+	// If the blockParam is a hash, we need to get the block number
+	if len(blockParam.(string)) > 32 {
+		block := s.mClient.GetBlockByHashOrNumber(blockParam.(string))
+		if block == nil {
+			return "0x", nil
+		}
+		blockParam = block.Number
 	}
 
 	result, err := FormatTransactionCallObject(s, txObj, blockParam, false)
@@ -475,10 +484,16 @@ func (s *EthService) Call(transaction interface{}, blockParam interface{}) (inte
 
 	callResult, err := s.mClient.PostCall(result)
 	if err != nil {
-		s.logger.Error("Mirror node failed to return gas estimate", zap.Error(err))
-		predefinedGas := s.PredifinedGasForTransaction(txObj)
-		return predefinedGas, nil
+		s.logger.Error("Failed to post call", zap.Error(err))
+		// If the error is a contract revert error, we return the revert reason
+		switch err := err.(type) {
+		case *domain.RPCError:
+			return nil, err
+		default:
+			return nil, domain.NewRPCError(domain.ServerError, "Failed to post call")
+		}
 	}
+
 	if callResult == nil {
 		s.logger.Error("Failed to post call", zap.Error(err))
 		return "0x0", domain.NewRPCError(domain.ServerError, "Failed to post call")

@@ -51,12 +51,18 @@ type CallObject struct {
 	GasPrice string `json:"gasPrice" binding:"omitempty,hexadecimal"`
 	Value    string `json:"value" binding:"omitempty,hexadecimal"`
 	Data     string `json:"data" binding:"omitempty,data"`
+	Input    string `json:"input" binding:"omitempty,data"`
+}
+
+type BlockNumberObject struct {
+	BlockNumber string `json:"blockNumber" binding:"omitempty,block_number_or_tag"`
+	BlockHash   string `json:"blockHash" binding:"omitempty,hexadecimal,len=66"`
 }
 
 // EthCallParams represents parameters for eth_call
 type EthCallParams struct {
 	CallObject CallObject `json:"callObject" binding:"required"`
-	Block      string     `json:"block" binding:"required,block_number_or_tag"`
+	Block      string     `json:"block" binding:"required"`
 }
 
 // EthGetTransactionByHashParams represents parameters for eth_getTransactionByHash
@@ -408,11 +414,13 @@ func (p *EthCallParams) FromPositionalParams(params []interface{}) *RPCError {
 	}
 
 	if to, exists := callObj["to"]; exists {
-		strTo, ok := to.(string)
-		if !ok {
+		if strTo, ok := to.(string); ok {
+			callObject.To = strTo
+		} else if to == nil {
+			callObject.To = ""
+		} else {
 			return NewInvalidParamsError(fmt.Sprintf("Expected 0x prefixed string representing the address (20 bytes), value: %v", to))
 		}
-		callObject.To = strTo
 	}
 
 	if gas, exists := callObj["gas"]; exists {
@@ -454,12 +462,33 @@ func (p *EthCallParams) FromPositionalParams(params []interface{}) *RPCError {
 	}
 
 	p.CallObject = callObject
-
-	block, ok := params[1].(string)
-	if !ok {
-		return NewInvalidParamsError("block must be a string")
+	var blocks BlockNumberObject
+	
+	// Here block could be string or map[string]interface
+	switch v := params[1].(type) {
+	case string:
+		blocks.BlockNumber = v
+	case map[string]interface{}:
+		if blockNumber, exists1 := v["blockNumber"].(string); exists1 {
+			blocks.BlockNumber = blockNumber
+		}
+		if blockHash, exists2 := v["blockHash"].(string); exists2 {
+			blocks.BlockHash = blockHash
+		}
+	default:
+		return NewInvalidParamsError("Missing value for required parameter 1")
 	}
-	p.Block = block
+
+	if err := validate.Struct(&blocks); err != nil {
+		message, tag := translateValidationErrors(err)
+		return NewInvalidParamsError(fmt.Sprintf("Invalid parameter '%s' for BlockNumberObject: %s", tag, message))
+	}
+
+	if blocks.BlockNumber != "" {
+		p.Block = blocks.BlockNumber
+	} else if blocks.BlockHash != "" {
+		p.Block = blocks.BlockHash
+	}
 
 	return nil
 }

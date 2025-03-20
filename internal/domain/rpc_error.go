@@ -57,6 +57,9 @@ const (
 
 	// Gas limit too low (-32003): Gas limit is too low
 	GasLimitTooLow = -32003
+
+	// ContractRevertError (3): Contract reverted
+	ContractRevertError = 3
 )
 
 // RPCError represents a JSON-RPC 2.0 error
@@ -141,4 +144,8 @@ func NewRangeTooLarge(blockRange int) *RPCError {
 
 func NewUnsupportedJSONRPCMethodError() *RPCError {
 	return NewRPCError(MethodNotFound, "Unsupported JSON-RPC method")
+}
+
+func NewContractRevertError(message string) *RPCError {
+	return NewRPCError(ContractRevertError, fmt.Sprintf("execution reverted: %s", message))
 }
