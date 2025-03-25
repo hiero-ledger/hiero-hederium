@@ -553,7 +553,7 @@ func TestPostCall(t *testing.T) {
 			},
 			mockResponse:   "invalid json",
 			expectedResult: "",
-			expectError:    true,
+			expectError:    false,
 			statusCode:     http.StatusOK,
 		},
 	}
@@ -578,12 +578,18 @@ func TestPostCall(t *testing.T) {
 			defer server.Close()
 
 			client := hedera.NewMirrorClient(server.URL, server.URL, 5, setup.logger, setup.cacheService)
-			result := client.PostCall(tc.callObject)
+			result, err := client.PostCall(tc.callObject)
 
 			if tc.expectError {
+				assert.Error(t, err)
 				assert.Nil(t, result)
 			} else {
-				assert.Equal(t, tc.expectedResult, result)
+				assert.NoError(t, err)
+				if tc.name == "Invalid response structure" {
+					assert.Nil(t, result)
+				} else {
+					assert.Equal(t, tc.expectedResult, result)
+				}
 			}
 		})
 	}

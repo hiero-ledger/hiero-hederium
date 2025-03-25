@@ -1214,7 +1214,7 @@ func TestCall(t *testing.T) {
 			if tc.setupMock {
 				mockClient.EXPECT().
 					PostCall(gomock.Any()).
-					Return(tc.mockResponse).
+					Return(tc.mockResponse, nil).
 					Times(1)
 			}
 
@@ -1304,7 +1304,7 @@ func TestEstimateGas(t *testing.T) {
 			if tc.setupMock {
 				mockClient.EXPECT().
 					PostCall(gomock.Any()).
-					Return(tc.mockResponse).
+					Return(tc.mockResponse, nil).
 					Times(1)
 			}
 

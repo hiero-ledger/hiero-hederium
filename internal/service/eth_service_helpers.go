@@ -17,8 +17,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/asm"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/rlp"
 	"go.uber.org/zap"
 )
 
@@ -377,7 +377,7 @@ func (s *EthService) tinybarsToWeibars(tinybars int64, allowNegative bool) (int6
 		return 0, fmt.Errorf("tinybars cannot be negative")
 	}
 
-	coefBigInt := big.NewInt(TINYBAR_TO_WEIBAR_COEF)
+	coefBigInt := big.NewInt(TinybarToWeibarCoef)
 	weiBigInt := new(big.Int).Mul(big.NewInt(tinybars), coefBigInt)
 
 	return weiBigInt.Int64(), nil
@@ -577,7 +577,7 @@ func WeibarHexToTinyBarInt(value string) (int64, error) {
 		}
 	}
 	// Create coefficient as big.Int
-	coefBigInt := big.NewInt(TINYBAR_TO_WEIBAR_COEF)
+	coefBigInt := big.NewInt(TinybarToWeibarCoef)
 
 	// Calculate tinybar value
 	tinybarValue := new(big.Int).Div(weiBigInt, coefBigInt)
@@ -1018,7 +1018,6 @@ func isHexString(str string) bool {
 	_, err := hex.DecodeString(str)
 	return err == nil
 }
-
 
 func buildLogsBloom(address string, topics []string) string {
 	if address == "" || len(topics) == 0 {

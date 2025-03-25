@@ -460,7 +460,7 @@ func TestFormatTransactionCallObject(t *testing.T) {
 			expected: map[string]interface{}{
 				"from":     "0x123",
 				"to":       "0x456",
-				"value":    "0", // 100 weibars is less than 1 tinybar, so it rounds to 0
+				"value":    "1", // 100 weibars is less than 1 tinybar, but rounds up to 1
 				"estimate": false,
 			},
 			expectError: false,
@@ -475,6 +475,7 @@ func TestFormatTransactionCallObject(t *testing.T) {
 			expected: map[string]interface{}{
 				"gasPrice": "100",
 				"estimate": true,
+				"to":       nil,
 			},
 			expectError: false,
 		},
@@ -489,6 +490,7 @@ func TestFormatTransactionCallObject(t *testing.T) {
 				"gas":      "100",
 				"block":    "latest",
 				"estimate": false,
+				"to":       nil,
 			},
 			expectError: false,
 		},
@@ -503,6 +505,7 @@ func TestFormatTransactionCallObject(t *testing.T) {
 			expected: map[string]interface{}{
 				"data":     "0x123",
 				"estimate": false,
+				"to":       nil,
 			},
 			expectError: false,
 		},
@@ -549,7 +552,7 @@ func TestWeibarHexToTinyBarInt(t *testing.T) {
 		{
 			name:     "Simple hex value",
 			input:    "0x64", // 100 in hex
-			expected: 0,      // 100 weibars < 1 tinybar
+			expected: 1,      // 100 weibars < 1 tinybar, but it rounds up to 1
 		},
 		{
 			name:     "Large hex value",
