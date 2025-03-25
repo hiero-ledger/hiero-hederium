@@ -12,15 +12,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	TxBaseCost                = 21000
-	TxDataZeroCost            = 4
-	IstanbulTxDataNonZeroCost = 16
-	MaxGasPerSec              = 15000000
-	TinybarToWeibarCoef       = 10000000000
-	GasPriceTinyBarBuffer     = 1
-)
-
 type Precheck interface {
 	ParseTxIfNeeded(transaction interface{}) *types.Transaction
 	Value(tx *types.Transaction) error
