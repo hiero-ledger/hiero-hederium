@@ -909,7 +909,6 @@ func TestGetBlockByNumber(t *testing.T) {
 		})
 	}
 }
-
 func TestGetBalance(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -919,13 +918,13 @@ func TestGetBalance(t *testing.T) {
 	logger, _ := cfg.Build()
 
 	cacheService := mocks.NewMockCacheService(ctrl)
-
 	mockClient := mocks.NewMockMirrorClient(ctrl)
+	commonService := mocks.NewMockCommonService(ctrl)
 
 	s := service.NewEthService(
 		nil,
 		mockClient,
-		nil,
+		commonService,
 		logger,
 		nil,
 		defaultChainId,
@@ -944,27 +943,103 @@ func TestGetBalance(t *testing.T) {
 			address:    "0x1234567890123456789012345678901234567890",
 			blockParam: "latest",
 			setupMock: func() {
+				// Set expectations for GetBlockNumberByNumberOrTag for latest
+				commonService.EXPECT().
+					GetBlockNumberByNumberOrTag("latest").
+					Return(int64(100), nil)
+
+				// Mock getting latest block
 				mockClient.EXPECT().
-					GetBalance("0x1234567890123456789012345678901234567890", "0").
-					Return("0x64")
+					GetBlockByHashOrNumber("100").
+					Return(&domain.BlockResponse{
+						Number: 100,
+						Hash:   "0xlatesthash",
+						Timestamp: domain.Timestamp{
+							From: "1234567890.000000000",
+							To:   "1234567890.000000000",
+						},
+					})
+
+				// Mock cache expectations
+				cacheService.EXPECT().
+					Get(gomock.Any(), "eth_getBalance_0x1234567890123456789012345678901234567890_0xlatesthash", gomock.Any()).
+					Return(fmt.Errorf("not found"))
+
+				// Mock account transactions
+				mockClient.EXPECT().
+					GetAccountTransactionsById("0x1234567890123456789012345678901234567890").
+					Return(&domain.AccountResponse{
+						Balance: struct {
+							Balance   int64         `json:"balance"`
+							Timestamp string        `json:"timestamp"`
+							Tokens    []interface{} `json:"tokens"`
+						}{
+							Balance:   100,
+							Timestamp: "1234567890.000000000",
+							Tokens:    []interface{}{},
+						},
+					}, nil)
+
+				// Mock cache Set
+				cacheService.EXPECT().
+					Set(gomock.Any(), "eth_getBalance_0x1234567890123456789012345678901234567890_0xlatesthash", "0xe8d4a51000", service.DefaultExpiration).
+					Return(nil)
 			},
-			expectedResult: "0x64",
+			expectedResult: "0xe8d4a51000",
 		},
 		{
 			name:       "Earliest block balance",
 			address:    "0x1234567890123456789012345678901234567890",
 			blockParam: "earliest",
 			setupMock: func() {
+				// Set expectations for GetBlockNumberByNumberOrTag for latest (used to get latest block)
+				commonService.EXPECT().
+					GetBlockNumberByNumberOrTag("latest").
+					Return(int64(100), nil)
+
+				// Mock getting latest block
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("100").
+					Return(&domain.BlockResponse{
+						Number: 100,
+						Hash:   "0xlatesthash",
+						Timestamp: domain.Timestamp{
+							From: "1234567890.000000000",
+							To:   "1234567890.000000000",
+						},
+					})
+
+				// Set expectations for GetBlockNumberByNumberOrTag for earliest
+				commonService.EXPECT().
+					GetBlockNumberByNumberOrTag("earliest").
+					Return(int64(0), nil)
+
+				// Mock getting earliest block
 				mockClient.EXPECT().
 					GetBlockByHashOrNumber("0").
 					Return(&domain.BlockResponse{
+						Number: 0,
+						Hash:   "0xearliesthash",
 						Timestamp: domain.Timestamp{
-							To: "2023-01-01T00:00:00.000Z",
+							From: "1000000000.000000000",
+							To:   "1000000000.000000000",
 						},
 					})
+
+				// Mock cache expectations
+				cacheService.EXPECT().
+					Get(gomock.Any(), "eth_getBalance_0x1234567890123456789012345678901234567890_0xearliesthash", gomock.Any()).
+					Return(fmt.Errorf("not found"))
+
+				// Mock getting balance
 				mockClient.EXPECT().
-					GetBalance("0x1234567890123456789012345678901234567890", "2023-01-01T00:00:00.000Z").
+					GetBalance("0x1234567890123456789012345678901234567890", "1000000000.000000000").
 					Return("0x32")
+
+				// Mock cache Set
+				cacheService.EXPECT().
+					Set(gomock.Any(), "eth_getBalance_0x1234567890123456789012345678901234567890_0xearliesthash", "0x32", service.DefaultExpiration).
+					Return(nil)
 			},
 			expectedResult: "0x32",
 		},
@@ -973,16 +1048,54 @@ func TestGetBalance(t *testing.T) {
 			address:    "0x1234567890123456789012345678901234567890",
 			blockParam: "0x50",
 			setupMock: func() {
+				// Set expectations for GetBlockNumberByNumberOrTag for latest (used to get latest block)
+				commonService.EXPECT().
+					GetBlockNumberByNumberOrTag("latest").
+					Return(int64(100), nil)
+
+				// Mock getting latest block
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("100").
+					Return(&domain.BlockResponse{
+						Number: 100,
+						Hash:   "0xlatesthash",
+						Timestamp: domain.Timestamp{
+							From: "1234567890.000000000",
+							To:   "1234567890.000000000",
+						},
+					})
+
+				// Set expectations for GetBlockNumberByNumberOrTag for specific block number
+				commonService.EXPECT().
+					GetBlockNumberByNumberOrTag("0x50").
+					Return(int64(80), nil)
+
+				// Mock getting specific block
 				mockClient.EXPECT().
 					GetBlockByHashOrNumber("80").
 					Return(&domain.BlockResponse{
+						Number: 80,
+						Hash:   "0xspecifichash",
 						Timestamp: domain.Timestamp{
-							To: "2023-06-01T00:00:00.000Z",
+							From: "1111111111.000000000",
+							To:   "1111111111.000000000",
 						},
 					})
+
+				// Mock cache expectations
+				cacheService.EXPECT().
+					Get(gomock.Any(), "eth_getBalance_0x1234567890123456789012345678901234567890_0xspecifichash", gomock.Any()).
+					Return(fmt.Errorf("not found"))
+
+				// Mock getting balance
 				mockClient.EXPECT().
-					GetBalance("0x1234567890123456789012345678901234567890", "2023-06-01T00:00:00.000Z").
+					GetBalance("0x1234567890123456789012345678901234567890", "1111111111.000000000").
 					Return("0x96")
+
+				// Mock cache Set
+				cacheService.EXPECT().
+					Set(gomock.Any(), "eth_getBalance_0x1234567890123456789012345678901234567890_0xspecifichash", "0x96", service.DefaultExpiration).
+					Return(nil)
 			},
 			expectedResult: "0x96",
 		},
@@ -991,6 +1104,29 @@ func TestGetBalance(t *testing.T) {
 			address:    "0x1234567890123456789012345678901234567890",
 			blockParam: "0x999",
 			setupMock: func() {
+				// Set expectations for GetBlockNumberByNumberOrTag for latest (used to get latest block)
+				commonService.EXPECT().
+					GetBlockNumberByNumberOrTag("latest").
+					Return(int64(100), nil)
+
+				// Mock getting latest block
+				mockClient.EXPECT().
+					GetBlockByHashOrNumber("100").
+					Return(&domain.BlockResponse{
+						Number: 100,
+						Hash:   "0xlatesthash",
+						Timestamp: domain.Timestamp{
+							From: "1234567890.000000000",
+							To:   "1234567890.000000000",
+						},
+					})
+
+				// Set expectations for GetBlockNumberByNumberOrTag for non-existent block
+				commonService.EXPECT().
+					GetBlockNumberByNumberOrTag("0x999").
+					Return(int64(2457), nil)
+
+				// Mock getting non-existent block returns nil
 				mockClient.EXPECT().
 					GetBlockByHashOrNumber("2457").
 					Return(nil)
@@ -1018,19 +1154,54 @@ func TestGetBalance_Latest(t *testing.T) {
 	logger, _ := cfg.Build()
 
 	cacheService := mocks.NewMockCacheService(ctrl)
-
-	// Create mock client
 	mockClient := mocks.NewMockMirrorClient(ctrl)
+	commonService := mocks.NewMockCommonService(ctrl)
 
-	// Setup expectations for getting balance with "0" timestamp
+	// Set expectations for GetBlockNumberByNumberOrTag for latest
+	commonService.EXPECT().
+		GetBlockNumberByNumberOrTag("latest").
+		Return(int64(100), nil)
+
+	// Mock getting latest block
 	mockClient.EXPECT().
-		GetBalance("0x123", "0").
-		Return("0x2a")
+		GetBlockByHashOrNumber("100").
+		Return(&domain.BlockResponse{
+			Number: 100,
+			Hash:   "0xlatesthash",
+			Timestamp: domain.Timestamp{
+				From: "1234567890.000000000",
+				To:   "1234567890.000000000",
+			},
+		})
+
+	// Mock cache expectations
+	cacheService.EXPECT().
+		Get(gomock.Any(), "eth_getBalance_0x123_0xlatesthash", gomock.Any()).
+		Return(fmt.Errorf("not found"))
+
+	// Mock account transactions
+	mockClient.EXPECT().
+		GetAccountTransactionsById("0x123").
+		Return(&domain.AccountResponse{
+			Balance: struct {
+				Balance   int64         `json:"balance"`
+				Timestamp string        `json:"timestamp"`
+				Tokens    []interface{} `json:"tokens"`
+			}{
+				Balance:   42,
+				Timestamp: "1234567890.000000000",
+				Tokens:    []interface{}{},
+			},
+		}, nil)
+
+	cacheService.EXPECT().
+		Set(gomock.Any(), "eth_getBalance_0x123_0xlatesthash", "0x61c9f36800", service.DefaultExpiration).
+		Return(nil)
 
 	s := service.NewEthService(
 		nil,
 		mockClient,
-		nil,
+		commonService,
 		logger,
 		nil,
 		defaultChainId,
@@ -1038,7 +1209,7 @@ func TestGetBalance_Latest(t *testing.T) {
 	)
 
 	result := s.GetBalance("0x123", "latest")
-	assert.Equal(t, "0x2a", result)
+	assert.Equal(t, "0x61c9f36800", result)
 }
 
 func TestGetBalance_Earliest(t *testing.T) {
@@ -1050,27 +1221,61 @@ func TestGetBalance_Earliest(t *testing.T) {
 	logger, _ := cfg.Build()
 
 	cacheService := mocks.NewMockCacheService(ctrl)
-
 	mockClient := mocks.NewMockMirrorClient(ctrl)
+	commonService := mocks.NewMockCommonService(ctrl)
+
+	// Set expectations for GetBlockNumberByNumberOrTag for latest (used to get latest block)
+	commonService.EXPECT().
+		GetBlockNumberByNumberOrTag("latest").
+		Return(int64(100), nil)
+
+	// Mock getting latest block
+	mockClient.EXPECT().
+		GetBlockByHashOrNumber("100").
+		Return(&domain.BlockResponse{
+			Number: 100,
+			Hash:   "0xlatesthash",
+			Timestamp: domain.Timestamp{
+				From: "1234567890.000000000",
+				To:   "1234567890.000000000",
+			},
+		})
+
+	// Set expectations for GetBlockNumberByNumberOrTag for earliest
+	commonService.EXPECT().
+		GetBlockNumberByNumberOrTag("earliest").
+		Return(int64(0), nil)
 
 	// Setup expectations for getting block zero
 	mockClient.EXPECT().
 		GetBlockByHashOrNumber("0").
 		Return(&domain.BlockResponse{
+			Number: 0,
+			Hash:   "0xearliesthash",
 			Timestamp: domain.Timestamp{
-				To: "2023-01-01T00:00:00.000Z",
+				From: "1000000000.000000000",
+				To:   "1000000000.000000000",
 			},
 		})
 
+	// Mock cache expectations
+	cacheService.EXPECT().
+		Get(gomock.Any(), "eth_getBalance_0x123_0xearliesthash", gomock.Any()).
+		Return(fmt.Errorf("not found"))
+
 	// Setup expectations for getting balance
 	mockClient.EXPECT().
-		GetBalance("0x123", "2023-01-01T00:00:00.000Z").
+		GetBalance("0x123", "1000000000.000000000").
 		Return("0x0")
+
+	cacheService.EXPECT().
+		Set(gomock.Any(), "eth_getBalance_0x123_0xearliesthash", "0x0", service.DefaultExpiration).
+		Return(nil)
 
 	s := service.NewEthService(
 		nil,
 		mockClient,
-		nil,
+		commonService,
 		logger,
 		nil,
 		defaultChainId,
@@ -1090,27 +1295,73 @@ func TestGetBalance_SpecificBlock(t *testing.T) {
 	logger, _ := cfg.Build()
 
 	cacheService := mocks.NewMockCacheService(ctrl)
-
 	mockClient := mocks.NewMockMirrorClient(ctrl)
+	commonService := mocks.NewMockCommonService(ctrl)
 
-	// Setup expectations for getting specific block
+	// Set expectations for GetBlockNumberByNumberOrTag for latest (used to get latest block)
+	commonService.EXPECT().
+		GetBlockNumberByNumberOrTag("latest").
+		Return(int64(100), nil)
+
+	// Mock getting latest block
 	mockClient.EXPECT().
 		GetBlockByHashOrNumber("100").
 		Return(&domain.BlockResponse{
+			Number: 100,
+			Hash:   "0xlatesthash",
 			Timestamp: domain.Timestamp{
-				To: "1234567890.000000000",
+				From: "1234567890.000000000",
+				To:   "1234567890.000000000",
 			},
 		})
 
-	// Setup expectations for getting balance
+	// Set expectations for GetBlockNumberByNumberOrTag for specific block number
+	commonService.EXPECT().
+		GetBlockNumberByNumberOrTag("0x64").
+		Return(int64(100), nil)
+
+	// Add a second expectation for GetBlockByHashOrNumber since it will be called
+	// a second time for the specific block number
 	mockClient.EXPECT().
-		GetBalance("0x123", "1234567890.000000000").
-		Return("0x64")
+		GetBlockByHashOrNumber("100").
+		Return(&domain.BlockResponse{
+			Number: 100,
+			Hash:   "0xspecifichash",
+			Timestamp: domain.Timestamp{
+				From: "1111111111.000000000",
+				To:   "1111111111.000000000",
+			},
+		})
+
+	// Since the specific block's timestamp (1111111111) is different from the latest block's timestamp (1234567890),
+	// we need to set up the account transactions call
+	mockClient.EXPECT().
+		GetAccountTransactionsById("0x123").
+		Return(&domain.AccountResponse{
+			Balance: struct {
+				Balance   int64         `json:"balance"`
+				Timestamp string        `json:"timestamp"`
+				Tokens    []interface{} `json:"tokens"`
+			}{
+				Balance:   100,
+				Timestamp: "1234567890.000000000",
+				Tokens:    []interface{}{},
+			},
+		}, nil)
+
+	// Mock cache expectations
+	cacheService.EXPECT().
+		Get(gomock.Any(), "eth_getBalance_0x123_0xspecifichash", gomock.Any()).
+		Return(fmt.Errorf("not found"))
+
+	cacheService.EXPECT().
+		Set(gomock.Any(), "eth_getBalance_0x123_0xspecifichash", "0xe8d4a51000", service.DefaultExpiration).
+		Return(nil)
 
 	s := service.NewEthService(
 		nil,
 		mockClient,
-		nil,
+		commonService,
 		logger,
 		nil,
 		defaultChainId,
@@ -1118,7 +1369,7 @@ func TestGetBalance_SpecificBlock(t *testing.T) {
 	)
 
 	result := s.GetBalance("0x123", "0x64") // hex for 100
-	assert.Equal(t, "0x64", result)
+	assert.Equal(t, "0xe8d4a51000", result)
 }
 
 func TestGetBalance_BlockNotFound(t *testing.T) {
@@ -1130,8 +1381,30 @@ func TestGetBalance_BlockNotFound(t *testing.T) {
 	logger, _ := cfg.Build()
 
 	cacheService := mocks.NewMockCacheService(ctrl)
-
 	mockClient := mocks.NewMockMirrorClient(ctrl)
+	commonService := mocks.NewMockCommonService(ctrl)
+
+	// Set expectations for GetBlockNumberByNumberOrTag for latest (used to get latest block)
+	commonService.EXPECT().
+		GetBlockNumberByNumberOrTag("latest").
+		Return(int64(100), nil)
+
+	// Mock getting latest block
+	mockClient.EXPECT().
+		GetBlockByHashOrNumber("100").
+		Return(&domain.BlockResponse{
+			Number: 100,
+			Hash:   "0xlatesthash",
+			Timestamp: domain.Timestamp{
+				From: "1234567890.000000000",
+				To:   "1234567890.000000000",
+			},
+		})
+
+	// Set expectations for GetBlockNumberByNumberOrTag for non-existent block
+	commonService.EXPECT().
+		GetBlockNumberByNumberOrTag("999999").
+		Return(int64(999999), nil)
 
 	// Setup expectations for getting block that doesn't exist
 	mockClient.EXPECT().
@@ -1141,7 +1414,7 @@ func TestGetBalance_BlockNotFound(t *testing.T) {
 	s := service.NewEthService(
 		nil,
 		mockClient,
-		nil,
+		commonService,
 		logger,
 		nil,
 		defaultChainId,
