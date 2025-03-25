@@ -10,9 +10,9 @@ import (
 type HandlerFunc func(ctx context.Context, params domain.RPCParams, services service.ServiceProvider) (interface{}, *domain.RPCError)
 
 type MethodInfo struct {
-	Name          string
-	ParamCreator func() domain.RPCParams 
-	Handler       HandlerFunc
+	Name         string
+	ParamCreator func() domain.RPCParams
+	Handler      HandlerFunc
 }
 
 type Methods struct {
@@ -262,44 +262,40 @@ func (m *Methods) registerEthMethods() {
 	m.registerMethod(MethodInfo{
 		Name: "eth_getUncleCountByBlockHash",
 		ParamCreator: func() domain.RPCParams {
-			return &domain.EthGetUncleCountByBlockHashParams{}
+			return &domain.NoParameters{}
 		},
 		Handler: func(ctx context.Context, params domain.RPCParams, services service.ServiceProvider) (interface{}, *domain.RPCError) {
-			p := params.(*domain.EthGetUncleCountByBlockHashParams)
-			return services.EthService().GetUncleCountByBlockHash(p.BlockHash)
+			return services.EthService().GetUncleCountByBlockHash("")
 		},
 	})
 
 	m.registerMethod(MethodInfo{
 		Name: "eth_getUncleCountByBlockNumber",
 		ParamCreator: func() domain.RPCParams {
-			return &domain.EthGetUncleCountByBlockNumberParams{}
+			return &domain.NoParameters{}
 		},
 		Handler: func(ctx context.Context, params domain.RPCParams, services service.ServiceProvider) (interface{}, *domain.RPCError) {
-			p := params.(*domain.EthGetUncleCountByBlockNumberParams)
-			return services.EthService().GetUncleCountByBlockNumber(p.BlockNumber)
+			return services.EthService().GetUncleCountByBlockNumber("")
 		},
 	})
 
 	m.registerMethod(MethodInfo{
 		Name: "eth_getUncleByBlockHashAndIndex",
 		ParamCreator: func() domain.RPCParams {
-			return &domain.EthGetUncleByBlockHashAndIndexParams{}
+			return &domain.NoParameters{}
 		},
 		Handler: func(ctx context.Context, params domain.RPCParams, services service.ServiceProvider) (interface{}, *domain.RPCError) {
-			p := params.(*domain.EthGetUncleByBlockHashAndIndexParams)
-			return services.EthService().GetUncleByBlockHashAndIndex(p.BlockHash, p.Index)
+			return services.EthService().GetUncleByBlockHashAndIndex("", "")
 		},
 	})
 
 	m.registerMethod(MethodInfo{
 		Name: "eth_getUncleByBlockNumberAndIndex",
 		ParamCreator: func() domain.RPCParams {
-			return &domain.EthGetUncleByBlockNumberAndIndexParams{}
+			return &domain.NoParameters{}
 		},
 		Handler: func(ctx context.Context, params domain.RPCParams, services service.ServiceProvider) (interface{}, *domain.RPCError) {
-			p := params.(*domain.EthGetUncleByBlockNumberAndIndexParams)
-			return services.EthService().GetUncleByBlockNumberAndIndex(p.BlockNumber, p.Index)
+			return services.EthService().GetUncleByBlockNumberAndIndex("", "")
 		},
 	})
 
@@ -363,6 +359,26 @@ func (m *Methods) registerWeb3Methods() {
 		},
 		Handler: func(ctx context.Context, params domain.RPCParams, services service.ServiceProvider) (interface{}, *domain.RPCError) {
 			return services.Web3Service().ClientVersion(), nil
+		},
+	})
+
+	m.registerMethod(MethodInfo{
+		Name: "web3_client_version",
+		ParamCreator: func() domain.RPCParams {
+			return &domain.NoParameters{}
+		},
+		Handler: func(ctx context.Context, params domain.RPCParams, services service.ServiceProvider) (interface{}, *domain.RPCError) {
+			return services.Web3Service().ClientVersion(), nil
+		},
+	})
+
+	m.registerMethod(MethodInfo{
+		Name: "eth_submitWork",
+		ParamCreator: func() domain.RPCParams {
+			return &domain.NoParameters{}
+		},
+		Handler: func(ctx context.Context, params domain.RPCParams, services service.ServiceProvider) (interface{}, *domain.RPCError) {
+			return services.EthService().SubmitWork()
 		},
 	})
 }

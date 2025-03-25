@@ -17,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/asm"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
 	"go.uber.org/zap"
 )
@@ -79,15 +80,30 @@ func ProcessBlock(s *EthService, block *domain.BlockResponse, showDetails bool) 
 		trimmedParentHash = trimmedParentHash[:66]
 	}
 
+	ethBlock.WithdrawalsRoot = "0x0000000000000000000000000000000000000000000000000000000000000000"
+	ethBlock.MixHash = "0x0000000000000000000000000000000000000000000000000000000000000000"
+
+	gasPrice, err := s.GetGasPrice()
+	if err != nil {
+		s.logger.Error("Failed to get gas price", zap.Error(err))
+	}
+	gasPriceStr, ok := gasPrice.(string)
+	if !ok {
+		s.logger.Error("Gas price is not a string")
+		gasPriceStr = "0x0"
+	}
+	ethBlock.Withdrawals = []string{}
+	ethBlock.BaseFeePerGas = gasPriceStr
 	ethBlock.Number = &hexNumber
 	ethBlock.GasUsed = hexGasUsed
-	ethBlock.GasLimit = hexify(15000000) // Hedera's default gas limit
+	ethBlock.GasLimit = hexify(GasLimit) // Hedera's default gas limit
 	ethBlock.Hash = &trimmedHash
 	ethBlock.LogsBloom = block.LogsBloom
 	ethBlock.TransactionsRoot = &trimmedHash
 	ethBlock.ParentHash = trimmedParentHash
 	ethBlock.Timestamp = hexTimestamp
 	ethBlock.Size = hexSize
+	ethBlock.TotalDifficulty = "0x0"
 
 	contractResults := s.mClient.GetContractResults(block.Timestamp)
 	for _, contractResult := range contractResults {
@@ -140,18 +156,18 @@ func ProcessTransaction(contractResult domain.ContractResults) interface{} {
 	hexBlockNumber := hexify(contractResult.BlockNumber)
 	hexGasUsed := hexify(contractResult.GasUsed)
 	hexTransactionIndex := hexify(int64(contractResult.TransactionIndex))
-	hexValue := hexify(int64(contractResult.Amount))
+	hexValue := fmt.Sprintf("0x%x", uint64(contractResult.Amount))
 	hexV := hexify(int64(contractResult.V))
 
 	// Safe string slicing with length checks
 	hexR := "0x0"
 	if contractResult.R != "" {
-		hexR = truncateString(contractResult.R, 66)
+		hexR = removeLeadingZeroes(truncateString(contractResult.R, 66))
 	}
 
 	hexS := "0x0"
 	if contractResult.S != "" {
-		hexS = truncateString(contractResult.S, 66)
+		hexS = removeLeadingZeroes(truncateString(contractResult.S, 66))
 	}
 
 	hexNonce := hexify(contractResult.Nonce)
@@ -218,11 +234,13 @@ func ProcessTransaction(contractResult domain.ContractResults) interface{} {
 			AccessList:  []domain.AccessListEntry{}, // Empty access list for now
 		}
 	case 2:
+		MaxPriorityFeePerGas := parseFee(contractResult.MaxPriorityFeePerGas)
+		MaxFeePerGas := parseFee(contractResult.MaxFeePerGas)
 		return domain.Transaction1559{
 			Transaction:          commonFields,
 			AccessList:           []domain.AccessListEntry{}, // Empty access list for now
-			MaxPriorityFeePerGas: contractResult.MaxPriorityFeePerGas,
-			MaxFeePerGas:         contractResult.MaxFeePerGas,
+			MaxPriorityFeePerGas: MaxPriorityFeePerGas,
+			MaxFeePerGas:         MaxFeePerGas,
 		}
 	default:
 		return commonFields // Default to legacy transaction
@@ -233,7 +251,14 @@ func (s *EthService) ProcessTransactionResponse(contractResult domain.ContractRe
 	hexBlockNumber := hexify(contractResult.BlockNumber)
 	hexGasUsed := hexify(contractResult.GasUsed)
 	hexTransactionIndex := hexify(int64(contractResult.TransactionIndex))
-	hexValue := hexify(int64(contractResult.Amount))
+	value, err := s.tinybarsToWeibars(int64(contractResult.Amount), true)
+	if err != nil {
+		// TODO: If allowNegative in tinybarsToWeibars can be false - this should return error and be handled in properly
+		// return domain.NewRPCError(domain.InternalError, "Invalid value - cannot pass negative number")
+		s.logger.Error("Invalid value - cannot pass negative number", zap.Error(err))
+		return nil
+	}
+	hexValue := hexify(value)
 	hexV := hexify(int64(contractResult.V))
 
 	// Safe string slicing with length checks
@@ -339,6 +364,25 @@ func (s *EthService) ProcessTransactionResponse(contractResult domain.ContractRe
 	}
 }
 
+func (s *EthService) tinybarsToWeibars(tinybars int64, allowNegative bool) (int64, error) {
+	if tinybars == 0 {
+		return 0, nil
+	}
+
+	if allowNegative && tinybars < 0 {
+		return tinybars, nil
+	}
+
+	if tinybars < 0 {
+		return 0, fmt.Errorf("tinybars cannot be negative")
+	}
+
+	coefBigInt := big.NewInt(TinybarToWeibarCoef)
+	weiBigInt := new(big.Int).Mul(big.NewInt(tinybars), coefBigInt)
+
+	return weiBigInt.Int64(), nil
+}
+
 func ParseTransactionCallObject(s *EthService, transaction interface{}) (*domain.TransactionCallObject, error) {
 	var transactionCallObject domain.TransactionCallObject
 	jsonBytes, err := json.Marshal(transaction)
@@ -411,7 +455,12 @@ func FormatTransactionCallObject(s *EthService, transactionCallObject *domain.Tr
 		if transactionCallObject.From != "" {
 			result["from"] = transactionCallObject.From
 		} else {
-			result["from"] = s.hClient.GetOperatorPublicKey()
+			operatorPublicKey := s.hClient.GetOperatorPublicKey()
+			evmAddress, err := s.resolveEvmAddress(operatorPublicKey)
+			if err != nil {
+				return nil, err
+			}
+			result["from"] = *evmAddress
 		}
 	}
 
@@ -432,10 +481,12 @@ func FormatTransactionCallObject(s *EthService, transactionCallObject *domain.Tr
 		result["block"] = blockParam
 	}
 
-	// Copy any remaining non-empty fields
 	if transactionCallObject.To != "" {
 		result["to"] = transactionCallObject.To
+	} else {
+		result["to"] = nil
 	}
+
 	if transactionCallObject.Nonce != "" && transactionCallObject.Nonce != "0x" {
 		result["nonce"] = transactionCallObject.Nonce
 	}
@@ -444,8 +495,67 @@ func FormatTransactionCallObject(s *EthService, transactionCallObject *domain.Tr
 	return result, nil
 }
 
-// Helper function to convert weibar hex to tinybar int
-const TINYBAR_TO_WEIBAR_COEF = 10000000000 // 10^10
+func (s *EthService) PredifinedGasForTransaction(callObject *domain.TransactionCallObject) string {
+	s.logger.Info("Predifined gas for transaction", zap.Any("callObject", callObject))
+	// Check if it's a simple transfer (has 'to' address and no data or empty data)
+	isSimpleTransfer := callObject.To != "" && (callObject.Data == "" || callObject.Data == "0x")
+
+	// Check if it's a contract call (has 'to' address and data with at least function selector length)
+	isContractCall := callObject.To != "" && callObject.Data != "" && len(callObject.Data) >= FunctionSelectorCharLength
+
+	// Check if it's a contract creation (no 'to' address and has data that's not empty)
+	isContractCreate := callObject.To == "" && callObject.Data != "" && callObject.Data != "0x"
+
+	if isSimpleTransfer {
+		_, err := s.mClient.GetAccountById(callObject.From)
+		if err == nil {
+			s.logger.Warn("Returning predefined gas for simple transfer:")
+			return fmt.Sprintf("0x%x", TxBaseCost)
+		}
+		s.logger.Warn("Returning predefined gas for hollow account creation:")
+		return fmt.Sprintf("0x%x", MinTxHollowAccountCreationGas)
+	} else if isContractCreate {
+		gasCost := calculateIntrinsicGasCost(callObject.Data)
+		return fmt.Sprintf("0x%x", gasCost)
+	} else if isContractCall {
+		return fmt.Sprintf("0x%x", TxContractCallAverageGas)
+	} else {
+		return fmt.Sprintf("0x%x", TxDefaultGas)
+	}
+}
+
+func calculateIntrinsicGasCost(data string) int64 {
+	fmt.Println("Calculating intrinsic gas cost for data:", data)
+
+	if data == "" || data == "0x" {
+		return TxBaseCost
+	}
+	cleanData := strings.TrimPrefix(data, "0x")
+
+	dataLength := len(cleanData) / 2
+	zeroBytes := 0
+	nonZeroBytes := 0
+
+	for i := 0; i < dataLength; i++ {
+		byteIndex := i * 2
+		if byteIndex+1 < len(cleanData) {
+			byteValue := cleanData[byteIndex : byteIndex+2]
+			if byteValue == "00" {
+				zeroBytes++
+			} else {
+				nonZeroBytes++
+			}
+		}
+	}
+
+	gasCost := TxBaseCost + int64(zeroBytes)*TxDataZeroCost + int64(nonZeroBytes)*TxDataNonZeroCost
+
+	if data != "" && data != "0x" {
+		gasCost += TxCreateExtra
+	}
+
+	return gasCost
+}
 
 func WeibarHexToTinyBarInt(value string) (int64, error) {
 	// Handle "0x" case
@@ -466,17 +576,16 @@ func WeibarHexToTinyBarInt(value string) (int64, error) {
 			return 0, fmt.Errorf("failed to parse value: %s", value)
 		}
 	}
-
 	// Create coefficient as big.Int
-	coefBigInt := big.NewInt(TINYBAR_TO_WEIBAR_COEF)
+	coefBigInt := big.NewInt(TinybarToWeibarCoef)
 
 	// Calculate tinybar value
 	tinybarValue := new(big.Int).Div(weiBigInt, coefBigInt)
-
 	// Only round up if the value is significant enough
 	remainder := new(big.Int).Mod(weiBigInt, coefBigInt)
-	if tinybarValue.Cmp(big.NewInt(0)) == 0 && remainder.Cmp(big.NewInt(TINYBAR_TO_WEIBAR_COEF/2)) > 0 {
-		return 1, nil // Round up to the smallest unit of tinybar only if remainder is significant
+
+	if tinybarValue.Cmp(big.NewInt(0)) == 0 && remainder.Cmp(big.NewInt(0)) > 0 {
+		return 1, nil
 	}
 
 	// Convert to int64 and check if it fits
@@ -908,4 +1017,50 @@ func isHexString(str string) bool {
 
 	_, err := hex.DecodeString(str)
 	return err == nil
+}
+
+func buildLogsBloom(address string, topics []string) string {
+	if address == "" || len(topics) == 0 {
+		return zeroHex32Bytes
+	}
+
+	address = strings.TrimPrefix(address, "0x")
+
+	items := []string{address}
+	for _, topic := range topics {
+		items = append(items, strings.TrimPrefix(topic, "0x"))
+	}
+
+	bitvector := make([]byte, BloomByteSize)
+
+	for _, item := range items {
+		itemBytes, _ := hex.DecodeString(item)
+		hash := crypto.Keccak256(itemBytes)
+
+		for i := 0; i < 3; i++ {
+			// Get first 2 bytes at position i*2
+			first2bytes := uint16(hash[i*2])<<8 | uint16(hash[i*2+1])
+
+			// Calculate bit position
+			loc := BloomMask & first2bytes
+			byteLoc := loc >> 3
+			bitLoc := uint8(1 << (loc % 8))
+
+			// Set the bit in the bitvector
+			bitvector[BloomByteSize-int(byteLoc)-1] |= bitLoc
+		}
+	}
+
+	return fmt.Sprintf("0x%s", hex.EncodeToString(bitvector))
+}
+
+func removeLeadingZeroes(str string) string {
+	return fmt.Sprintf("0x%s", strings.TrimLeft(strings.TrimPrefix(str, "0x"), "0"))
+}
+
+func parseFee(fee string) string {
+	if fee == "" || fee == "0x" {
+		return "0x0"
+	}
+	return removeLeadingZeroes(fee)
 }

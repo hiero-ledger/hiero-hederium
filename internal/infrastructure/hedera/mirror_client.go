@@ -24,7 +24,7 @@ type MirrorNodeClient interface {
 	GetBalance(address string, timestampTo string) string
 	GetAccount(address string, timestampTo string) interface{}
 	GetContractResult(transactionId string) interface{}
-	PostCall(callObject map[string]interface{}) interface{}
+	PostCall(callObject map[string]interface{}) (interface{}, error)
 	GetContractStateByAddressAndSlot(address string, slot string, timestampTo string) (*domain.ContractStateResponse, error)
 	GetContractResultsLogsByAddress(address string, queryParams map[string]interface{}) ([]domain.LogEntry, error)
 	GetContractResultsLogsWithRetry(queryParams map[string]interface{}) ([]domain.LogEntry, error)
@@ -37,14 +37,16 @@ type MirrorNodeClient interface {
 
 type MirrorClient struct {
 	BaseURL      string
+	Web3URL      string
 	Timeout      time.Duration
 	logger       *zap.Logger
 	cacheService cache.CacheService
 }
 
-func NewMirrorClient(baseURL string, timeoutSeconds int, logger *zap.Logger, cacheService cache.CacheService) *MirrorClient {
+func NewMirrorClient(baseURL string, web3Url string, timeoutSeconds int, logger *zap.Logger, cacheService cache.CacheService) *MirrorClient {
 	return &MirrorClient{
 		BaseURL:      baseURL,
+		Web3URL:      web3Url,
 		Timeout:      time.Duration(timeoutSeconds) * time.Second,
 		logger:       logger,
 		cacheService: cacheService,
@@ -428,33 +430,34 @@ func (m *MirrorClient) RepeatGetContractResult(transactionIdOrHash string, retri
 	return nil
 }
 
-func (m *MirrorClient) PostCall(callObject map[string]interface{}) interface{} {
+func (m *MirrorClient) PostCall(callObject map[string]interface{}) (interface{}, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
 	defer cancel()
-
 	jsonBody, err := json.Marshal(callObject)
 	if err != nil {
 		m.logger.Error("Error marshaling call object", zap.Error(err))
-		return nil
+		return nil, nil
 	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.BaseURL+"/api/v1/contracts/call", bytes.NewBuffer(jsonBody))
+	url := fmt.Sprintf("%s/api/v1/contracts/call", m.Web3URL)
+	m.logger.Info("Posting contract call", zap.String("url", url))
+	m.logger.Info("Body", zap.String("body", string(jsonBody)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		m.logger.Error("Error creating request for contract call", zap.Error(err))
-		return nil
+		return nil, nil
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		m.logger.Error("Error making contract call", zap.Error(err))
-		return nil
+		return nil, nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		m.logger.Error("Mirror node returned non-OK status", zap.Int("status", resp.StatusCode))
-		return nil
+		return nil, fmt.Errorf("mirror node returned %d", resp.StatusCode)
 	}
 
 	var result struct {
@@ -462,10 +465,10 @@ func (m *MirrorClient) PostCall(callObject map[string]interface{}) interface{} {
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		m.logger.Error("Error decoding response body", zap.Error(err))
-		return nil
+		return nil, nil
 	}
 
-	return result.Result
+	return result.Result, nil
 }
 
 func (m *MirrorClient) GetContractStateByAddressAndSlot(address string, slot string, timestampTo string) (*domain.ContractStateResponse, error) {
@@ -595,7 +598,7 @@ func (m *MirrorClient) fetchLogsPages(url string) (*domain.ContractResultsLogRes
 
 	if resp.StatusCode != http.StatusOK {
 		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
-		return nil, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
+		return nil, nil
 	}
 
 	var result domain.ContractResultsLogResponse
@@ -616,7 +619,7 @@ func (m *MirrorClient) getPaginatedResults(url string) ([]domain.LogEntry, error
 			return nil, err
 		}
 
-		if len(result.Logs) == 0 {
+		if result == nil || len(result.Logs) == 0 {
 			break
 		}
 
@@ -658,7 +661,7 @@ func (m *MirrorClient) GetContractResultWithRetry(queryParams map[string]interfa
 
 		if resp.StatusCode != http.StatusOK {
 			m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
-			return nil, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
+			return nil, nil
 		}
 
 		// Should make struct for this

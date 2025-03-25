@@ -331,14 +331,20 @@ func (s *EthService) EstimateGas(transaction interface{}, blockParam interface{}
 		s.logger.Error("Failed to parse transaction call object", zap.Error(err))
 		return "0x0", domain.NewRPCError(domain.ServerError, "Failed to parse transaction call object")
 	}
-
+	
 	formatResult, err := FormatTransactionCallObject(s, txObj, blockParam, true)
 	if err != nil {
 		s.logger.Error("Failed to format transaction call object", zap.Error(err))
 		return "0x0", domain.NewRPCError(domain.ServerError, "Failed to format transaction call object")
 	}
 
-	callResult := s.mClient.PostCall(formatResult)
+	callResult, err := s.mClient.PostCall(formatResult)
+	if err != nil {
+		s.logger.Error("Mirror node failed to return gas estimate", zap.Error(err))
+		predefinedGas := s.PredifinedGasForTransaction(txObj)
+		return predefinedGas, nil
+	}
+
 	if callResult == nil {
 		s.logger.Error("Failed to post call", zap.Error(err))
 		return "0x0", domain.NewRPCError(domain.ServerError, "Failed to post call")
@@ -366,7 +372,12 @@ func (s *EthService) Call(transaction interface{}, blockParam interface{}) (inte
 		return nil, domain.NewRPCError(domain.ServerError, "Failed to format transaction call object")
 	}
 
-	callResult := s.mClient.PostCall(result)
+	callResult, err := s.mClient.PostCall(result)
+	if err != nil {
+		s.logger.Error("Mirror node failed to return gas estimate", zap.Error(err))
+		predefinedGas := s.PredifinedGasForTransaction(txObj)
+		return predefinedGas, nil
+	}
 	if callResult == nil {
 		s.logger.Error("Failed to post call", zap.Error(err))
 		return "0x0", domain.NewRPCError(domain.ServerError, "Failed to post call")
@@ -416,8 +427,48 @@ func (s *EthService) GetTransactionReceipt(hash string) (interface{}, *domain.RP
 
 	contractResult := s.mClient.GetContractResult(hash)
 	if contractResult == nil {
-		// TODO: Here we should handle synthetic transactions
-		return nil, nil
+		params := map[string]interface{}{
+			"transaction.hash": hash,
+		}
+
+		logs, err := s.commonService.GetLogsWithParams(nil, params)
+		if err != nil {
+			s.logger.Error("Failed to get logs", zap.Error(err))
+			return nil, nil
+		}
+		if len(logs) == 0 {
+			s.logger.Error("no tx for hash", zap.String("hash", hash))
+			return nil, nil
+		}
+
+		effectiveGasPrice, err := s.getCurrentGasPriceForBlock(logs[0].BlockHash)
+		if err != nil {
+			s.logger.Error("Failed to get gas price for block", zap.Any("error", err))
+		}
+
+		receipt := domain.TransactionReceipt{
+			BlockHash:         logs[0].BlockHash,
+			BlockNumber:       logs[0].BlockNumber,
+			ContractAddress:   logs[0].Address,
+			From:              zeroHexAddress,
+			CumulativeGasUsed: zeroHex,
+			EffectiveGasPrice: effectiveGasPrice,
+			GasUsed:           zeroHex,
+			Logs:              logs,
+			LogsBloom:         buildLogsBloom(logs[0].Address, logs[0].Topics),
+			Root:              "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421", // This is the default root hash for EVM
+			Status:            oneHex,
+			To:                logs[0].Address,
+			TransactionHash:   logs[0].TransactionHash,
+			TransactionIndex:  logs[0].TransactionIndex,
+			Type:              nil,
+		}
+
+		if err := s.cacheService.Set(s.ctx, cacheKey, &receipt, DefaultExpiration); err != nil {
+			s.logger.Debug("Failed to cache transaction receipt", zap.Error(err))
+		}
+
+		return receipt, nil
 	}
 	contractResultResponse := contractResult.(domain.ContractResultResponse)
 
@@ -436,11 +487,6 @@ func (s *EthService) GetTransactionReceipt(hash string) (interface{}, *domain.RP
 			TransactionIndex: hexify(int64(contractResultResponse.TransactionIndex)),
 		}
 	}
-
-	// Default values
-	const emptyHex = "0x"
-	const emptyBloom = "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-	const defaultRootHash = "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
 
 	evmAddressFrom, err := s.resolveEvmAddress(contractResultResponse.From)
 	if err != nil {
@@ -575,15 +621,20 @@ func (s *EthService) FeeHistory(blockCount string, newestBlock string, rewardPer
 
 func (s *EthService) GetStorageAt(address, slot, blockNumberOrHash string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting storage at", zap.String("address", address), zap.String("slot", slot), zap.String("blockNumberOrHash", blockNumberOrHash))
-	blockInt, errRpc := s.commonService.GetBlockNumberByNumberOrTag(blockNumberOrHash)
-	if errRpc != nil {
-		return nil, errRpc
+	var block string
+	if len(blockNumberOrHash) == 66 {
+		block = blockNumberOrHash
+	} else {
+		blockInt, errRpc := s.commonService.GetBlockNumberByNumberOrTag(blockNumberOrHash)
+		if errRpc != nil {
+			return nil, errRpc
+		}
+		block = strconv.FormatInt(blockInt, 10)
 	}
-
-	blockResponse := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockInt, 10))
+	blockResponse := s.mClient.GetBlockByHashOrNumber(block)
 
 	if blockResponse == nil {
-		return nil, domain.NewRPCError(domain.ServerError, "Failed to get block data")
+		return nil, domain.NewRPCError(domain.NotFound, "Requested resource not found")
 	}
 
 	timestampTo := blockResponse.Timestamp.To
@@ -830,8 +881,9 @@ func (s *EthService) GetCode(address string, blockNumberOrTag string) (interface
 		}
 	case *domain.TokenResponse:
 		s.logger.Debug("Token redirect case, returning redirectBytecode")
-		redirectBytecode := redirectBytecodePrefix + address[2:] + redirectBytecodePostfix
-		return "0x" + redirectBytecode, nil
+
+		redirectBytecode := fmt.Sprintf("%s%s%s", redirectBytecodePrefix, address[2:], redirectBytecodePostfix)
+		return redirectBytecode, nil
 	}
 
 	result, err = s.hClient.GetContractByteCode(0, 0, address)
@@ -911,4 +963,9 @@ func (s *EthService) GetUncleByBlockHashAndIndex(blockHash string, index string)
 	s.logger.Info("GetUncleByBlockHashAndIndex", zap.String("blockHash", blockHash), zap.String("index", index))
 	s.logger.Debug("Returning nil as per specification")
 	return nil, nil
+}
+
+func (s *EthService) SubmitWork() (interface{}, *domain.RPCError) {
+	s.logger.Debug("Returning nil as per specification")
+	return false, nil
 }
