@@ -27,14 +27,14 @@ type Server interface {
 }
 
 type server struct {
-	router          *gin.Engine
-	logger          *zap.Logger
-	port            string
-	serviceProvider service.ServiceProvider
-	apiKeyStore     *limiter.APIKeyStore
-	tieredLimiter   *limiter.TieredLimiter
-	enforceAPIKey   bool
-	rpcHandler      rpc.RPCHandler
+	router           *gin.Engine
+	logger           *zap.Logger
+	port             string
+	serviceProvider  service.ServiceProvider
+	apiKeyStore      *limiter.APIKeyStore
+	tieredLimiter    *limiter.TieredLimiter
+	enforceAPIKey    bool
+	rpcHandler       rpc.RPCHandler
 }
 
 func NewServer(
@@ -48,8 +48,9 @@ func NewServer(
 	enforceAPIKey bool,
 	cacheService cache.CacheService,
 	port string,
+	filterApiEnabled bool,
 ) Server {
-	serviceProvider := service.NewServiceProvider(hClient, mClient, logger, applicationVersion, chainId, apiKeyStore, tieredLimiter, cacheService)
+	serviceProvider := service.NewServiceProvider(hClient, mClient, logger, applicationVersion, chainId, apiKeyStore, tieredLimiter, cacheService, filterApiEnabled)
 
 	router := gin.Default()
 
@@ -59,14 +60,14 @@ func NewServer(
 	)
 
 	s := &server{
-		router:          router,
-		logger:          logger,
-		port:            port,
-		serviceProvider: serviceProvider,
-		apiKeyStore:     apiKeyStore,
-		tieredLimiter:   tieredLimiter,
-		enforceAPIKey:   enforceAPIKey,
-		rpcHandler:      rpcHandler,
+		router:           router,
+		logger:           logger,
+		port:             port,
+		serviceProvider:  serviceProvider,
+		apiKeyStore:      apiKeyStore,
+		tieredLimiter:    tieredLimiter,
+		enforceAPIKey:    enforceAPIKey,
+		rpcHandler:       rpcHandler,
 	}
 
 	router.Use(s.LoggingMiddleware())

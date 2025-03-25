@@ -54,8 +54,9 @@ func NewServer(
 	enforceAPIKey bool,
 	cacheService cache.CacheService,
 	port string,
+	filterApiEnabled bool,
 ) WSServer {
-	serviceProvider := service.NewServiceProvider(hClient, mClient, logger, applicationVersion, chainId, apiKeyStore, tieredLimiter, cacheService)
+	serviceProvider := service.NewServiceProvider(hClient, mClient, logger, applicationVersion, chainId, apiKeyStore, tieredLimiter, cacheService, filterApiEnabled)
 
 	router := gin.Default()
 

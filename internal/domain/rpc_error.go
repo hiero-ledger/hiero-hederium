@@ -149,3 +149,7 @@ func NewUnsupportedJSONRPCMethodError() *RPCError {
 func NewContractRevertError(message string) *RPCError {
 	return NewRPCError(ContractRevertError, fmt.Sprintf("execution reverted: %s", message))
 }
+
+func NewFilterNotFoundError() *RPCError {
+	return NewRPCError(NotFound, "Filter not found")
+}

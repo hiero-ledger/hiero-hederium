@@ -31,13 +31,13 @@ func NewServiceProvider(
 	apiKeyStore *limiter.APIKeyStore,
 	tieredLimiter *limiter.TieredLimiter,
 	cacheService cache.CacheService,
+	filterApiEnabled bool,
 ) ServiceProvider {
 	commonService := NewCommonService(mClient, log, cacheService)
 	ethService := NewEthService(hClient, mClient, commonService, log, tieredLimiter, chainId, cacheService)
 	web3Service := NewWeb3Service(log, applicationVersion)
 	netService := NewNetService(log, chainId)
-	filterService := NewFilterService(mClient, cacheService, log, commonService)
-
+	filterService := NewFilterService(mClient, cacheService, log, commonService, filterApiEnabled)
 	return &serviceProvider{ethService: ethService, web3Service: web3Service, netService: netService, filterService: filterService}
 }
 

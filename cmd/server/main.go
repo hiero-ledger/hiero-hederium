@@ -44,17 +44,18 @@ func main() {
 	mClient := hedera.NewMirrorClient(viper.GetString("mirrorNode.baseUrl"), viper.GetString("mirrorNode.web3Url"), viper.GetInt("mirrorNode.timeoutSeconds"), log, cacheService)
 
 	enforceAPIKey := viper.GetBool("features.enforceApiKey")
+	filterApiEnabled := viper.GetBool("features.filterApiEnabled")
 
 	port := viper.GetString("server.port")
 	serverType := viper.GetString("server.type")
 
 	if serverType == "http" {
-		server := http_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, cacheService, port)
+		server := http_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, cacheService, port, filterApiEnabled)
 		if err := server.Start(); err != nil {
 			log.Fatal("Failed to start server", zap.Error(err))
 		}
 	} else if serverType == "ws" {
-		server := ws_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, cacheService, port)
+		server := ws_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, cacheService, port, filterApiEnabled)
 		if err := server.Start(); err != nil {
 			log.Fatal("Failed to start server", zap.Error(err))
 		}

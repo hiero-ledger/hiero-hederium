@@ -21,18 +21,20 @@ type FilterServicer interface {
 }
 
 type filterService struct {
-	mirrorClient  infrahedera.MirrorNodeClient
-	cacheService  cache.CacheService
-	logger        *zap.Logger
-	commonService CommonService
+	mirrorClient     infrahedera.MirrorNodeClient
+	cacheService     cache.CacheService
+	logger           *zap.Logger
+	commonService    CommonService
+	filterApiEnabled bool
 }
 
-func NewFilterService(mirrorClient infrahedera.MirrorNodeClient, cacheService cache.CacheService, logger *zap.Logger, commonService CommonService) FilterServicer {
+func NewFilterService(mirrorClient infrahedera.MirrorNodeClient, cacheService cache.CacheService, logger *zap.Logger, commonService CommonService, filterApiEnabled bool) FilterServicer {
 	return &filterService{
-		mirrorClient:  mirrorClient,
-		cacheService:  cacheService,
-		logger:        logger,
-		commonService: commonService,
+		mirrorClient:     mirrorClient,
+		cacheService:     cacheService,
+		logger:           logger,
+		commonService:    commonService,
+		filterApiEnabled: filterApiEnabled,
 	}
 }
 
@@ -64,8 +66,10 @@ func (s *filterService) createFilter(filterType, fromBlock, toBlock, blockAtCrea
 	return &filterId
 }
 
-// TODO: Check it in config file
 func (s *filterService) requireFilterEnabled() error {
+	if !s.filterApiEnabled {
+		return fmt.Errorf("filter API is disabled")
+	}
 	return nil
 }
 
@@ -120,7 +124,7 @@ func (s *filterService) UninstallFilter(filterID string) (interface{}, *domain.R
 
 	var filter domain.Filter
 	if err := s.cacheService.Get(ctx, cacheKey, &filter); err != nil {
-		return false, domain.NewNotFoundError()
+		return false, nil
 	}
 
 	if err := s.cacheService.Delete(ctx, cacheKey); err != nil {
@@ -143,11 +147,11 @@ func (s *filterService) GetFilterLogs(filterID string) ([]domain.Log, *domain.RP
 	cacheKey := fmt.Sprintf("filterId_%s", filterID)
 	var filter domain.Filter
 	if err := s.cacheService.Get(ctx, cacheKey, &filter); err != nil {
-		return nil, domain.NewNotFoundError()
+		return nil, domain.NewFilterNotFoundError()
 	}
 
 	if filter.Type != "log" {
-		return nil, domain.NewNotFoundError()
+		return nil, domain.NewFilterNotFoundError()
 	}
 
 	s.logger.Info("getting logs for filter", zap.String("filterID", filterID), zap.Any("filter", filter))
@@ -183,7 +187,7 @@ func (s *filterService) GetFilterChanges(filterID string) (interface{}, *domain.
 	cacheKey := fmt.Sprintf("filterId_%s", filterID)
 	var filter domain.Filter
 	if err := s.cacheService.Get(ctx, cacheKey, &filter); err != nil {
-		return nil, domain.NewNotFoundError()
+		return nil, domain.NewFilterNotFoundError()
 	}
 
 	var blockResult []string
