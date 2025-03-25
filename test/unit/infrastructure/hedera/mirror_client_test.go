@@ -553,7 +553,7 @@ func TestPostCall(t *testing.T) {
 			},
 			mockResponse:   "invalid json",
 			expectedResult: "",
-			expectError:    false,
+			expectError:    true,
 			statusCode:     http.StatusOK,
 		},
 	}
@@ -585,11 +585,7 @@ func TestPostCall(t *testing.T) {
 				assert.Nil(t, result)
 			} else {
 				assert.NoError(t, err)
-				if tc.name == "Invalid response structure" {
-					assert.Nil(t, result)
-				} else {
-					assert.Equal(t, tc.expectedResult, result)
-				}
+				assert.Equal(t, tc.expectedResult, result)
 			}
 		})
 	}
