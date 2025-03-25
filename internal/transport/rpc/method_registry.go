@@ -27,6 +27,7 @@ func NewMethods() *Methods {
 	m.registerWeb3Methods()
 	m.registerNetMethods()
 	m.registerFilterMethods()
+	m.registerDebugMethods()
 
 	return m
 }
@@ -469,6 +470,19 @@ func (m *Methods) registerFilterMethods() {
 		Handler: func(ctx context.Context, params domain.RPCParams, services service.ServiceProvider) (interface{}, *domain.RPCError) {
 			p := params.(*domain.EthGetFilterChangesParams)
 			return services.FilterService().GetFilterChanges(p.FilterID)
+		},
+	})
+}
+
+func (m *Methods) registerDebugMethods() {
+	m.registerMethod(MethodInfo{
+		Name: "debug_traceTransaction",
+		ParamCreator: func() domain.RPCParams {
+			return &domain.DebugTraceTransactionParams{}
+		},
+		Handler: func(ctx context.Context, params domain.RPCParams, services service.ServiceProvider) (interface{}, *domain.RPCError) {
+			p := params.(*domain.DebugTraceTransactionParams)
+			return services.DebugService().DebugTraceTransaction(p.TransactionIDOrHash, p.Tracer, p.Config)
 		},
 	})
 }

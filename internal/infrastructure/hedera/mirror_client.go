@@ -36,6 +36,8 @@ type MirrorNodeClient interface {
 	RepeatGetContractResult(transactionIdOrHash string, retries int) *domain.ContractResultResponse
 	GetAccountTransactionsById(idOrAliasOrEvmAddress string) (*domain.AccountResponse, error)
 	GetPaginatedAccountTransactions(url string, maxPages int) ([]domain.AccountResponse, error)
+	GetContractsResultsOpcodes(transactionIdOrHash string, options map[string]interface{}) (*domain.OpcodesResponse, error)
+	GetContractsResultsActions(transactionIdOrHash string) (*domain.ActionsResponse, error)
 }
 
 type MirrorClient struct {
@@ -135,7 +137,10 @@ func (m *MirrorClient) GetBlockByHashOrNumber(hashOrNumber string) *domain.Block
 		return &cachedBlock
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BaseURL+"/api/v1/blocks/"+hashOrNumber, nil)
+	url := fmt.Sprintf("%s/api/v1/blocks/%s", m.BaseURL, hashOrNumber)
+	m.logger.Debug("Getting block by hash or number", zap.String("url", url))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		m.logger.Error("Error creating request to get block by hash or number", zap.Error(err))
 		return nil
@@ -411,13 +416,10 @@ func (m *MirrorClient) GetContractResult(transactionIdOrHash string) interface{}
 		return nil
 	}
 
-	if err := m.cacheService.Set(ctx, cachedKey, &result, DefaultExpiration); err != nil {
-		m.logger.Error("Error caching contract result", zap.Error(err))
-	}
-
-	cachedKeyHash := fmt.Sprintf("%s_%s", GetContractResult, result.Hash[:66])
-	if err := m.cacheService.Set(ctx, cachedKeyHash, &result, DefaultExpiration); err != nil {
-		m.logger.Error("Error caching contract result", zap.Error(err))
+	if result.BlockHash != "0x" && result.BlockNumber != 0 && result.Result == "SUCCESS" {
+		if err := m.cacheService.Set(ctx, cachedKey, &result, DefaultExpiration); err != nil {
+			m.logger.Error("Error caching contract result", zap.Error(err))
+		}
 	}
 
 	m.logger.Info("Contract result", zap.Any("result", result))
@@ -577,7 +579,7 @@ func (m *MirrorClient) GetContractStateByAddressAndSlot(address string, slot str
 }
 
 func (m *MirrorClient) GetContractResultsLogsWithRetry(queryParams map[string]interface{}) ([]domain.LogEntry, error) {
-	queryParamsStr := formatQueryParams(queryParams)
+	queryParamsStr := formatQueryParams(queryParams, "asc")
 
 	url := fmt.Sprintf("%s/api/v1/contracts/results/logs?%s&limit=%d", m.BaseURL, queryParamsStr, Limit)
 
@@ -625,7 +627,7 @@ func (m *MirrorClient) GetContractResultsLogsWithRetry(queryParams map[string]in
 }
 
 func (m *MirrorClient) GetContractResultsLogsByAddress(address string, queryParams map[string]interface{}) ([]domain.LogEntry, error) {
-	queryParamsStr := formatQueryParams(queryParams)
+	queryParamsStr := formatQueryParams(queryParams, "asc")
 
 	url := fmt.Sprintf("%s/api/v1/contracts/%s/results/logs?%s&limit=%d", m.BaseURL, address, queryParamsStr, Limit)
 
@@ -694,7 +696,7 @@ func (m *MirrorClient) getPaginatedResults(url string) ([]domain.LogEntry, error
 }
 
 func (m *MirrorClient) GetContractResultWithRetry(queryParams map[string]interface{}) (*domain.ContractResults, error) {
-	queryParamsStr := formatQueryParams(queryParams)
+	queryParamsStr := formatQueryParams(queryParams, "desc")
 
 	url := fmt.Sprintf("%s/api/v1/contracts/results?%s", m.BaseURL, queryParamsStr)
 
@@ -765,14 +767,14 @@ func (m *MirrorClient) GetContractResultWithRetry(queryParams map[string]interfa
 }
 
 // Util function to format query params
-func formatQueryParams(params map[string]interface{}) string {
+func formatQueryParams(params map[string]interface{}, order string) string {
 	var queryParams []string
 	for key, value := range params {
 		queryParams = append(queryParams, fmt.Sprintf("%s=%v", key, value))
 	}
 	queryParamsStr := strings.Join(queryParams, "&")
-	if queryParamsStr != "" {
-		queryParamsStr += "&order=desc" // Hardcoded order for now
+	if queryParamsStr != "" && order != "" {
+		queryParamsStr += fmt.Sprintf("&order=%s", order)
 	}
 	return queryParamsStr
 }
@@ -1004,4 +1006,76 @@ func (m *MirrorClient) GetPaginatedAccountTransactions(url string, maxPages int)
 	}
 
 	return accounts, nil
+}
+
+func (m *MirrorClient) GetContractsResultsOpcodes(transactionIdOrHash string, options map[string]interface{}) (*domain.OpcodesResponse, error) {
+	queryParams := formatQueryParams(options, "")
+
+	url := fmt.Sprintf("%s/api/v1/contracts/results/%s/opcodes?%s", m.BaseURL, transactionIdOrHash, queryParams)
+
+	m.logger.Info("Getting contract results opcodes", zap.String("url", url))
+
+	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		m.logger.Error("Error creating request", zap.Error(err))
+		return nil, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		m.logger.Error("Error making request", zap.Error(err))
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
+		return nil, nil
+	}
+
+	var result domain.OpcodesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		m.logger.Error("Error decoding response", zap.Error(err))
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+func (m *MirrorClient) GetContractsResultsActions(transactionIdOrHash string) (*domain.ActionsResponse, error) {
+	url := fmt.Sprintf("%s/api/v1/contracts/results/%s/actions", m.BaseURL, transactionIdOrHash)
+
+	m.logger.Info("Getting contract results actions", zap.String("url", url))
+
+	ctx, cancel := context.WithTimeout(context.Background(), m.Timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		m.logger.Error("Error creating request", zap.Error(err))
+		return nil, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		m.logger.Error("Error making request", zap.Error(err))
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
+		return nil, nil
+	}
+
+	var result domain.ActionsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		m.logger.Error("Error decoding response", zap.Error(err))
+		return nil, err
+	}
+
+	return &result, nil
 }

@@ -12,6 +12,7 @@ type ServiceProvider interface {
 	Web3Service() Web3Servicer
 	NetService() NetServicer
 	FilterService() FilterServicer
+	DebugService() DebugServicer
 }
 
 // For now we use *EthService instead of EthServicer
@@ -20,6 +21,7 @@ type serviceProvider struct {
 	web3Service   Web3Servicer
 	netService    NetServicer
 	filterService FilterServicer
+	debugService  DebugServicer
 }
 
 func NewServiceProvider(
@@ -32,13 +34,15 @@ func NewServiceProvider(
 	tieredLimiter *limiter.TieredLimiter,
 	cacheService cache.CacheService,
 	filterApiEnabled bool,
+	debugApiEnabled bool,
 ) ServiceProvider {
 	commonService := NewCommonService(mClient, log, cacheService)
 	ethService := NewEthService(hClient, mClient, commonService, log, tieredLimiter, chainId, cacheService)
 	web3Service := NewWeb3Service(log, applicationVersion)
 	netService := NewNetService(log, chainId)
 	filterService := NewFilterService(mClient, cacheService, log, commonService, filterApiEnabled)
-	return &serviceProvider{ethService: ethService, web3Service: web3Service, netService: netService, filterService: filterService}
+	debugService := NewDebugService(mClient, log, debugApiEnabled, ethService)
+	return &serviceProvider{ethService: ethService, web3Service: web3Service, netService: netService, filterService: filterService, debugService: debugService}
 }
 
 func (s *serviceProvider) EthService() *EthService {
@@ -55,4 +59,8 @@ func (s *serviceProvider) NetService() NetServicer {
 
 func (s *serviceProvider) FilterService() FilterServicer {
 	return s.filterService
+}
+
+func (s *serviceProvider) DebugService() DebugServicer {
+	return s.debugService
 }

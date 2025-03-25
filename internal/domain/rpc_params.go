@@ -143,6 +143,14 @@ type EthGetCodeParams struct {
 	BlockNumber string `json:"blockNumber" binding:"required,block_number_or_tag"`
 }
 
+type DebugTraceTransactionParams struct {
+	TransactionIDOrHash string             `json:"transactionIDOrHash" binding:"required,len=66,hexadecimal,startswith=0x"`
+	Tracer              string             `json:"tracer" binding:"required,oneof=callTracer opcodeLogger"`
+	TracerConfig        CallTracerConfig   `json:"callTracerConfig"`
+	OpcodeConfig        OpcodeLoggerConfig `json:"opcodeLoggerConfig"`
+	Config              interface{}        `json:"config"`
+}
+
 // FromPositionalParams implements parameter conversion for NoParameters
 func (p *NoParameters) FromPositionalParams(params []interface{}) *RPCError {
 	// No parameters expected
@@ -463,7 +471,7 @@ func (p *EthCallParams) FromPositionalParams(params []interface{}) *RPCError {
 
 	p.CallObject = callObject
 	var blocks BlockNumberObject
-	
+
 	// Here block could be string or map[string]interface
 	switch v := params[1].(type) {
 	case string:
@@ -863,6 +871,75 @@ func (p *EthUnsubscribeParams) FromPositionalParams(params []interface{}) *RPCEr
 		return NewInvalidParamsError("subscription ID must be a string")
 	}
 	p.SubscriptionID = subscriptionID
+
+	return nil
+}
+
+func (p *DebugTraceTransactionParams) FromPositionalParams(params []interface{}) *RPCError {
+	if len(params) < 1 {
+		return NewInvalidParamsError("Missing value for required parameter 0")
+	}
+
+	transactionIDOrHash, ok := params[0].(string)
+	if !ok {
+		return NewInvalidParamsError("transactionIDOrHash must be a string")
+	}
+	p.TransactionIDOrHash = transactionIDOrHash
+
+	if len(params) == 2 {
+		switch tracer := params[1].(type) {
+		case string:
+			p.Tracer = tracer
+		case map[string]interface{}:
+			if tracerType, ok := tracer["tracer"].(string); ok {
+				p.Tracer = tracerType
+			} else {
+				p.Tracer = "OpcodeLoggerConfig"
+			}
+			if tracerConfig, ok := tracer["onlyTopCall"].(bool); ok {
+				p.TracerConfig.OnlyTopCall = tracerConfig
+			}
+			if tracerConfig, ok := tracer["enableMemory"].(bool); ok {
+				p.OpcodeConfig.EnableMemory = tracerConfig
+			}
+			if tracerConfig, ok := tracer["disableStack"].(bool); ok {
+				p.OpcodeConfig.DisableStack = tracerConfig
+			}
+			if tracerConfig, ok := tracer["disableStorage"].(bool); ok {
+				p.OpcodeConfig.DisableStorage = tracerConfig
+			}
+			if tracerConfig, ok := tracer["tracerConfig"].(map[string]interface{}); ok {
+				if tracerConfigType, ok := tracerConfig["onlyTopCall"].(bool); ok {
+					p.TracerConfig.OnlyTopCall = tracerConfigType
+				} else {
+					return NewInvalidParamsError(fmt.Sprintf("Invalid parameter 'tracerConfig' for TracerConfigWrapper: Expected TracerConfig, value: %v", tracerConfig))
+				}
+			}
+		default:
+			return NewInvalidParamsError(fmt.Sprintf("Invalid parameter 1: The value passed is not valid: %v. Expected TracerType OR Expected TracerConfig OR Expected TracerConfigWrapper which contains a valid TracerType and/or TracerConfig", params[1]))
+		}
+	}
+
+	if len(params) == 3 {
+		tracerConfig, ok := params[1].(map[string]bool)
+		if !ok {
+			return NewInvalidParamsError(fmt.Sprintf("Invalid parameter 2: Expected TracerConfig, value: %v", params[1]))
+		}
+		p.TracerConfig = CallTracerConfig{
+			OnlyTopCall: tracerConfig["onlyTopCall"],
+		}
+		p.OpcodeConfig = OpcodeLoggerConfig{
+			EnableMemory:   tracerConfig["enableMemory"],
+			DisableStack:   tracerConfig["disableStack"],
+			DisableStorage: tracerConfig["disableStorage"],
+		}
+	}
+
+	if p.Tracer == "callTracer" {
+		p.Config = p.TracerConfig
+	} else if p.Tracer == "opcodeLogger" {
+		p.Config = p.OpcodeConfig
+	}
 
 	return nil
 }

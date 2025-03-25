@@ -42,6 +42,7 @@ apiKeys:
 features:
   enforceApiKey: false
   filterApiEnabled: true
+  debugApiEnabled: true
 
 cache:
   defaultExpiration: "1h"

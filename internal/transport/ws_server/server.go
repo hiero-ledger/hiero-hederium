@@ -55,8 +55,9 @@ func NewServer(
 	cacheService cache.CacheService,
 	port string,
 	filterApiEnabled bool,
+	debugApiEnabled bool,
 ) WSServer {
-	serviceProvider := service.NewServiceProvider(hClient, mClient, logger, applicationVersion, chainId, apiKeyStore, tieredLimiter, cacheService, filterApiEnabled)
+	serviceProvider := service.NewServiceProvider(hClient, mClient, logger, applicationVersion, chainId, apiKeyStore, tieredLimiter, cacheService, filterApiEnabled, debugApiEnabled)
 
 	router := gin.Default()
 

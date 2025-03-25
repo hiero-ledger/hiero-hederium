@@ -45,17 +45,18 @@ func main() {
 
 	enforceAPIKey := viper.GetBool("features.enforceApiKey")
 	filterApiEnabled := viper.GetBool("features.filterApiEnabled")
+	debugApiEnabled := viper.GetBool("features.debugApiEnabled")
 
 	port := viper.GetString("server.port")
 	serverType := viper.GetString("server.type")
 
 	if serverType == "http" {
-		server := http_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, cacheService, port, filterApiEnabled)
+		server := http_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, cacheService, port, filterApiEnabled, debugApiEnabled)
 		if err := server.Start(); err != nil {
 			log.Fatal("Failed to start server", zap.Error(err))
 		}
 	} else if serverType == "ws" {
-		server := ws_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, cacheService, port, filterApiEnabled)
+		server := ws_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, cacheService, port, filterApiEnabled, debugApiEnabled)
 		if err := server.Start(); err != nil {
 			log.Fatal("Failed to start server", zap.Error(err))
 		}
