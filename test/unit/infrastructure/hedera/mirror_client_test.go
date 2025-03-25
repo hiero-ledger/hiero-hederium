@@ -1171,3 +1171,321 @@ func TestGetContractById(t *testing.T) {
 		})
 	}
 }
+
+func TestGetContractsResultsOpcodes(t *testing.T) {
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
+
+	testCases := []struct {
+		name           string
+		transactionID  string
+		options        map[string]interface{}
+		mockResponse   *domain.OpcodesResponse
+		expectedResult *domain.OpcodesResponse
+		expectError    bool
+		statusCode     int
+	}{
+		{
+			name:          "Successful opcodes retrieval",
+			transactionID: "0xtx123",
+			options:       map[string]interface{}{"enableMemory": true},
+			mockResponse: &domain.OpcodesResponse{
+				Address:    "0x1234567890123456789012345678901234567890",
+				ContractID: "0.0.123",
+				Gas:        100000,
+				Failed:     false,
+				Opcodes: []domain.Opcode{
+					{
+						PC:      0,
+						Op:      "PUSH1",
+						Gas:     100000,
+						GasCost: 3,
+						Depth:   1,
+						Stack:   []string{"0x01"},
+					},
+					{
+						PC:      2,
+						Op:      "ADD",
+						Gas:     99997,
+						GasCost: 3,
+						Depth:   1,
+						Stack:   []string{"0x02"},
+					},
+				},
+			},
+			expectedResult: &domain.OpcodesResponse{
+				Address:    "0x1234567890123456789012345678901234567890",
+				ContractID: "0.0.123",
+				Gas:        100000,
+				Failed:     false,
+				Opcodes: []domain.Opcode{
+					{
+						PC:      0,
+						Op:      "PUSH1",
+						Gas:     100000,
+						GasCost: 3,
+						Depth:   1,
+						Stack:   []string{"0x01"},
+					},
+					{
+						PC:      2,
+						Op:      "ADD",
+						Gas:     99997,
+						GasCost: 3,
+						Depth:   1,
+						Stack:   []string{"0x02"},
+					},
+				},
+			},
+			expectError: false,
+			statusCode:  http.StatusOK,
+		},
+		{
+			name:           "Server error",
+			transactionID:  "0xtx456",
+			options:        map[string]interface{}{},
+			mockResponse:   nil,
+			expectedResult: nil,
+			expectError:    false, // Function returns nil, nil for non-200 status codes
+			statusCode:     http.StatusInternalServerError,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/api/v1/contracts/results/"+tc.transactionID+"/opcodes", r.URL.Path)
+				assert.Equal(t, http.MethodGet, r.Method)
+
+				// Check options are converted to query parameters correctly if present
+				if len(tc.options) > 0 {
+					for key, value := range tc.options {
+						assert.Contains(t, r.URL.RawQuery, fmt.Sprintf("%s=%v", key, value))
+					}
+				}
+
+				w.WriteHeader(tc.statusCode)
+				if tc.mockResponse != nil {
+					json.NewEncoder(w).Encode(tc.mockResponse)
+				}
+			}))
+			defer server.Close()
+
+			client := hedera.NewMirrorClient(server.URL, server.URL, 5, setup.logger, setup.cacheService)
+			result, err := client.GetContractsResultsOpcodes(tc.transactionID, tc.options)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				if tc.statusCode == http.StatusOK {
+					assert.NotNil(t, result)
+					assert.Equal(t, tc.expectedResult.Address, result.Address)
+					assert.Equal(t, tc.expectedResult.ContractID, result.ContractID)
+					assert.Equal(t, tc.expectedResult.Gas, result.Gas)
+					assert.Equal(t, tc.expectedResult.Failed, result.Failed)
+					assert.Equal(t, len(tc.expectedResult.Opcodes), len(result.Opcodes))
+
+					// Check opcodes
+					for i, expectedOpcode := range tc.expectedResult.Opcodes {
+						assert.Equal(t, expectedOpcode.PC, result.Opcodes[i].PC)
+						assert.Equal(t, expectedOpcode.Op, result.Opcodes[i].Op)
+						assert.Equal(t, expectedOpcode.Gas, result.Opcodes[i].Gas)
+						assert.Equal(t, expectedOpcode.GasCost, result.Opcodes[i].GasCost)
+						assert.Equal(t, expectedOpcode.Depth, result.Opcodes[i].Depth)
+						assert.Equal(t, len(expectedOpcode.Stack), len(result.Opcodes[i].Stack))
+
+						for j, stackValue := range expectedOpcode.Stack {
+							assert.Equal(t, stackValue, result.Opcodes[i].Stack[j])
+						}
+					}
+				} else {
+					// For non-200 status codes, the function should return nil, nil
+					assert.Nil(t, result)
+				}
+			}
+		})
+	}
+}
+
+func TestGetContractsResultsActions(t *testing.T) {
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
+
+	testCases := []struct {
+		name           string
+		transactionID  string
+		mockResponse   *domain.ActionsResponse
+		expectedResult *domain.ActionsResponse
+		expectError    bool
+		statusCode     int
+	}{
+		{
+			name:          "Successful actions retrieval",
+			transactionID: "0xtx123",
+			mockResponse: &domain.ActionsResponse{
+				Actions: []domain.Action{
+					{
+						CallDepth:         1,
+						CallOperationType: "CALL",
+						CallType:          "CALL",
+						Caller:            "0x1234567890123456789012345678901234567890",
+						CallerType:        "CONTRACT",
+						From:              "0x1234567890123456789012345678901234567890",
+						Gas:               100000,
+						GasUsed:           50000,
+						Index:             0,
+						Input:             "0x123456",
+						Recipient:         "0x0987654321098765432109876543210987654321",
+						RecipientType:     "CONTRACT",
+						ResultData:        "0xabcdef",
+						ResultDataType:    "OUTPUT",
+						Timestamp:         "1640995200.000000000",
+						To:                "0x0987654321098765432109876543210987654321",
+						Value:             0,
+					},
+					{
+						CallDepth:         2,
+						CallOperationType: "STATICCALL",
+						CallType:          "STATICCALL",
+						Caller:            "0x0987654321098765432109876543210987654321",
+						CallerType:        "CONTRACT",
+						From:              "0x0987654321098765432109876543210987654321",
+						Gas:               50000,
+						GasUsed:           25000,
+						Index:             1,
+						Input:             "0x654321",
+						Recipient:         "0x2222222222222222222222222222222222222222",
+						RecipientType:     "CONTRACT",
+						ResultData:        "0xfedcba",
+						ResultDataType:    "OUTPUT",
+						Timestamp:         "1640995200.000000001",
+						To:                "0x2222222222222222222222222222222222222222",
+						Value:             0,
+					},
+				},
+				Links: struct {
+					Next *string `json:"next"`
+				}{
+					Next: nil,
+				},
+			},
+			expectedResult: &domain.ActionsResponse{
+				Actions: []domain.Action{
+					{
+						CallDepth:         1,
+						CallOperationType: "CALL",
+						CallType:          "CALL",
+						Caller:            "0x1234567890123456789012345678901234567890",
+						CallerType:        "CONTRACT",
+						From:              "0x1234567890123456789012345678901234567890",
+						Gas:               100000,
+						GasUsed:           50000,
+						Index:             0,
+						Input:             "0x123456",
+						Recipient:         "0x0987654321098765432109876543210987654321",
+						RecipientType:     "CONTRACT",
+						ResultData:        "0xabcdef",
+						ResultDataType:    "OUTPUT",
+						Timestamp:         "1640995200.000000000",
+						To:                "0x0987654321098765432109876543210987654321",
+						Value:             0,
+					},
+					{
+						CallDepth:         2,
+						CallOperationType: "STATICCALL",
+						CallType:          "STATICCALL",
+						Caller:            "0x0987654321098765432109876543210987654321",
+						CallerType:        "CONTRACT",
+						From:              "0x0987654321098765432109876543210987654321",
+						Gas:               50000,
+						GasUsed:           25000,
+						Index:             1,
+						Input:             "0x654321",
+						Recipient:         "0x2222222222222222222222222222222222222222",
+						RecipientType:     "CONTRACT",
+						ResultData:        "0xfedcba",
+						ResultDataType:    "OUTPUT",
+						Timestamp:         "1640995200.000000001",
+						To:                "0x2222222222222222222222222222222222222222",
+						Value:             0,
+					},
+				},
+				Links: struct {
+					Next *string `json:"next"`
+				}{
+					Next: nil,
+				},
+			},
+			expectError: false,
+			statusCode:  http.StatusOK,
+		},
+		{
+			name:           "Server error",
+			transactionID:  "0xtx456",
+			mockResponse:   nil,
+			expectedResult: nil,
+			expectError:    false, // Function returns nil, nil for non-200 status codes
+			statusCode:     http.StatusInternalServerError,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/api/v1/contracts/results/"+tc.transactionID+"/actions", r.URL.Path)
+				assert.Equal(t, http.MethodGet, r.Method)
+
+				w.WriteHeader(tc.statusCode)
+				if tc.mockResponse != nil {
+					json.NewEncoder(w).Encode(tc.mockResponse)
+				}
+			}))
+			defer server.Close()
+
+			client := hedera.NewMirrorClient(server.URL, server.URL, 5, setup.logger, setup.cacheService)
+			result, err := client.GetContractsResultsActions(tc.transactionID)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				if tc.statusCode == http.StatusOK {
+					assert.NotNil(t, result)
+
+					// Check the number of actions
+					assert.Equal(t, len(tc.expectedResult.Actions), len(result.Actions))
+
+					// Check each action
+					for i := 0; i < len(result.Actions); i++ {
+						expectedAction := tc.expectedResult.Actions[i]
+						actualAction := result.Actions[i]
+
+						assert.Equal(t, expectedAction.CallDepth, actualAction.CallDepth)
+						assert.Equal(t, expectedAction.CallOperationType, actualAction.CallOperationType)
+						assert.Equal(t, expectedAction.CallType, actualAction.CallType)
+						assert.Equal(t, expectedAction.Caller, actualAction.Caller)
+						assert.Equal(t, expectedAction.CallerType, actualAction.CallerType)
+						assert.Equal(t, expectedAction.From, actualAction.From)
+						assert.Equal(t, expectedAction.Gas, actualAction.Gas)
+						assert.Equal(t, expectedAction.GasUsed, actualAction.GasUsed)
+						assert.Equal(t, expectedAction.Index, actualAction.Index)
+						assert.Equal(t, expectedAction.Input, actualAction.Input)
+						assert.Equal(t, expectedAction.Recipient, actualAction.Recipient)
+						assert.Equal(t, expectedAction.RecipientType, actualAction.RecipientType)
+						assert.Equal(t, expectedAction.ResultData, actualAction.ResultData)
+						assert.Equal(t, expectedAction.ResultDataType, actualAction.ResultDataType)
+						assert.Equal(t, expectedAction.Timestamp, actualAction.Timestamp)
+						assert.Equal(t, expectedAction.To, actualAction.To)
+						assert.Equal(t, expectedAction.Value, actualAction.Value)
+					}
+				} else {
+					// For non-200 status codes, the function should return nil, nil
+					assert.Nil(t, result)
+				}
+			}
+		})
+	}
+}
