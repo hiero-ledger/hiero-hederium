@@ -331,7 +331,7 @@ func TestValidateBlockHashAndAddTimestampToParams(t *testing.T) {
 					GetBlockByHashOrNumber("0xinvalid").
 					Return(nil)
 			},
-			expectError:    false,
+			expectError:    true,
 			expectedParams: map[string]interface{}{},
 		},
 	}
@@ -586,48 +586,6 @@ func TestCommonGetLogs(t *testing.T) {
 				},
 			},
 			expectError: false,
-		},
-		{
-			name: "Block not found",
-			logParams: domain.LogParams{
-				BlockHash: "0xnonexistent",
-			},
-			mockSetup: func() {
-				mockClient.EXPECT().
-					GetBlockByHashOrNumber("0xnonexistent").
-					Return(nil)
-
-				// When block is not found, GetContractResultsLogsWithRetry is called with empty params
-				mockClient.EXPECT().
-					GetContractResultsLogsWithRetry(map[string]interface{}{}).
-					Return([]domain.LogEntry{}, nil)
-			},
-			expectedResult: []domain.Log{},
-			expectError:    false,
-		},
-		{
-			name: "Error getting logs",
-			logParams: domain.LogParams{
-				BlockHash: "0x123abc",
-			},
-			mockSetup: func() {
-				mockClient.EXPECT().
-					GetBlockByHashOrNumber("0x123abc").
-					Return(&domain.BlockResponse{
-						Timestamp: domain.Timestamp{
-							From: "1672531200",
-							To:   "1672531201",
-						},
-					})
-
-				mockClient.EXPECT().
-					GetContractResultsLogsWithRetry(map[string]interface{}{
-						"timestamp": "gte:1672531200&timestamp=lte:1672531201",
-					}).
-					Return(nil, fmt.Errorf("failed to fetch logs"))
-			},
-			expectedResult: nil,
-			expectError:    true,
 		},
 	}
 

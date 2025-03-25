@@ -120,7 +120,7 @@ func (s *filterService) UninstallFilter(filterID string) (interface{}, *domain.R
 
 	var filter domain.Filter
 	if err := s.cacheService.Get(ctx, cacheKey, &filter); err != nil {
-		return false, domain.NewFilterNotFoundError()
+		return false, domain.NewNotFoundError()
 	}
 
 	if err := s.cacheService.Delete(ctx, cacheKey); err != nil {
@@ -143,11 +143,11 @@ func (s *filterService) GetFilterLogs(filterID string) ([]domain.Log, *domain.RP
 	cacheKey := fmt.Sprintf("filterId_%s", filterID)
 	var filter domain.Filter
 	if err := s.cacheService.Get(ctx, cacheKey, &filter); err != nil {
-		return nil, domain.NewFilterNotFoundError()
+		return nil, domain.NewNotFoundError()
 	}
 
 	if filter.Type != "log" {
-		return nil, domain.NewFilterNotFoundError()
+		return nil, domain.NewNotFoundError()
 	}
 
 	s.logger.Info("getting logs for filter", zap.String("filterID", filterID), zap.Any("filter", filter))
@@ -183,7 +183,7 @@ func (s *filterService) GetFilterChanges(filterID string) (interface{}, *domain.
 	cacheKey := fmt.Sprintf("filterId_%s", filterID)
 	var filter domain.Filter
 	if err := s.cacheService.Get(ctx, cacheKey, &filter); err != nil {
-		return nil, domain.NewFilterNotFoundError()
+		return nil, domain.NewNotFoundError()
 	}
 
 	var blockResult []string
