@@ -719,6 +719,8 @@ func (s *EthService) getRepeatedFeeHistory(blockCount, oldestBlockInt int64, rew
 		feeHistory.Reward = rewards
 	}
 
+	s.logger.Info("Fee history", zap.Any("feeHistory", feeHistory))
+
 	return feeHistory
 }
 
@@ -986,7 +988,7 @@ func (s *EthService) isLatestBlockRequest(blockNumberOrTag string, blockNumber i
 		return false
 	}
 
-	return blockNumber+10 > latestBlockInt
+	return latestBlockInt-blockNumber <= maxBlockRange
 }
 
 func (s *EthService) getContractAddressFromReceipt(receiptResponse domain.ContractResultResponse) string {

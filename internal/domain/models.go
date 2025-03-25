@@ -13,9 +13,9 @@ type Fee struct {
 }
 
 type FeeHistory struct {
-	BaseFeePerGas []string   `json:"base_fee_per_gas"`
-	GasUsedRatio  []float64  `json:"gas_used_ratio"`
-	OldestBlock   string     `json:"oldest_block"`
+	BaseFeePerGas []string   `json:"baseFeePerGas"`
+	GasUsedRatio  []float64  `json:"gasUsedRatio"`
+	OldestBlock   string     `json:"oldestBlock"`
 	Reward        [][]string `json:"reward,omitempty"`
 }
 

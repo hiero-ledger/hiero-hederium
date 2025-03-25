@@ -60,6 +60,7 @@ const (
 	MaxTimestampParamRange = 604800 // 7 days in seconds
 
 	maxBlockCountForResult  = 10
+	maxBlockRange           = 5 // This is for the transactionCount function
 	defaultUsedGasRatio     = 0.5
 	zeroHex32Bytes          = "0x0000000000000000000000000000000000000000000000000000000000000000"
 	zeroHexAddress          = "0x0000000000000000000000000000000000000000"

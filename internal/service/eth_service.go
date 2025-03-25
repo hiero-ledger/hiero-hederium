@@ -381,47 +381,65 @@ func (s *EthService) GetBalance(address string, blockNumberOrTagOrHash string) s
 	return weibars
 }
 
-// TODO: Add error handling
 func (s *EthService) GetTransactionCount(address string, blockNumberOrTag string) string {
 	s.logger.Info("Getting transaction count", zap.String("address", address), zap.String("blockNumberOrTag", blockNumberOrTag))
 
-	blockNumberInt, errRpc := s.commonService.GetBlockNumberByNumberOrTag(blockNumberOrTag)
-	if errRpc != nil {
-		return "0x0"
+	var block *domain.BlockResponse
+
+	if len(blockNumberOrTag) > 32 {
+		block = s.mClient.GetBlockByHashOrNumber(blockNumberOrTag)
+	} else {
+		blockNumberInt, errRpc := s.commonService.GetBlockNumberByNumberOrTag(blockNumberOrTag)
+		if errRpc != nil {
+			return "0x0"
+		}
+		block = s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockNumberInt, 10))
 	}
-
-	requestingLatest := s.isLatestBlockRequest(blockNumberOrTag, blockNumberInt)
-
-	block := s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(blockNumberInt, 10))
 
 	if block == nil {
 		return "0x0"
 	}
 
+	cacheKey := fmt.Sprintf("%s_%s_%s", GetTransactionCount, address, block.Hash)
+
+	var cachedCount string
+	if err := s.cacheService.Get(s.ctx, cacheKey, &cachedCount); err == nil && cachedCount != "" {
+		s.logger.Info("Transaction count fetched from cache", zap.String("count", cachedCount))
+		return cachedCount
+	}
+
+	requestingLatest := s.isLatestBlockRequest(blockNumberOrTag, int64(block.Number))
+
 	account := s.mClient.GetAccount(address, block.Timestamp.To)
 	if account == nil {
+		s.logger.Error("Could not get account", zap.String("address", address))
 		return "0x0"
 	}
+
 	accountResponse := account.(domain.AccountResponse)
+	var result string
 
 	if requestingLatest {
-		return fmt.Sprintf("0x%x", accountResponse.EthereumNonce)
+		s.logger.Info("Returning nonce", zap.String("nonce", fmt.Sprintf("0x%x", accountResponse.EthereumNonce)))
+		result = fmt.Sprintf("0x%x", accountResponse.EthereumNonce)
+	} else if len(accountResponse.Transactions) == 0 {
+		result = "0x0"
+	} else {
+		contractResult := s.mClient.GetContractResult(accountResponse.Transactions[0].TransactionId)
+		if contractResult == nil {
+			s.logger.Error("Could not get contract result", zap.String("transactionId", accountResponse.Transactions[0].TransactionId))
+			return "0x0"
+		}
+		contractResultResponse := contractResult.(domain.ContractResultResponse)
+		result = fmt.Sprintf("0x%x", contractResultResponse.Nonce+1) // We add 1 here, because of the nature nonce is incremented.
 	}
 
-	if len(accountResponse.Transactions) == 0 {
-		return "0x0"
+	if err := s.cacheService.Set(s.ctx, cacheKey, result, DefaultExpiration); err != nil {
+		s.logger.Debug("Failed to cache transaction count", zap.Error(err))
 	}
 
-	contractResult := s.mClient.GetContractResult(accountResponse.Transactions[0].TransactionId)
-	if contractResult == nil {
-		return "0x0"
-	}
-	contractResultResponse := contractResult.(domain.ContractResultResponse)
-
-	nonce := fmt.Sprintf("0x%x", contractResultResponse.Nonce+1) // We add 1 here, because of the nature nonce is incremented.
-
-	s.logger.Info("Returning nonce", zap.String("nonce", nonce), zap.String("address", address))
-	return nonce
+	s.logger.Info("Returning nonce", zap.String("nonce", result), zap.String("address", address))
+	return result
 }
 
 func (s *EthService) EstimateGas(transaction interface{}, blockParam interface{}) (string, *domain.RPCError) {
