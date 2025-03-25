@@ -724,3 +724,89 @@ func (p *EthGetFilterChangesParams) FromPositionalParams(params []interface{}) e
 	}
 	return fmt.Errorf("invalid filter ID parameter")
 }
+
+// EthSubscribeParams represents parameters for eth_subscribe
+type EthSubscribeParams struct {
+	SubscriptionType string            `json:"subscriptionType" binding:"required"`
+	SubscribeOptions *SubscribeOptions `json:"subscribeOptions"`
+}
+
+// SubscribeFilterOpts represents filter options for eth_subscribe
+type SubscribeOptions struct {
+	Address             []string `json:"address,omitempty"`
+	Topics              []string `json:"topics,omitempty"`
+	IncludeTransactions bool     `json:"includeTransactions,omitempty"`
+}
+
+// EthUnsubscribeParams represents parameters for eth_unsubscribe
+type EthUnsubscribeParams struct {
+	SubscriptionID string `json:"subscriptionId" binding:"required,hexadecimal,startswith=0x"`
+}
+
+// FromPositionalParams converts positional parameters to EthSubscribeParams
+func (p *EthSubscribeParams) FromPositionalParams(params []interface{}) error {
+	if len(params) < 1 {
+		return fmt.Errorf("expected at least 1 parameter, got %d", len(params))
+	}
+
+	subscriptionType, ok := params[0].(string)
+	if !ok {
+		return fmt.Errorf("subscription type must be a string")
+	}
+	p.SubscriptionType = subscriptionType
+
+	p.SubscribeOptions = &SubscribeOptions{}
+
+	if len(params) > 1 {
+		switch filterOptions := params[1].(type) {
+		case bool:
+			p.SubscribeOptions.IncludeTransactions = filterOptions
+
+		case map[string]interface{}:
+			if address, exists := filterOptions["address"]; exists {
+				switch addr := address.(type) {
+				case string:
+					p.SubscribeOptions.Address = []string{addr}
+				case []interface{}:
+					addresses := make([]string, 0, len(addr))
+					for _, a := range addr {
+						if addrStr, ok := a.(string); ok {
+							addresses = append(addresses, addrStr)
+						}
+					}
+					p.SubscribeOptions.Address = addresses
+				}
+			}
+
+			if topics, exists := filterOptions["topics"]; exists {
+				if topicsArr, ok := topics.([]interface{}); ok {
+					topicsStr := make([]string, 0, len(topicsArr))
+					for _, t := range topicsArr {
+						if topicStr, ok := t.(string); ok {
+							topicsStr = append(topicsStr, topicStr)
+						}
+					}
+					p.SubscribeOptions.Topics = topicsStr
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// FromPositionalParams converts positional parameters to EthUnsubscribeParams
+func (p *EthUnsubscribeParams) FromPositionalParams(params []interface{}) error {
+	if len(params) != 1 {
+		return fmt.Errorf("expected 1 parameter, got %d", len(params))
+	}
+
+	subscriptionID, ok := params[0].(string)
+	if !ok {
+		return fmt.Errorf("subscription ID must be a string")
+	}
+	p.SubscriptionID = subscriptionID
+
+	return nil
+}

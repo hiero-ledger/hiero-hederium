@@ -62,10 +62,24 @@ const (
 	maxBlockCountForResult  = 10
 	defaultUsedGasRatio     = 0.5
 	zeroHex32Bytes          = "0x0000000000000000000000000000000000000000000000000000000000000000"
+	zeroHexAddress          = "0x0000000000000000000000000000000000000000"
+	zeroHex                 = "0x0"
+	oneHex                  = "0x1"
 	blockRangeLimit         = 1000
 	redirectBytecodePrefix  = "6080604052348015600f57600080fd5b506000610167905077618dc65e"
 	redirectBytecodePostfix = "600052366000602037600080366018016008845af43d806000803e8160008114605857816000f35b816000fdfea2646970667358221220d8378feed472ba49a0005514ef7087017f707b45fb9bf56bb81bb93ff19a238b64736f6c634300080b0033"
 	iHTSAddress             = "0x0000000000000000000000000000000000000167"
+
+	DefaultPollingInterval = 500
+
+	EventNewHeads = "newHeads"
+	EventLogs     = "logs"
+
+	TinybarToWeibarCoef = 10000000000
+
+	emptyHex = "0x"
+	emptyBloom = "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+	defaultRootHash = "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
 )
 
 var HTSCreateFuncSelectors = map[string]struct{}{
@@ -82,3 +96,47 @@ var HTSCreateFuncSelectors = map[string]struct{}{
 	CreateNonFungibleTokenWithFeesV2: {},
 	CreateNonFungibleTokenWithFeesV3: {},
 }
+
+// Gas-related constants
+const (
+	// Base gas cost for a transaction
+	TxBaseCost = 21000
+
+	// Minimum gas for hollow account creation
+	MinTxHollowAccountCreationGas = 587000
+
+	// Average gas for contract calls
+	TxContractCallAverageGas = 500000
+
+	// Default gas for unknown transactions
+	TxDefaultGas = 400000
+
+	// Extra gas for contract creation
+	TxCreateExtra = 32000
+
+	// Gas cost for zero bytes in transaction data
+	TxDataZeroCost = 4
+
+	// Gas cost for non-zero bytes in transaction data
+	TxDataNonZeroCost = 16
+
+	// Function selector character length (including 0x prefix)
+	FunctionSelectorCharLength int = 10
+
+	IstanbulTxDataNonZeroCost = 16
+	MaxGasPerSec              = 15000000
+	GasPriceTinyBarBuffer     = 1
+
+	GasLimit = 30000000
+)
+
+const (
+	BloomByteSize = 256
+	BloomMask     = 0x7ff
+)
+
+const (
+	DETERMINISTIC_DEPLOYER_TRANSACTION = "0xf8a58085174876e800830186a08080b853604580600e600039806000f350fe7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf31ba02222222222222222222222222222222222222222222222222222222222222222a02222222222222222222222222222222222222222222222222222222222222222"
+	DETERMINISTIC_DEPLOYMENT_SIGNER    = "0x3fab184622dc19b6109349b94811493bf2a45362"
+	DETERMINISTIC_PROXY_CONTRACT       = "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+)

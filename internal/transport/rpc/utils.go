@@ -9,7 +9,7 @@ func IsValidAddress(address string) bool {
 }
 
 func IsValidBlockNumberOrTag(blockNumber string) bool {
-	return blockNumber == "latest" || blockNumber == "earliest" || blockNumber == "pending" || IsValidHexNumber(blockNumber)
+	return blockNumber == "latest" || blockNumber == "earliest" || blockNumber == "pending" || IsValidHexNumber(blockNumber) || blockNumber == "finalized" || blockNumber == "safe"
 }
 
 func IsValidHexNumber(hexNumber string) bool {
@@ -17,7 +17,7 @@ func IsValidHexNumber(hexNumber string) bool {
 }
 
 func IsValidBlockHashOrTag(blockHash string) bool {
-	return regexp.MustCompile("^0x[a-fA-F0-9]{64}$").MatchString(blockHash) || blockHash == "latest" || blockHash == "earliest" || blockHash == "pending"
+	return regexp.MustCompile("^0x[a-fA-F0-9]{64}$").MatchString(blockHash) || blockHash == "latest" || blockHash == "earliest" || blockHash == "pending" || blockHash == "finalized" || blockHash == "safe"
 }
 
 func IsValidHexHash(hexHash string) bool {

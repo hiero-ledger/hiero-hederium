@@ -1,6 +1,7 @@
 package hedera
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -17,9 +18,10 @@ type HederaNodeClient interface {
 
 type HederaClient struct {
 	*hedera.Client
+	operatorKeyFormat string
 }
 
-func NewHederaClient(network, operatorId, operatorKey string) (*HederaClient, error) {
+func NewHederaClient(network, operatorId, operatorKey, operatorKeyFormat string, networkConfig map[string]string) (*HederaClient, error) {
 	var client *hedera.Client
 	switch network {
 	case "mainnet":
@@ -30,12 +32,17 @@ func NewHederaClient(network, operatorId, operatorKey string) (*HederaClient, er
 		client = hedera.ClientForPreviewnet()
 	case "local":
 		var err error
-		client, err = hedera.ClientForName("local")
+		data, err := json.Marshal(networkConfig)
+		if err != nil {
+			return nil, err
+		}
+		jsonBytes := []byte(fmt.Sprintf(`{"network":%s}`, string(data)))
+		client, err = hedera.ClientFromConfig(jsonBytes)
 		if err != nil {
 			return nil, err
 		}
 	default:
-		return nil, fmt.Errorf("unsupported Hedera network: %s", network)
+		return nil, fmt.Errorf("invalid network: %s", network)
 	}
 
 	accID, err := hedera.AccountIDFromString(operatorId)
@@ -47,7 +54,7 @@ func NewHederaClient(network, operatorId, operatorKey string) (*HederaClient, er
 		return nil, err
 	}
 	client.SetOperator(accID, opKey)
-	return &HederaClient{Client: client}, nil
+	return &HederaClient{Client: client, operatorKeyFormat: operatorKeyFormat}, nil
 }
 
 func (h *HederaClient) GetNetworkFees() (int64, error) {
@@ -209,5 +216,9 @@ func (h *HederaClient) GetContractByteCode(shard, realm int64, address string) (
 }
 
 func (h *HederaClient) GetOperatorPublicKey() string {
-	return h.Client.GetOperatorPublicKey().ToEvmAddress()
+	if h.operatorKeyFormat == "HEX_ECDSA" {
+		return h.Client.GetOperatorPublicKey().ToEvmAddress()
+	}
+	accountId := h.Client.GetOperatorAccountID().String()
+	return accountId
 }
