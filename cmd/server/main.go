@@ -12,6 +12,7 @@ import (
 	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
 	"github.com/LimeChain/Hederium/internal/infrastructure/logger"
 	"github.com/LimeChain/Hederium/internal/transport/http_server"
+	"github.com/LimeChain/Hederium/internal/transport/ws_server"
 )
 
 func main() {
@@ -43,9 +44,17 @@ func main() {
 	enforceAPIKey := viper.GetBool("features.enforceApiKey")
 
 	port := viper.GetString("server.port")
+	serverType := viper.GetString("server.type")
 
-	server := http_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, cacheService, port)
-	if err := server.Start(); err != nil {
-		log.Fatal("Failed to start server", zap.Error(err))
+	if serverType == "http" {
+		server := http_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, cacheService, port)
+		if err := server.Start(); err != nil {
+			log.Fatal("Failed to start server", zap.Error(err))
+		}
+	} else if serverType == "ws" {
+		server := ws_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, cacheService, port)
+		if err := server.Start(); err != nil {
+			log.Fatal("Failed to start server", zap.Error(err))
+		}
 	}
 }
