@@ -18,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/crypto"
 	"go.uber.org/zap"
 )
 
@@ -79,15 +80,30 @@ func ProcessBlock(s *EthService, block *domain.BlockResponse, showDetails bool) 
 		trimmedParentHash = trimmedParentHash[:66]
 	}
 
+	ethBlock.WithdrawalsRoot = "0x0000000000000000000000000000000000000000000000000000000000000000"
+	ethBlock.MixHash = "0x0000000000000000000000000000000000000000000000000000000000000000"
+
+	gasPrice, err := s.GetGasPrice()
+	if err != nil {
+		s.logger.Error("Failed to get gas price", zap.Error(err))
+	}
+	gasPriceStr, ok := gasPrice.(string)
+	if !ok {
+		s.logger.Error("Gas price is not a string")
+		gasPriceStr = "0x0"
+	}
+	ethBlock.Withdrawals = []string{}
+	ethBlock.BaseFeePerGas = gasPriceStr
 	ethBlock.Number = &hexNumber
 	ethBlock.GasUsed = hexGasUsed
-	ethBlock.GasLimit = hexify(15000000) // Hedera's default gas limit
+	ethBlock.GasLimit = hexify(GasLimit) // Hedera's default gas limit
 	ethBlock.Hash = &trimmedHash
 	ethBlock.LogsBloom = block.LogsBloom
 	ethBlock.TransactionsRoot = &trimmedHash
 	ethBlock.ParentHash = trimmedParentHash
 	ethBlock.Timestamp = hexTimestamp
 	ethBlock.Size = hexSize
+	ethBlock.TotalDifficulty = "0x0"
 
 	contractResults := s.mClient.GetContractResults(block.Timestamp)
 	for _, contractResult := range contractResults {
@@ -146,12 +162,12 @@ func ProcessTransaction(contractResult domain.ContractResults) interface{} {
 	// Safe string slicing with length checks
 	hexR := "0x0"
 	if contractResult.R != "" {
-		hexR = truncateString(contractResult.R, 66)
+		hexR = removeLeadingZeroes(truncateString(contractResult.R, 66))
 	}
 
 	hexS := "0x0"
 	if contractResult.S != "" {
-		hexS = truncateString(contractResult.S, 66)
+		hexS = removeLeadingZeroes(truncateString(contractResult.S, 66))
 	}
 
 	hexNonce := hexify(contractResult.Nonce)
@@ -218,11 +234,13 @@ func ProcessTransaction(contractResult domain.ContractResults) interface{} {
 			AccessList:  []domain.AccessListEntry{}, // Empty access list for now
 		}
 	case 2:
+		MaxPriorityFeePerGas := parseFee(contractResult.MaxPriorityFeePerGas)
+		MaxFeePerGas := parseFee(contractResult.MaxFeePerGas)
 		return domain.Transaction1559{
 			Transaction:          commonFields,
 			AccessList:           []domain.AccessListEntry{}, // Empty access list for now
-			MaxPriorityFeePerGas: contractResult.MaxPriorityFeePerGas,
-			MaxFeePerGas:         contractResult.MaxFeePerGas,
+			MaxPriorityFeePerGas: MaxPriorityFeePerGas,
+			MaxFeePerGas:         MaxFeePerGas,
 		}
 	default:
 		return commonFields // Default to legacy transaction
@@ -934,4 +952,51 @@ func isHexString(str string) bool {
 
 	_, err := hex.DecodeString(str)
 	return err == nil
+}
+
+
+func buildLogsBloom(address string, topics []string) string {
+	if address == "" || len(topics) == 0 {
+		return zeroHex32Bytes
+	}
+
+	address = strings.TrimPrefix(address, "0x")
+
+	items := []string{address}
+	for _, topic := range topics {
+		items = append(items, strings.TrimPrefix(topic, "0x"))
+	}
+
+	bitvector := make([]byte, BloomByteSize)
+
+	for _, item := range items {
+		itemBytes, _ := hex.DecodeString(item)
+		hash := crypto.Keccak256(itemBytes)
+
+		for i := 0; i < 3; i++ {
+			// Get first 2 bytes at position i*2
+			first2bytes := uint16(hash[i*2])<<8 | uint16(hash[i*2+1])
+
+			// Calculate bit position
+			loc := BloomMask & first2bytes
+			byteLoc := loc >> 3
+			bitLoc := uint8(1 << (loc % 8))
+
+			// Set the bit in the bitvector
+			bitvector[BloomByteSize-int(byteLoc)-1] |= bitLoc
+		}
+	}
+
+	return fmt.Sprintf("0x%s", hex.EncodeToString(bitvector))
+}
+
+func removeLeadingZeroes(str string) string {
+	return fmt.Sprintf("0x%s", strings.TrimLeft(strings.TrimPrefix(str, "0x"), "0"))
+}
+
+func parseFee(fee string) string {
+	if fee == "" || fee == "0x" {
+		return "0x0"
+	}
+	return removeLeadingZeroes(fee)
 }

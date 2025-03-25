@@ -416,8 +416,48 @@ func (s *EthService) GetTransactionReceipt(hash string) (interface{}, *domain.RP
 
 	contractResult := s.mClient.GetContractResult(hash)
 	if contractResult == nil {
-		// TODO: Here we should handle synthetic transactions
-		return nil, nil
+		params := map[string]interface{}{
+			"transaction.hash": hash,
+		}
+
+		logs, err := s.commonService.GetLogsWithParams(nil, params)
+		if err != nil {
+			s.logger.Error("Failed to get logs", zap.Error(err))
+			return nil, nil
+		}
+		if len(logs) == 0 {
+			s.logger.Error("no tx for hash", zap.String("hash", hash))
+			return nil, nil
+		}
+
+		effectiveGasPrice, err := s.getCurrentGasPriceForBlock(logs[0].BlockHash)
+		if err != nil {
+			s.logger.Error("Failed to get gas price for block", zap.Any("error", err))
+		}
+
+		receipt := domain.TransactionReceipt{
+			BlockHash:         logs[0].BlockHash,
+			BlockNumber:       logs[0].BlockNumber,
+			ContractAddress:   logs[0].Address,
+			From:              zeroHexAddress,
+			CumulativeGasUsed: zeroHex,
+			EffectiveGasPrice: effectiveGasPrice,
+			GasUsed:           zeroHex,
+			Logs:              logs,
+			LogsBloom:         buildLogsBloom(logs[0].Address, logs[0].Topics),
+			Root:              "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421", // This is the default root hash for EVM
+			Status:            oneHex,
+			To:                logs[0].Address,
+			TransactionHash:   logs[0].TransactionHash,
+			TransactionIndex:  logs[0].TransactionIndex,
+			Type:              nil,
+		}
+
+		if err := s.cacheService.Set(s.ctx, cacheKey, &receipt, DefaultExpiration); err != nil {
+			s.logger.Debug("Failed to cache transaction receipt", zap.Error(err))
+		}
+
+		return receipt, nil
 	}
 	contractResultResponse := contractResult.(domain.ContractResultResponse)
 
@@ -436,11 +476,6 @@ func (s *EthService) GetTransactionReceipt(hash string) (interface{}, *domain.RP
 			TransactionIndex: hexify(int64(contractResultResponse.TransactionIndex)),
 		}
 	}
-
-	// Default values
-	const emptyHex = "0x"
-	const emptyBloom = "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-	const defaultRootHash = "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
 
 	evmAddressFrom, err := s.resolveEvmAddress(contractResultResponse.From)
 	if err != nil {
