@@ -115,6 +115,15 @@ func TestProcessBlock_Success(t *testing.T) {
 		},
 	}
 
+	// Mock gas price call
+	mockCacheService.EXPECT().
+		Get(gomock.Any(), "eth_gasPrice", gomock.Any()).
+		Return(fmt.Errorf("not found"))
+
+	mockClient.EXPECT().
+		GetNetworkFees("", "").
+		Return(int64(10000000000), nil) // Return 10 HBAR in tinybars
+
 	mockClient.EXPECT().
 		GetContractResults(block.Timestamp).
 		Return(contractResults)
@@ -197,6 +206,11 @@ func TestProcessBlock_Success(t *testing.T) {
 		Set(gomock.Any(), toCacheKey3, contractResults[2].To, service.DefaultExpiration).
 		Return(nil)
 
+	// Setup gas price caching
+	mockCacheService.EXPECT().
+		Set(gomock.Any(), "eth_gasPrice", gomock.Any(), service.DefaultExpiration).
+		Return(nil)
+
 	s := service.NewEthService(
 		nil,
 		mockClient,
@@ -241,9 +255,23 @@ func TestProcessBlock_WithLongHashes(t *testing.T) {
 		},
 	}
 
+	// Mock gas price call
+	cacheService.EXPECT().
+		Get(gomock.Any(), "eth_gasPrice", gomock.Any()).
+		Return(fmt.Errorf("not found"))
+
+	mockClient.EXPECT().
+		GetNetworkFees("", "").
+		Return(int64(10000000000), nil) // Return 10 HBAR in tinybars
+
 	mockClient.EXPECT().
 		GetContractResults(block.Timestamp).
 		Return([]domain.ContractResults{})
+
+	// Setup gas price caching
+	cacheService.EXPECT().
+		Set(gomock.Any(), "eth_gasPrice", gomock.Any(), service.DefaultExpiration).
+		Return(nil)
 
 	s := service.NewEthService(
 		nil,
@@ -657,8 +685,8 @@ func TestProcessTransactionResponse(t *testing.T) {
 				Hash:             makeHexString("2"),
 				Nonce:            "0x5",
 				TransactionIndex: stringPtr("0x1"),
-				Value:            "0xf4240", // 1000000 in hex
-				V:                "0x1b",    // 27 in hex
+				Value:            "0x2386f26fc10000", // Correct weibar value calculation
+				V:                "0x1b",             // 27 in hex
 				R:                makeHexString("a"),
 				S:                makeHexString("b"),
 				Type:             "0x0",
@@ -695,8 +723,8 @@ func TestProcessTransactionResponse(t *testing.T) {
 					Hash:             makeHexString("6"),
 					Nonce:            "0x6",
 					TransactionIndex: stringPtr("0x2"),
-					Value:            "0x1e8480", // 2000000 in hex
-					V:                "0x1c",     // 28 in hex
+					Value:            "0x470de4df820000", // Correct weibar value calculation
+					V:                "0x1c",             // 28 in hex
 					R:                makeHexString("c"),
 					S:                makeHexString("d"),
 					Type:             "0x1",
@@ -737,8 +765,8 @@ func TestProcessTransactionResponse(t *testing.T) {
 					Hash:             makeHexString("f"),
 					Nonce:            "0x7",
 					TransactionIndex: stringPtr("0x3"),
-					Value:            "0x2dc6c0", // 3000000 in hex
-					V:                "0x1d",     // 29 in hex
+					Value:            "0x6a94d74f430000", // Correct weibar value calculation
+					V:                "0x1d",             // 29 in hex
 					R:                makeHexString("e"),
 					S:                makeHexString("f"),
 					Type:             "0x2",
