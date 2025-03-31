@@ -29,6 +29,7 @@ func main() {
 		viper.GetString("hedera.operatorKey"),
 		viper.GetString("hedera.operatorKeyFormat"),
 		viper.GetStringMapString("hedera.networkConfig"),
+		log,
 	)
 	if err != nil {
 		log.Fatal("Failed to initialize Hedera client", zap.Error(err))
