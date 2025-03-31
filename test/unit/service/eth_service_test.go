@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/LimeChain/Hederium/internal/domain"
-	"github.com/LimeChain/Hederium/internal/infrastructure/hedera"
 	"github.com/LimeChain/Hederium/internal/service"
 	"github.com/LimeChain/Hederium/test/unit/mocks"
 	"github.com/golang/mock/gomock"
@@ -3547,6 +3546,28 @@ func TestSendRawTransactionEndpoint(t *testing.T) {
 	logger := zap.NewNop()
 	ethService := service.NewEthService(mockHederaClient, mockMirrorClient, nil, logger, nil, "0x128", mockCacheService)
 
+	// Set up mock expectations that will be used by both test cases
+	mockMirrorClient.EXPECT().
+		GetAccount(gomock.Any(), gomock.Any()).
+		Return(nil).
+		AnyTimes()
+
+	mockMirrorClient.EXPECT().
+		GetAccountById(gomock.Any()).
+		Return(&domain.AccountResponse{
+			EvmAddress: "0x96216849c49358B10257cb55b28eA603c874b05E",
+			Balance: struct {
+				Balance   int64         `json:"balance"`
+				Timestamp string        `json:"timestamp"`
+				Tokens    []interface{} `json:"tokens"`
+			}{
+				Balance:   1000000000,
+				Timestamp: "2021-01-01T00:00:00Z",
+				Tokens:    []interface{}{},
+			},
+		}, nil).
+		AnyTimes()
+
 	// Test case 1: Successful transaction
 	t.Run("Successful transaction", func(t *testing.T) {
 		// Mock cache service for gas price
@@ -3555,26 +3576,6 @@ func TestSendRawTransactionEndpoint(t *testing.T) {
 			SetArg(2, "0x4f29944800").
 			Return(nil)
 
-		// Mock GetAccount for contract address
-		mockMirrorClient.EXPECT().
-			GetAccount(gomock.Any(), gomock.Any()).
-			Return(nil)
-
-		mockMirrorClient.EXPECT().
-			GetAccountById(gomock.Any()).
-			Return(&domain.AccountResponse{
-				EvmAddress: "0x96216849c49358B10257cb55b28eA603c874b05E",
-				Balance: struct {
-					Balance   int64         `json:"balance"`
-					Timestamp string        `json:"timestamp"`
-					Tokens    []interface{} `json:"tokens"`
-				}{
-					Balance:   1000000000,
-					Timestamp: "2021-01-01T00:00:00Z",
-					Tokens:    []interface{}{},
-				},
-			}, nil)
-
 		rawTxHex := "0xf8cc1e854f29944800832dc6c0940a56fd9e0c4f67df549e7f375a9451c0086482ec80b864a41368620000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000b757064617465645f6d7367000000000000000000000000000000000000000000820274a0cd6095ae91ea5d609b32923a9f73572e2d031fde0b7e38de44d3eda187474140a03028ecf5eb61070cba8e927ad5e11eac116da441307f2d54dae8be90f4476c59"
 
 		expectedHash := "0x123456789abcdef"
@@ -3582,7 +3583,7 @@ func TestSendRawTransactionEndpoint(t *testing.T) {
 		// Mock successful transaction
 		mockHederaClient.EXPECT().
 			SendRawTransaction(gomock.Any(), gomock.Any(), gomock.Any()).
-			Return(&hedera.TransactionResponse{
+			Return(&domain.TransactionResponse{
 				TransactionID: "0.0.1234@1234567890.123456789",
 			}, nil)
 
@@ -3595,9 +3596,9 @@ func TestSendRawTransactionEndpoint(t *testing.T) {
 		result, errMap := ethService.SendRawTransaction(rawTxHex)
 
 		assert.Nil(t, errMap)
-		resultStr, ok := result.(*string)
+		resultPtr, ok := result.(*string)
 		assert.True(t, ok)
-		assert.Equal(t, expectedHash, *resultStr)
+		assert.Equal(t, expectedHash, *resultPtr)
 	})
 
 	// Test case 2: Invalid transaction data
