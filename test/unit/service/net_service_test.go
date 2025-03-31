@@ -1,6 +1,8 @@
 package service_test
 
 import (
+	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/LimeChain/Hederium/internal/service"
@@ -18,17 +20,19 @@ func TestNetService_Listening(t *testing.T) {
 	result := netService.Listening()
 
 	// Assert
-	assert.False(t, result, "Listening should always return false for Hedera network")
+	assert.Equal(t, "false", result, "Listening should always return false for Hedera network")
 }
 
 func TestNetService_Version(t *testing.T) {
 	// Setup
 	logger := zap.NewNop()
-	expectedChainId := "testnet-123"
+	expectedChainId := "0x12a"
 	netService := service.NewNetService(logger, expectedChainId)
 
 	// Test
 	result := netService.Version()
+	digit, _ := strconv.ParseInt(result, 10, 64)
+	result = fmt.Sprintf("0x%x", digit)
 
 	// Assert
 	assert.Equal(t, expectedChainId, result, "Version should return the chain ID")
