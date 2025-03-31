@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/LimeChain/Hederium/internal/domain"
 	"github.com/ethereum/go-ethereum/common"
 	hedera "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 	"go.uber.org/zap"
@@ -12,7 +13,7 @@ import (
 
 type HederaNodeClient interface {
 	GetNetworkFees() (int64, error)
-	SendRawTransaction(transactionData []byte, networkGasPriceInTinyBars int64, callerId *common.Address) (*TransactionResponse, error)
+	SendRawTransaction(transactionData []byte, networkGasPriceInTinyBars int64, callerId *common.Address) (*domain.TransactionResponse, error)
 	DeleteFile(fileID *hedera.FileID) error
 	GetContractByteCode(shard, realm int64, address string) ([]byte, error)
 	GetOperatorPublicKey() string
@@ -86,45 +87,53 @@ func (h *HederaClient) GetNetworkFees() (int64, error) {
 	return 72, nil
 }
 
-type TransactionResponse struct {
-	TransactionID string
-	FileID        *hedera.FileID
-}
-
 // SendRawTransaction submits an Ethereum transaction to the Hedera network.
 // It handles large call data by creating a file if needed and validates gas prices.
-func (h *HederaClient) SendRawTransaction(transactionData []byte, networkGasPriceInWeiBars int64, callerId *common.Address) (*TransactionResponse, error) {
+func (h *HederaClient) SendRawTransaction(transactionData []byte, networkGasPriceInTinyBars int64, callerId *common.Address) (*domain.TransactionResponse, error) {
 	ethereumTx := hedera.NewEthereumTransaction()
 
-	var fileID *hedera.FileID
-	var err error
+	ethereumData, err := hedera.EthereumTransactionDataFromBytes(transactionData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ethereum transaction data: %v", err)
+	}
 
-	if len(transactionData) <= fileAppendChunkSize {
-		ethereumTx.SetEthereumData(transactionData)
+	data, err := ethereumData.ToBytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert ethereum transaction data to bytes: %v", err)
+	}
+
+	h.logger.Info("Sending raw transaction", zap.Int("data length", len(data)))
+
+	var fileID *hedera.FileID
+	if len(data) <= fileAppendChunkSize {
+		ethereumTx.SetEthereumData(data)
 	} else {
-		fileID, err = h.createFileForCallData(transactionData)
-		if err != nil {
+		fileID, err = h.createFileForCallData(data)
+		if err != nil && fileID == nil {
+			h.logger.Error("Failed to create file for call data", zap.Error(err))
 			return nil, fmt.Errorf("failed to create file for call data: %v", err)
 		}
 
-		ethereumTx.SetEthereumData([]byte{})
-		ethereumTx.SetCallDataFileID(*fileID)
+		ethereumTx.SetEthereumData(data).SetCallDataFileID(*fileID)
 	}
 
-	// TODO: Make this in separate function
-	networkGasPriceInTinyBars := networkGasPriceInWeiBars / 10000000000
-	maxFee := hedera.NewHbar(float64(networkGasPriceInTinyBars*maxGasPerSec) / 100000000.0)
+	maxFee := hedera.HbarFromTinybar(networkGasPriceInTinyBars * maxGasPerSec)
 	ethereumTx.SetMaxTransactionFee(maxFee)
+
+	h.logger.Info("Executing transaction", zap.Int("data length", len(transactionData)), zap.Bool("using file", fileID != nil))
 
 	response, err := ethereumTx.Execute(h.Client)
 	if err != nil {
-		if fileID != nil {
-			_ = h.deleteFile(*fileID)
-		}
+		h.logger.Error("Failed to execute transaction", zap.Error(err))
 		return nil, fmt.Errorf("failed to execute transaction: %v", err)
 	}
 
-	return &TransactionResponse{
+	_, err = response.GetReceipt(h.Client)
+	if err != nil {
+		h.logger.Error("Failed to get transaction receipt", zap.Error(err))
+	}
+
+	return &domain.TransactionResponse{
 		TransactionID: response.TransactionID.String(),
 		FileID:        fileID,
 	}, nil
@@ -135,17 +144,21 @@ func (h *HederaClient) createFileForCallData(data []byte) (*hedera.FileID, error
 	// TODO: EstimateTxFee
 	// TODO: hbarLimitService - check if the limit is reached
 
-	// Create initial file with first chunk
+	h.logger.Info("Creating file for call data", zap.Int("data length", len(data)))
+
 	fileCreateTx := hedera.NewFileCreateTransaction().
 		SetContents(data[:fileAppendChunkSize]).
 		SetKeys(h.Client.GetOperatorPublicKey())
 
-	resp, err := fileCreateTx.Execute(h.Client)
+	response, err := fileCreateTx.Execute(h.Client)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create file: %v", err)
+		h.logger.Error("Failed to execute file create transaction", zap.Error(err))
+		return nil, fmt.Errorf("failed to execute transaction: %v", err)
 	}
 
-	receipt, err := resp.GetReceipt(h.Client)
+	h.logger.Info("File create transaction executed successfully", zap.Any("response", response))
+
+	receipt, err := response.GetReceipt(h.Client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get file creation receipt: %v", err)
 	}

@@ -1,5 +1,9 @@
 package domain
 
+import (
+	hedera "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
+)
+
 // Block represents an Ethereum-compatible block structure
 type Block struct {
 	Number           *string       `json:"number"`           // The block number (hex)
@@ -124,4 +128,9 @@ type TransactionReceipt struct {
 	TransactionIndex  string  `json:"transactionIndex"`
 	Type              *string `json:"type"`
 	RevertReason      string  `json:"revertReason,omitempty"`
+}
+
+type TransactionResponse struct {
+	TransactionID string
+	FileID        *hedera.FileID
 }
