@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	infrahedera "github.com/LimeChain/Hederium/internal/infrastructure/hedera"
 	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/rlp"
 	"go.uber.org/zap"
 )
 
@@ -929,14 +931,18 @@ func (s *EthService) GetTransactionByBlockNumberAndIndex(blockNumberOrTag string
 func (s *EthService) SendRawTransaction(data string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Sending raw transaction", zap.String("data", data))
 
-	parsedTx, err := ParseTransaction(data)
+	parsedTx, rawTx, err := ParseTransaction(data)
 	if err != nil {
 		s.logger.Error("Failed to parse transaction", zap.Error(err))
+		// This check is for the acceptance tests
+		if errors.Is(err, rlp.ErrMoreThanOneValue) {
+			return nil, domain.NewRPCError(domain.InternalError, "Unknown error invoking RPC")
+		}
 		return nil, domain.NewRPCError(domain.ServerError, "Failed to parse transaction")
 	}
 
-	if err = s.precheck.CheckSize(data); err != nil {
-		return nil, domain.NewRPCError(domain.ServerError, err.Error())
+	if errRpc := s.precheck.CheckSize(data); errRpc != nil {
+		return nil, errRpc
 	}
 
 	gasPriceHex, rpcErr := s.GetGasPrice()
@@ -950,23 +956,21 @@ func (s *EthService) SendRawTransaction(data string) (interface{}, *domain.RPCEr
 		return nil, domain.NewRPCError(domain.ServerError, "Failed to parse gas price")
 	}
 
-	if err = s.precheck.SendRawTransactionCheck(parsedTx, gasPrice); err != nil {
-		s.logger.Error("Transaction rejected by precheck", zap.Error(err))
-		return nil, domain.NewRPCError(domain.ServerError, "Transaction rejected by precheck")
+	if errRpc := s.precheck.SendRawTransactionCheck(parsedTx, gasPrice); errRpc != nil {
+		s.logger.Error("Transaction rejected by precheck", zap.Error(errRpc))
+		return nil, errRpc
 	}
 
-	rawTxHex := strings.TrimPrefix(data, "0x")
-
-	rawTx, err := hex.DecodeString(rawTxHex)
+	gasPriceInTinyBars, err := WeibarHexToTinyBarInt(gasPriceHex.(string))
 	if err != nil {
-		s.logger.Error("Failed to decode raw transaction", zap.Error(err))
-		return nil, domain.NewRPCError(domain.ServerError, "Failed to decode raw transaction")
+		s.logger.Error("Failed to convert gas price to tinybars", zap.Error(err))
+		return nil, domain.NewRPCError(domain.ServerError, "Failed to convert gas price to tinybars")
 	}
 
-	txHash, err := s.SendRawTransactionProcessor(rawTx, parsedTx, gasPrice)
-	if err != nil {
-		s.logger.Error("Failed to process transaction", zap.Error(err))
-		return nil, domain.NewRPCError(domain.ServerError, "Failed to process transaction")
+	txHash, errRpc := s.SendRawTransactionProcessor(rawTx, parsedTx, gasPriceInTinyBars)
+	if errRpc != nil {
+		s.logger.Error("Failed to process transaction", zap.Error(errRpc))
+		return nil, errRpc
 	}
 
 	return txHash, nil
