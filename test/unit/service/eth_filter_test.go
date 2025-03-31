@@ -18,7 +18,7 @@ func setupFilterTest(t *testing.T) (*gomock.Controller, *mocks.MockMirrorClient,
 	mockClient := mocks.NewMockMirrorClient(ctrl)
 	mockCache := mocks.NewMockCacheService(ctrl)
 	mockCommon := mocks.NewMockCommonService(ctrl)
-	filterService := service.NewFilterService(mockClient, mockCache, logger, mockCommon)
+	filterService := service.NewFilterService(mockClient, mockCache, logger, mockCommon, true)
 
 	return ctrl, mockClient, mockCache, mockCommon, filterService
 }
@@ -143,7 +143,7 @@ func TestUninstallFilter(t *testing.T) {
 					Get(gomock.Any(), fmt.Sprintf("filterId_%s", "0xnonexistent"), gomock.Any()).
 					Return(fmt.Errorf("not found"))
 			},
-			expectError:    true,
+			expectError:    false,
 			expectedResult: false,
 		},
 		{

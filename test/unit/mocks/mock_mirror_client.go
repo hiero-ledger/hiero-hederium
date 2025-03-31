@@ -63,6 +63,21 @@ func (mr *MockMirrorClientMockRecorder) GetAccountById(idOrAliasOrEvmAddress int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAccountById", reflect.TypeOf((*MockMirrorClient)(nil).GetAccountById), idOrAliasOrEvmAddress)
 }
 
+// GetAccountTransactionsById mocks base method.
+func (m *MockMirrorClient) GetAccountTransactionsById(idOrAliasOrEvmAddress string) (*domain.AccountResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAccountTransactionsById", idOrAliasOrEvmAddress)
+	ret0, _ := ret[0].(*domain.AccountResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAccountTransactionsById indicates an expected call of GetAccountTransactionsById.
+func (mr *MockMirrorClientMockRecorder) GetAccountTransactionsById(idOrAliasOrEvmAddress interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAccountTransactionsById", reflect.TypeOf((*MockMirrorClient)(nil).GetAccountTransactionsById), idOrAliasOrEvmAddress)
+}
+
 // GetBalance mocks base method.
 func (m *MockMirrorClient) GetBalance(address, timestampTo string) string {
 	m.ctrl.T.Helper()
@@ -89,6 +104,21 @@ func (m *MockMirrorClient) GetBlockByHashOrNumber(hashOrNumber string) *domain.B
 func (mr *MockMirrorClientMockRecorder) GetBlockByHashOrNumber(hashOrNumber interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlockByHashOrNumber", reflect.TypeOf((*MockMirrorClient)(nil).GetBlockByHashOrNumber), hashOrNumber)
+}
+
+// GetBlocks mocks base method.
+func (m *MockMirrorClient) GetBlocks(blockNumber string) ([]map[string]interface{}, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBlocks", blockNumber)
+	ret0, _ := ret[0].([]map[string]interface{})
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBlocks indicates an expected call of GetBlocks.
+func (mr *MockMirrorClientMockRecorder) GetBlocks(blockNumber interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlocks", reflect.TypeOf((*MockMirrorClient)(nil).GetBlocks), blockNumber)
 }
 
 // GetContractById mocks base method.
@@ -194,6 +224,36 @@ func (mr *MockMirrorClientMockRecorder) GetContractStateByAddressAndSlot(address
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetContractStateByAddressAndSlot", reflect.TypeOf((*MockMirrorClient)(nil).GetContractStateByAddressAndSlot), address, slot, timestampTo)
 }
 
+// GetContractsResultsActions mocks base method.
+func (m *MockMirrorClient) GetContractsResultsActions(transactionIdOrHash string) (*domain.ActionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetContractsResultsActions", transactionIdOrHash)
+	ret0, _ := ret[0].(*domain.ActionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetContractsResultsActions indicates an expected call of GetContractsResultsActions.
+func (mr *MockMirrorClientMockRecorder) GetContractsResultsActions(transactionIdOrHash interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetContractsResultsActions", reflect.TypeOf((*MockMirrorClient)(nil).GetContractsResultsActions), transactionIdOrHash)
+}
+
+// GetContractsResultsOpcodes mocks base method.
+func (m *MockMirrorClient) GetContractsResultsOpcodes(transactionIdOrHash string, options map[string]interface{}) (*domain.OpcodesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetContractsResultsOpcodes", transactionIdOrHash, options)
+	ret0, _ := ret[0].(*domain.OpcodesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetContractsResultsOpcodes indicates an expected call of GetContractsResultsOpcodes.
+func (mr *MockMirrorClientMockRecorder) GetContractsResultsOpcodes(transactionIdOrHash, options interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetContractsResultsOpcodes", reflect.TypeOf((*MockMirrorClient)(nil).GetContractsResultsOpcodes), transactionIdOrHash, options)
+}
+
 // GetLatestBlock mocks base method.
 func (m *MockMirrorClient) GetLatestBlock() (map[string]interface{}, error) {
 	m.ctrl.T.Helper()
@@ -224,6 +284,21 @@ func (mr *MockMirrorClientMockRecorder) GetNetworkFees(timestampTo, order interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNetworkFees", reflect.TypeOf((*MockMirrorClient)(nil).GetNetworkFees), timestampTo, order)
 }
 
+// GetPaginatedAccountTransactions mocks base method.
+func (m *MockMirrorClient) GetPaginatedAccountTransactions(url string, maxPages int) ([]domain.AccountResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPaginatedAccountTransactions", url, maxPages)
+	ret0, _ := ret[0].([]domain.AccountResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPaginatedAccountTransactions indicates an expected call of GetPaginatedAccountTransactions.
+func (mr *MockMirrorClientMockRecorder) GetPaginatedAccountTransactions(url, maxPages interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPaginatedAccountTransactions", reflect.TypeOf((*MockMirrorClient)(nil).GetPaginatedAccountTransactions), url, maxPages)
+}
+
 // GetTokenById mocks base method.
 func (m *MockMirrorClient) GetTokenById(tokenId string) (*domain.TokenResponse, error) {
 	m.ctrl.T.Helper()
@@ -240,11 +315,12 @@ func (mr *MockMirrorClientMockRecorder) GetTokenById(tokenId interface{}) *gomoc
 }
 
 // PostCall mocks base method.
-func (m *MockMirrorClient) PostCall(callObject map[string]interface{}) interface{} {
+func (m *MockMirrorClient) PostCall(callObject map[string]interface{}) (interface{}, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PostCall", callObject)
 	ret0, _ := ret[0].(interface{})
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // PostCall indicates an expected call of PostCall.
@@ -267,17 +343,3 @@ func (mr *MockMirrorClientMockRecorder) RepeatGetContractResult(transactionIdOrH
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RepeatGetContractResult", reflect.TypeOf((*MockMirrorClient)(nil).RepeatGetContractResult), transactionIdOrHash, retries)
 }
 
-// GetBlocks mocks base method
-func (m *MockMirrorClient) GetBlocks(blockHash string) ([]map[string]interface{}, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetBlocks", blockHash)
-	ret0, _ := ret[0].([]map[string]interface{})
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetBlocks indicates an expected call of GetBlocks.
-func (mr *MockMirrorClientMockRecorder) GetBlocks(blockHash string) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlocks", reflect.TypeOf((*MockMirrorClient)(nil).GetBlocks), blockHash)
-}

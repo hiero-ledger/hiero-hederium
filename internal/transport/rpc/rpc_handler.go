@@ -63,7 +63,7 @@ func (h *rpcHandler) HandleRequest(ctx context.Context, req *JSONRPCRequest) *JS
 func (h *rpcHandler) dispatchMethod(ctx context.Context, methodName string, params interface{}) (interface{}, *domain.RPCError) {
 	methodInfo, ok := h.registry.GetMethod(methodName)
 	if !ok {
-		return nil, domain.NewRPCError(domain.MethodNotFound, fmt.Sprintf("Unsupported JSON-RPC method: %s", methodName))
+		return nil, domain.NewRPCError(domain.MethodNotFound, "Unsupported JSON-RPC method")
 	}
 
 	h.logger.Debug("Received params", zap.Any("params", params))

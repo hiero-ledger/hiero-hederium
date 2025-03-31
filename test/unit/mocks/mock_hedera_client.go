@@ -6,9 +6,10 @@ package mocks
 import (
 	"reflect"
 
+	"github.com/LimeChain/Hederium/internal/domain"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/golang/mock/gomock"
-	"github.com/LimeChain/Hederium/internal/infrastructure/hedera"
+	hedera "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 )
 
 // MockHederaNodeClient is a mock of HederaNodeClient interface.
@@ -34,6 +35,20 @@ func (m *MockHederaNodeClient) EXPECT() *MockHederaNodeClientMockRecorder {
 	return m.recorder
 }
 
+// DeleteFile mocks base method.
+func (m *MockHederaNodeClient) DeleteFile(fileID *hedera.FileID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteFile", fileID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteFile indicates an expected call of DeleteFile.
+func (mr *MockHederaNodeClientMockRecorder) DeleteFile(fileID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteFile", reflect.TypeOf((*MockHederaNodeClient)(nil).DeleteFile), fileID)
+}
+
 // GetNetworkFees mocks base method.
 func (m *MockHederaNodeClient) GetNetworkFees() (int64, error) {
 	m.ctrl.T.Helper()
@@ -50,18 +65,18 @@ func (mr *MockHederaNodeClientMockRecorder) GetNetworkFees() *gomock.Call {
 }
 
 // SendRawTransaction mocks base method.
-func (m *MockHederaNodeClient) SendRawTransaction(transactionData []byte, networkGasPriceInWeiBars int64, callerId *common.Address) (*hedera.TransactionResponse, error) {
+func (m *MockHederaNodeClient) SendRawTransaction(transactionData []byte, networkGasPriceInTinyBars int64, callerId *common.Address) (*domain.TransactionResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SendRawTransaction", transactionData, networkGasPriceInWeiBars, callerId)
-	ret0, _ := ret[0].(*hedera.TransactionResponse)
+	ret := m.ctrl.Call(m, "SendRawTransaction", transactionData, networkGasPriceInTinyBars, callerId)
+	ret0, _ := ret[0].(*domain.TransactionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // SendRawTransaction indicates an expected call of SendRawTransaction.
-func (mr *MockHederaNodeClientMockRecorder) SendRawTransaction(transactionData, networkGasPriceInWeiBars, callerId interface{}) *gomock.Call {
+func (mr *MockHederaNodeClientMockRecorder) SendRawTransaction(transactionData, networkGasPriceInTinyBars, callerId interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendRawTransaction", reflect.TypeOf((*MockHederaNodeClient)(nil).SendRawTransaction), transactionData, networkGasPriceInWeiBars, callerId)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendRawTransaction", reflect.TypeOf((*MockHederaNodeClient)(nil).SendRawTransaction), transactionData, networkGasPriceInTinyBars, callerId)
 }
 
 // GetContractByteCode mocks base method.
@@ -79,12 +94,15 @@ func (mr *MockHederaNodeClientMockRecorder) GetContractByteCode(shard, realm, ad
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetContractByteCode", reflect.TypeOf((*MockHederaNodeClient)(nil).GetContractByteCode), shard, realm, address)
 }
 
+// GetOperatorPublicKey mocks base method.
 func (m *MockHederaNodeClient) GetOperatorPublicKey() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOperatorPublicKey")
-	return ret[0].(string)
+	ret0, _ := ret[0].(string)
+	return ret0
 }
 
+// GetOperatorPublicKey indicates an expected call of GetOperatorPublicKey.
 func (mr *MockHederaNodeClientMockRecorder) GetOperatorPublicKey() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorPublicKey", reflect.TypeOf((*MockHederaNodeClient)(nil).GetOperatorPublicKey))

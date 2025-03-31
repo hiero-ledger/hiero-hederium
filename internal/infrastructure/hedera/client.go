@@ -1,25 +1,31 @@
 package hedera
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
+	"github.com/LimeChain/Hederium/internal/domain"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/hashgraph/hedera-sdk-go/v2"
+	hedera "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
+	"go.uber.org/zap"
 )
 
 type HederaNodeClient interface {
 	GetNetworkFees() (int64, error)
-	SendRawTransaction(transactionData []byte, networkGasPriceInWeiBars int64, callerId *common.Address) (*TransactionResponse, error)
+	SendRawTransaction(transactionData []byte, networkGasPriceInTinyBars int64, callerId *common.Address) (*domain.TransactionResponse, error)
+	DeleteFile(fileID *hedera.FileID) error
 	GetContractByteCode(shard, realm int64, address string) ([]byte, error)
 	GetOperatorPublicKey() string
 }
 
 type HederaClient struct {
 	*hedera.Client
+	operatorKeyFormat string
+	logger            *zap.Logger
 }
 
-func NewHederaClient(network, operatorId, operatorKey string) (*HederaClient, error) {
+func NewHederaClient(network, operatorId, operatorKey, operatorKeyFormat string, networkConfig map[string]string, logger *zap.Logger) (*HederaClient, error) {
 	var client *hedera.Client
 	switch network {
 	case "mainnet":
@@ -30,12 +36,17 @@ func NewHederaClient(network, operatorId, operatorKey string) (*HederaClient, er
 		client = hedera.ClientForPreviewnet()
 	case "local":
 		var err error
-		client, err = hedera.ClientForName("local")
+		data, err := json.Marshal(networkConfig)
+		if err != nil {
+			return nil, err
+		}
+		jsonBytes := []byte(fmt.Sprintf(`{"network":%s}`, string(data)))
+		client, err = hedera.ClientFromConfig(jsonBytes)
 		if err != nil {
 			return nil, err
 		}
 	default:
-		return nil, fmt.Errorf("unsupported Hedera network: %s", network)
+		return nil, fmt.Errorf("invalid network: %s", network)
 	}
 
 	accID, err := hedera.AccountIDFromString(operatorId)
@@ -47,7 +58,7 @@ func NewHederaClient(network, operatorId, operatorKey string) (*HederaClient, er
 		return nil, err
 	}
 	client.SetOperator(accID, opKey)
-	return &HederaClient{Client: client}, nil
+	return &HederaClient{Client: client, operatorKeyFormat: operatorKeyFormat, logger: logger}, nil
 }
 
 func (h *HederaClient) GetNetworkFees() (int64, error) {
@@ -76,45 +87,53 @@ func (h *HederaClient) GetNetworkFees() (int64, error) {
 	return 72, nil
 }
 
-type TransactionResponse struct {
-	TransactionID string
-	FileID        *hedera.FileID
-}
-
 // SendRawTransaction submits an Ethereum transaction to the Hedera network.
 // It handles large call data by creating a file if needed and validates gas prices.
-func (h *HederaClient) SendRawTransaction(transactionData []byte, networkGasPriceInWeiBars int64, callerId *common.Address) (*TransactionResponse, error) {
+func (h *HederaClient) SendRawTransaction(transactionData []byte, networkGasPriceInTinyBars int64, callerId *common.Address) (*domain.TransactionResponse, error) {
 	ethereumTx := hedera.NewEthereumTransaction()
 
-	var fileID *hedera.FileID
-	var err error
+	ethereumData, err := hedera.EthereumTransactionDataFromBytes(transactionData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ethereum transaction data: %v", err)
+	}
 
-	if len(transactionData) <= fileAppendChunkSize {
-		ethereumTx.SetEthereumData(transactionData)
+	data, err := ethereumData.ToBytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert ethereum transaction data to bytes: %v", err)
+	}
+
+	h.logger.Info("Sending raw transaction", zap.Int("data length", len(data)))
+
+	var fileID *hedera.FileID
+	if len(data) <= fileAppendChunkSize {
+		ethereumTx.SetEthereumData(data)
 	} else {
-		fileID, err = h.createFileForCallData(transactionData)
-		if err != nil {
+		fileID, err = h.createFileForCallData(data)
+		if err != nil && fileID == nil {
+			h.logger.Error("Failed to create file for call data", zap.Error(err))
 			return nil, fmt.Errorf("failed to create file for call data: %v", err)
 		}
 
-		ethereumTx.SetEthereumData([]byte{})
-		ethereumTx.SetCallDataFileID(*fileID)
+		ethereumTx.SetEthereumData(data).SetCallDataFileID(*fileID)
 	}
 
-	// TODO: Make this in separate function
-	networkGasPriceInTinyBars := networkGasPriceInWeiBars / 10000000000
-	maxFee := hedera.NewHbar(float64(networkGasPriceInTinyBars*maxGasPerSec) / 100000000.0)
+	maxFee := hedera.HbarFromTinybar(networkGasPriceInTinyBars * maxGasPerSec)
 	ethereumTx.SetMaxTransactionFee(maxFee)
+
+	h.logger.Info("Executing transaction", zap.Int("data length", len(transactionData)), zap.Bool("using file", fileID != nil))
 
 	response, err := ethereumTx.Execute(h.Client)
 	if err != nil {
-		if fileID != nil {
-			_ = h.deleteFile(*fileID)
-		}
+		h.logger.Error("Failed to execute transaction", zap.Error(err))
 		return nil, fmt.Errorf("failed to execute transaction: %v", err)
 	}
 
-	return &TransactionResponse{
+	_, err = response.GetReceipt(h.Client)
+	if err != nil {
+		h.logger.Error("Failed to get transaction receipt", zap.Error(err))
+	}
+
+	return &domain.TransactionResponse{
 		TransactionID: response.TransactionID.String(),
 		FileID:        fileID,
 	}, nil
@@ -125,17 +144,21 @@ func (h *HederaClient) createFileForCallData(data []byte) (*hedera.FileID, error
 	// TODO: EstimateTxFee
 	// TODO: hbarLimitService - check if the limit is reached
 
-	// Create initial file with first chunk
+	h.logger.Info("Creating file for call data", zap.Int("data length", len(data)))
+
 	fileCreateTx := hedera.NewFileCreateTransaction().
 		SetContents(data[:fileAppendChunkSize]).
 		SetKeys(h.Client.GetOperatorPublicKey())
 
-	resp, err := fileCreateTx.Execute(h.Client)
+	response, err := fileCreateTx.Execute(h.Client)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create file: %v", err)
+		h.logger.Error("Failed to execute file create transaction", zap.Error(err))
+		return nil, fmt.Errorf("failed to execute transaction: %v", err)
 	}
 
-	receipt, err := resp.GetReceipt(h.Client)
+	h.logger.Info("File create transaction executed successfully", zap.Any("response", response))
+
+	receipt, err := response.GetReceipt(h.Client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get file creation receipt: %v", err)
 	}
@@ -147,44 +170,70 @@ func (h *HederaClient) createFileForCallData(data []byte) (*hedera.FileID, error
 
 	if len(data) > fileAppendChunkSize {
 		remaining := data[fileAppendChunkSize:]
-		for i := 0; i < len(remaining); i += fileAppendChunkSize {
-			end := i + fileAppendChunkSize
-			if end > len(remaining) {
-				end = len(remaining)
-			}
+		appendTx := hedera.NewFileAppendTransaction().
+			SetFileID(*fileID).
+			SetContents(remaining).
+			SetMaxChunkSize(fileAppendChunkSize).
+			SetMaxChunks(maxChunks)
+		transactionResponses, err := appendTx.ExecuteAll(h.Client)
 
-			chunk := remaining[i:end]
-			appendTx := hedera.NewFileAppendTransaction().
-				SetFileID(*fileID).
-				SetContents(chunk)
-
-			_, err = appendTx.Execute(h.Client)
-			if err != nil {
-				_ = h.deleteFile(*fileID)
-				return nil, fmt.Errorf("failed to append chunk %d: %v", i/fileAppendChunkSize+1, err)
-			}
+		if err != nil {
+			h.logger.Error("Failed to execute file append transaction", zap.Error(err))
+			return nil, fmt.Errorf("failed to execute transaction: %v", err)
 		}
+
+		h.logger.Info(fmt.Sprintf("Successfully execute all %d file append transactions", len(transactionResponses)))
+	}
+
+	// Make query to see if the file is created successfully
+	query := hedera.NewFileInfoQuery().SetFileID(*fileID)
+	queryResponse, err := query.Execute(h.Client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute query: %v", err)
+	}
+
+	if queryResponse.Size == 0 {
+		return nil, fmt.Errorf("created file is empty")
 	}
 
 	return fileID, nil
 }
 
-func (h *HederaClient) deleteFile(fileID hedera.FileID) error {
+func (h *HederaClient) DeleteFile(fileID *hedera.FileID) error {
+	h.logger.Info("Deleting file", zap.String("fileID", fileID.String()))
+
 	deleteTx, err := hedera.NewFileDeleteTransaction().
-		SetFileID(fileID).SetMaxTransactionFee(hedera.NewHbar(2)).FreezeWith(h.Client)
+		SetFileID(*fileID).SetMaxTransactionFee(hedera.NewHbar(2)).FreezeWith(h.Client)
 	if err != nil {
 		return fmt.Errorf("failed to freeze delete transaction: %v", err)
 	}
 
-	_, err = deleteTx.Execute(h.Client)
+	response, err := deleteTx.Execute(h.Client)
 	if err != nil {
 		return fmt.Errorf("failed to delete file: %v", err)
+	}
+
+	_, err = response.GetReceipt(h.Client)
+	if err != nil {
+		return fmt.Errorf("failed to get delete receipt: %v", err)
+	}
+
+	query := hedera.NewFileInfoQuery().SetFileID(*fileID)
+	queryResponse, err := query.Execute(h.Client)
+	if err != nil {
+		return fmt.Errorf("failed to execute query: %v", err)
+	}
+
+	if queryResponse.Size == 0 {
+		return fmt.Errorf("file was not deleted")
 	}
 
 	return nil
 }
 
 func (h *HederaClient) GetContractByteCode(shard, realm int64, address string) ([]byte, error) {
+	h.logger.Info("Getting contract bytecode", zap.String("address", address))
+
 	address = strings.TrimPrefix(address, "0x")
 	contractID, err := hedera.ContractIDFromEvmAddress(uint64(shard), uint64(realm), address)
 	if err != nil {
@@ -209,5 +258,9 @@ func (h *HederaClient) GetContractByteCode(shard, realm int64, address string) (
 }
 
 func (h *HederaClient) GetOperatorPublicKey() string {
-	return h.Client.GetOperatorPublicKey().ToEvmAddress()
+	if h.operatorKeyFormat == "HEX_ECDSA" {
+		return h.Client.GetOperatorPublicKey().ToEvmAddress()
+	}
+	accountId := h.Client.GetOperatorAccountID().String()
+	return accountId
 }

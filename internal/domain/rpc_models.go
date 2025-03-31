@@ -1,5 +1,9 @@
 package domain
 
+import (
+	hedera "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
+)
+
 // Block represents an Ethereum-compatible block structure
 type Block struct {
 	Number           *string       `json:"number"`           // The block number (hex)
@@ -13,7 +17,7 @@ type Block struct {
 	ReceiptsRoot     string        `json:"receiptsRoot"`     // Root of receipts trie
 	Miner            string        `json:"miner"`            // The address of the beneficiary
 	Difficulty       string        `json:"difficulty"`       // Integer of the difficulty
-	TotalDifficulty  *string       `json:"totalDifficulty"`  // Integer of total difficulty
+	TotalDifficulty  string        `json:"totalDifficulty"`  // Integer of total difficulty
 	ExtraData        string        `json:"extraData"`        // Extra data field
 	Size             string        `json:"size"`             // Size of block in bytes
 	GasLimit         string        `json:"gasLimit"`         // Maximum gas allowed
@@ -21,6 +25,10 @@ type Block struct {
 	Timestamp        string        `json:"timestamp"`        // Unix timestamp
 	Transactions     []interface{} `json:"transactions"`     // Array of transaction objects or hashes
 	Uncles           []string      `json:"uncles"`           // Array of uncle hashes
+	Withdrawals      []string      `json:"withdrawals"`      // Array of withdrawal objects
+	WithdrawalsRoot  string        `json:"withdrawalsRoot"`  // Root of withdrawals trie
+	BaseFeePerGas    string        `json:"baseFeePerGas"`    // Base fee per gas
+	MixHash          string        `json:"mixHash"`          // Mix hash
 }
 
 // Transaction represents an Ethereum-compatible transaction structure
@@ -78,7 +86,7 @@ type TransactionCallObject struct {
 // NewBlock creates a new Block instance with default values for non-nullable fields
 func NewBlock() *Block {
 	return &Block{
-		ReceiptsRoot: "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+		ReceiptsRoot: "0x41f639e5f179099843a6b73fdf71f0fc8b4fb7de9dba6a98e902c082236e13f3",
 		Miner:        "0x0000000000000000000000000000000000000000",
 		Nonce:        "0x0000000000000000",
 		StateRoot:    "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
@@ -120,4 +128,9 @@ type TransactionReceipt struct {
 	TransactionIndex  string  `json:"transactionIndex"`
 	Type              *string `json:"type"`
 	RevertReason      string  `json:"revertReason,omitempty"`
+}
+
+type TransactionResponse struct {
+	TransactionID string
+	FileID        *hedera.FileID
 }

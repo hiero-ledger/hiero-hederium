@@ -11,13 +11,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/LimeChain/Hederium/internal/domain"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/asm"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/crypto"
 	"go.uber.org/zap"
 )
 
@@ -79,15 +80,30 @@ func ProcessBlock(s *EthService, block *domain.BlockResponse, showDetails bool) 
 		trimmedParentHash = trimmedParentHash[:66]
 	}
 
+	ethBlock.WithdrawalsRoot = "0x0000000000000000000000000000000000000000000000000000000000000000"
+	ethBlock.MixHash = "0x0000000000000000000000000000000000000000000000000000000000000000"
+
+	gasPrice, err := s.GetGasPrice()
+	if err != nil {
+		s.logger.Error("Failed to get gas price", zap.Error(err))
+	}
+	gasPriceStr, ok := gasPrice.(string)
+	if !ok {
+		s.logger.Error("Gas price is not a string")
+		gasPriceStr = "0x0"
+	}
+	ethBlock.Withdrawals = []string{}
+	ethBlock.BaseFeePerGas = gasPriceStr
 	ethBlock.Number = &hexNumber
 	ethBlock.GasUsed = hexGasUsed
-	ethBlock.GasLimit = hexify(15000000) // Hedera's default gas limit
+	ethBlock.GasLimit = hexify(GasLimit) // Hedera's default gas limit
 	ethBlock.Hash = &trimmedHash
 	ethBlock.LogsBloom = block.LogsBloom
 	ethBlock.TransactionsRoot = &trimmedHash
 	ethBlock.ParentHash = trimmedParentHash
 	ethBlock.Timestamp = hexTimestamp
 	ethBlock.Size = hexSize
+	ethBlock.TotalDifficulty = "0x0"
 
 	contractResults := s.mClient.GetContractResults(block.Timestamp)
 	for _, contractResult := range contractResults {
@@ -140,18 +156,18 @@ func ProcessTransaction(contractResult domain.ContractResults) interface{} {
 	hexBlockNumber := hexify(contractResult.BlockNumber)
 	hexGasUsed := hexify(contractResult.GasUsed)
 	hexTransactionIndex := hexify(int64(contractResult.TransactionIndex))
-	hexValue := hexify(int64(contractResult.Amount))
+	hexValue := fmt.Sprintf("0x%x", uint64(contractResult.Amount))
 	hexV := hexify(int64(contractResult.V))
 
 	// Safe string slicing with length checks
 	hexR := "0x0"
 	if contractResult.R != "" {
-		hexR = truncateString(contractResult.R, 66)
+		hexR = removeLeadingZeroes(truncateString(contractResult.R, 66))
 	}
 
 	hexS := "0x0"
 	if contractResult.S != "" {
-		hexS = truncateString(contractResult.S, 66)
+		hexS = removeLeadingZeroes(truncateString(contractResult.S, 66))
 	}
 
 	hexNonce := hexify(contractResult.Nonce)
@@ -218,11 +234,13 @@ func ProcessTransaction(contractResult domain.ContractResults) interface{} {
 			AccessList:  []domain.AccessListEntry{}, // Empty access list for now
 		}
 	case 2:
+		MaxPriorityFeePerGas := parseFee(contractResult.MaxPriorityFeePerGas)
+		MaxFeePerGas := parseFee(contractResult.MaxFeePerGas)
 		return domain.Transaction1559{
 			Transaction:          commonFields,
 			AccessList:           []domain.AccessListEntry{}, // Empty access list for now
-			MaxPriorityFeePerGas: contractResult.MaxPriorityFeePerGas,
-			MaxFeePerGas:         contractResult.MaxFeePerGas,
+			MaxPriorityFeePerGas: MaxPriorityFeePerGas,
+			MaxFeePerGas:         MaxFeePerGas,
 		}
 	default:
 		return commonFields // Default to legacy transaction
@@ -233,7 +251,14 @@ func (s *EthService) ProcessTransactionResponse(contractResult domain.ContractRe
 	hexBlockNumber := hexify(contractResult.BlockNumber)
 	hexGasUsed := hexify(contractResult.GasUsed)
 	hexTransactionIndex := hexify(int64(contractResult.TransactionIndex))
-	hexValue := hexify(int64(contractResult.Amount))
+	value, err := s.tinybarsToWeibars(int64(contractResult.Amount), true)
+	if err != nil {
+		// TODO: If allowNegative in tinybarsToWeibars can be false - this should return error and be handled in properly
+		// return domain.NewRPCError(domain.InternalError, "Invalid value - cannot pass negative number")
+		s.logger.Error("Invalid value - cannot pass negative number", zap.Error(err))
+		return nil
+	}
+	hexValue := hexify(value)
 	hexV := hexify(int64(contractResult.V))
 
 	// Safe string slicing with length checks
@@ -339,6 +364,25 @@ func (s *EthService) ProcessTransactionResponse(contractResult domain.ContractRe
 	}
 }
 
+func (s *EthService) tinybarsToWeibars(tinybars int64, allowNegative bool) (int64, error) {
+	if tinybars == 0 {
+		return 0, nil
+	}
+
+	if allowNegative && tinybars < 0 {
+		return tinybars, nil
+	}
+
+	if tinybars < 0 {
+		return 0, fmt.Errorf("tinybars cannot be negative")
+	}
+
+	coefBigInt := big.NewInt(TinybarToWeibarCoef)
+	weiBigInt := new(big.Int).Mul(big.NewInt(tinybars), coefBigInt)
+
+	return weiBigInt.Int64(), nil
+}
+
 func ParseTransactionCallObject(s *EthService, transaction interface{}) (*domain.TransactionCallObject, error) {
 	var transactionCallObject domain.TransactionCallObject
 	jsonBytes, err := json.Marshal(transaction)
@@ -411,7 +455,12 @@ func FormatTransactionCallObject(s *EthService, transactionCallObject *domain.Tr
 		if transactionCallObject.From != "" {
 			result["from"] = transactionCallObject.From
 		} else {
-			result["from"] = s.hClient.GetOperatorPublicKey()
+			operatorPublicKey := s.hClient.GetOperatorPublicKey()
+			evmAddress, err := s.resolveEvmAddress(operatorPublicKey)
+			if err != nil {
+				return nil, err
+			}
+			result["from"] = *evmAddress
 		}
 	}
 
@@ -432,10 +481,12 @@ func FormatTransactionCallObject(s *EthService, transactionCallObject *domain.Tr
 		result["block"] = blockParam
 	}
 
-	// Copy any remaining non-empty fields
 	if transactionCallObject.To != "" {
 		result["to"] = transactionCallObject.To
+	} else {
+		result["to"] = nil
 	}
+
 	if transactionCallObject.Nonce != "" && transactionCallObject.Nonce != "0x" {
 		result["nonce"] = transactionCallObject.Nonce
 	}
@@ -444,8 +495,67 @@ func FormatTransactionCallObject(s *EthService, transactionCallObject *domain.Tr
 	return result, nil
 }
 
-// Helper function to convert weibar hex to tinybar int
-const TINYBAR_TO_WEIBAR_COEF = 10000000000 // 10^10
+func (s *EthService) PredifinedGasForTransaction(callObject *domain.TransactionCallObject) string {
+	s.logger.Info("Predifined gas for transaction", zap.Any("callObject", callObject))
+	// Check if it's a simple transfer (has 'to' address and no data or empty data)
+	isSimpleTransfer := callObject.To != "" && (callObject.Data == "" || callObject.Data == "0x")
+
+	// Check if it's a contract call (has 'to' address and data with at least function selector length)
+	isContractCall := callObject.To != "" && callObject.Data != "" && len(callObject.Data) >= FunctionSelectorCharLength
+
+	// Check if it's a contract creation (no 'to' address and has data that's not empty)
+	isContractCreate := callObject.To == "" && callObject.Data != "" && callObject.Data != "0x"
+
+	if isSimpleTransfer {
+		_, err := s.mClient.GetAccountById(callObject.From)
+		if err == nil {
+			s.logger.Warn("Returning predefined gas for simple transfer:")
+			return fmt.Sprintf("0x%x", TxBaseCost)
+		}
+		s.logger.Warn("Returning predefined gas for hollow account creation:")
+		return fmt.Sprintf("0x%x", MinTxHollowAccountCreationGas)
+	} else if isContractCreate {
+		gasCost := calculateIntrinsicGasCost(callObject.Data)
+		return fmt.Sprintf("0x%x", gasCost)
+	} else if isContractCall {
+		return fmt.Sprintf("0x%x", TxContractCallAverageGas)
+	} else {
+		return fmt.Sprintf("0x%x", TxDefaultGas)
+	}
+}
+
+func calculateIntrinsicGasCost(data string) int64 {
+	fmt.Println("Calculating intrinsic gas cost for data:", data)
+
+	if data == "" || data == "0x" {
+		return TxBaseCost
+	}
+	cleanData := strings.TrimPrefix(data, "0x")
+
+	dataLength := len(cleanData) / 2
+	zeroBytes := 0
+	nonZeroBytes := 0
+
+	for i := 0; i < dataLength; i++ {
+		byteIndex := i * 2
+		if byteIndex+1 < len(cleanData) {
+			byteValue := cleanData[byteIndex : byteIndex+2]
+			if byteValue == "00" {
+				zeroBytes++
+			} else {
+				nonZeroBytes++
+			}
+		}
+	}
+
+	gasCost := TxBaseCost + int64(zeroBytes)*TxDataZeroCost + int64(nonZeroBytes)*TxDataNonZeroCost
+
+	if data != "" && data != "0x" {
+		gasCost += TxCreateExtra
+	}
+
+	return gasCost
+}
 
 func WeibarHexToTinyBarInt(value string) (int64, error) {
 	// Handle "0x" case
@@ -466,17 +576,16 @@ func WeibarHexToTinyBarInt(value string) (int64, error) {
 			return 0, fmt.Errorf("failed to parse value: %s", value)
 		}
 	}
-
 	// Create coefficient as big.Int
-	coefBigInt := big.NewInt(TINYBAR_TO_WEIBAR_COEF)
+	coefBigInt := big.NewInt(TinybarToWeibarCoef)
 
 	// Calculate tinybar value
 	tinybarValue := new(big.Int).Div(weiBigInt, coefBigInt)
-
 	// Only round up if the value is significant enough
 	remainder := new(big.Int).Mod(weiBigInt, coefBigInt)
-	if tinybarValue.Cmp(big.NewInt(0)) == 0 && remainder.Cmp(big.NewInt(TINYBAR_TO_WEIBAR_COEF/2)) > 0 {
-		return 1, nil // Round up to the smallest unit of tinybar only if remainder is significant
+
+	if tinybarValue.Cmp(big.NewInt(0)) == 0 && remainder.Cmp(big.NewInt(0)) > 0 {
+		return 1, nil
 	}
 
 	// Convert to int64 and check if it fits
@@ -610,6 +719,8 @@ func (s *EthService) getRepeatedFeeHistory(blockCount, oldestBlockInt int64, rew
 		feeHistory.Reward = rewards
 	}
 
+	s.logger.Info("Fee history", zap.Any("feeHistory", feeHistory))
+
 	return feeHistory
 }
 
@@ -721,24 +832,30 @@ func (s *EthService) getTransactionByBlockAndIndex(queryParamas map[string]inter
 	return ProcessTransaction(*transaction), nil
 }
 
-func ParseTransaction(rawTxHex string) (*types.Transaction, error) {
+// ParseTransactgion returns transaction and raw transaction bytes
+func ParseTransaction(rawTxHex string) (*types.Transaction, []byte, error) {
 	if rawTxHex == "" {
-		return nil, errors.New("transaction data is empty")
+		return nil, nil, errors.New("transaction data is empty")
 	}
 
 	rawTxHex = strings.TrimPrefix(rawTxHex, "0x")
 
 	rawTx, err := hex.DecodeString(rawTxHex)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode hex string: %w", err)
+		return nil, nil, fmt.Errorf("failed to decode hex string: %w", err)
+	}
+	var tx types.Transaction
+	err = tx.UnmarshalBinary(rawTx)
+	if err == nil {
+		fmt.Println("tx", tx.ChainId())
+		v, r, s := tx.RawSignatureValues()
+		fmt.Println("v", v)
+		fmt.Println("r", r)
+		fmt.Println("s", s)
+		return &tx, rawTx, nil
 	}
 
-	tx := new(types.Transaction)
-	if err := rlp.DecodeBytes(rawTx, tx); err != nil {
-		return nil, fmt.Errorf("failed to decode transaction: %w", err)
-	}
-
-	return tx, nil
+	return nil, nil, fmt.Errorf("failed to decode transaction: %w", err)
 }
 
 // Add 10% buffer to the gas price
@@ -748,11 +865,11 @@ func AddBuffer(weibars *big.Int) *big.Int {
 }
 
 // ProcessRawTransaction handles the processing of a raw Ethereum transaction for Hedera
-func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *types.Transaction, gasPrice int64) (*string, error) {
+func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *types.Transaction, gasPriceInTinyBars int64) (*string, *domain.RPCError) {
 	// Get the sender address for event tracking
 	fromAddress, err := GetFromAddress(tx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get sender address: %w", err)
+		return nil, domain.NewInternalError(fmt.Sprintf("Failed to get sender address: %s", err.Error()))
 	}
 
 	// Get the recipient address for event tracking
@@ -761,52 +878,97 @@ func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *typ
 		toAddress = tx.To().String()
 	}
 
+	isSubmitted := false
+
 	// Send the raw transaction using the client's implementation
-	response, err := s.hClient.SendRawTransaction(transactionData, gasPrice, fromAddress)
-	if err != nil {
+	response, saveErr := s.hClient.SendRawTransaction(transactionData, gasPriceInTinyBars, fromAddress)
+	if saveErr != nil {
 		s.logger.Error("Failed to send raw transaction",
-			zap.Error(err),
-			zap.String("from", fromAddress.String()),
-			zap.String("to", toAddress),
-			zap.Int64("gasPrice", gasPrice))
-		return nil, fmt.Errorf("failed to send raw transaction: %w", err)
+			zap.Error(saveErr),
+			zap.Any("transactionData", tx))
 	}
 
-	subbmitedTransactionId := response.TransactionID
-
-	transactionIDRegex := regexp.MustCompile(`\d{1}\.\d{1}\.\d{1,10}\@\d{1,10}\.\d{1,9}`)
-	if !transactionIDRegex.MatchString(subbmitedTransactionId) {
-		s.logger.Error("Invalid transaction ID format", zap.String("transactionID", subbmitedTransactionId))
-		return nil, fmt.Errorf("invalid transaction ID format: %s", subbmitedTransactionId)
-	}
-
-	if subbmitedTransactionId != "" {
-		transactionId := ConvertTransactionID(subbmitedTransactionId)
-		contractResult := s.mClient.RepeatGetContractResult(transactionId, 10)
-		if contractResult == nil {
-			s.logger.Error("Failed to get contract result",
-				zap.String("transactionID", transactionId))
-			return nil, fmt.Errorf("no matching transaction record retrieved: %s", transactionId)
+	if response != nil {
+		subbmitedTransactionId := response.TransactionID
+		fileId := response.FileID
+		isSubmitted = true
+		transactionIDRegex := regexp.MustCompile(`\d{1}\.\d{1}\.\d{1,10}\@\d{1,10}\.\d{1,9}`)
+		if !transactionIDRegex.MatchString(subbmitedTransactionId) {
+			s.logger.Error("Invalid transaction ID format", zap.String("transactionID", subbmitedTransactionId))
+			return nil, domain.NewInternalError(fmt.Sprintf("Invalid transaction ID format: %s", subbmitedTransactionId))
 		}
 
-		hash := contractResult.Hash
-
-		if hash == "" {
-			s.logger.Error("Transaction returned a null transaction hash:",
-				zap.String("transactionID", subbmitedTransactionId))
-			return nil, fmt.Errorf("no matching transaction record retrieved: %s", subbmitedTransactionId)
+		// trqbva da se iztrie file-a tuk
+		if fileId != nil {
+			err := s.hClient.DeleteFile(fileId)
+			if err != nil {
+				s.logger.Error("Failed to delete file", zap.Error(err))
+			}
 		}
 
-		s.logger.Info("Transaction sent successfully",
-			zap.String("transactionID", hash),
-			zap.String("from", fromAddress.String()),
-			zap.String("to", toAddress),
-			zap.Int64("gasPrice", gasPrice))
+		if subbmitedTransactionId != "" {
+			transactionId := ConvertTransactionID(subbmitedTransactionId)
+			contractResult := s.mClient.RepeatGetContractResult(transactionId, 10)
+			if contractResult == nil {
+				s.logger.Error("Failed to get contract result",
+					zap.String("transactionID", transactionId))
+				return nil, domain.NewInternalError(fmt.Sprintf("No matching transaction record retrieved: %s", transactionId))
+			}
 
-		return &hash, nil
+			hash := contractResult.Hash
+
+			if hash == "" {
+				s.logger.Error("Transaction returned a null transaction hash:",
+					zap.String("transactionID", subbmitedTransactionId))
+				return nil, domain.NewInternalError(fmt.Sprintf("no matching transaction record retrieved: %s", subbmitedTransactionId))
+			}
+
+			s.logger.Info("Transaction sent successfully",
+				zap.String("transactionID", hash),
+				zap.String("from", fromAddress.String()),
+				zap.String("to", toAddress),
+				zap.Int64("gasPrice", gasPriceInTinyBars))
+
+			return &hash, nil
+		}
 	}
 
-	return nil, fmt.Errorf("failed to send transaction: %w", err)
+	if strings.Contains(saveErr.Error(), "WRONG_NONCE") {
+		// note: because this is a WRONG_NONCE error handler, the nonce of the account is expected to be different from the nonce of the parsedTx
+		//       running a polling loop to give mirror node enough time to update account nonce
+		var accountNonce uint64
+		var flag bool
+		for i := 0; i < 10; i++ {
+			time.Sleep(100 * time.Millisecond)
+			accountInfo, err := s.mClient.GetAccountById(fromAddress.String())
+			if err != nil {
+				return nil, domain.NewInternalError(fmt.Sprintf("failed to get account info: %s", err.Error()))
+			}
+
+			if uint64(accountInfo.EthereumNonce) != tx.Nonce() && accountInfo.Account != "" {
+				accountNonce = uint64(accountInfo.EthereumNonce)
+				flag = true
+				break
+			}
+		}
+
+		if !flag {
+			return nil, domain.NewInternalError("Cannot find updated account nonce for WRONG_NONCE error.")
+		}
+
+		if tx.Nonce() <= accountNonce {
+			return nil, domain.NewRPCError(domain.NonceTooLow, fmt.Sprintf("Nonce too low. Provided nonce: %d, current nonce: %d", tx.Nonce(), accountNonce))
+		} else {
+			return nil, domain.NewRPCError(domain.NonceTooHigh, fmt.Sprintf("Nonce too high. Provided nonce: %d, current nonce: %d", tx.Nonce(), accountNonce))
+		}
+	}
+
+	if isSubmitted {
+		str := computeTransactionHash(transactionData)
+		return &str, nil
+	}
+
+	return nil, domain.NewInternalError("Failed to send transaction")
 }
 
 func (s *EthService) getCurrentGasPriceForBlock(blockHash string) (string, error) {
@@ -819,7 +981,7 @@ func (s *EthService) getCurrentGasPriceForBlock(blockHash string) (string, error
 	return fmt.Sprintf("0x%x", gasPriceForTimestamp), nil
 }
 func GetFromAddress(tx *types.Transaction) (*common.Address, error) {
-	signer := types.NewEIP155Signer(tx.ChainId())
+	signer := types.LatestSignerForChainID(tx.ChainId())
 	from, err := types.Sender(signer, tx)
 	if err != nil {
 		return nil, err
@@ -877,7 +1039,7 @@ func (s *EthService) isLatestBlockRequest(blockNumberOrTag string, blockNumber i
 		return false
 	}
 
-	return blockNumber+10 > latestBlockInt
+	return latestBlockInt-blockNumber <= maxBlockRange
 }
 
 func (s *EthService) getContractAddressFromReceipt(receiptResponse domain.ContractResultResponse) string {
@@ -908,4 +1070,76 @@ func isHexString(str string) bool {
 
 	_, err := hex.DecodeString(str)
 	return err == nil
+}
+
+func buildLogsBloom(address string, topics []string) string {
+	if address == "" || len(topics) == 0 {
+		return zeroHex32Bytes
+	}
+
+	address = strings.TrimPrefix(address, "0x")
+
+	items := []string{address}
+	for _, topic := range topics {
+		items = append(items, strings.TrimPrefix(topic, "0x"))
+	}
+
+	bitvector := make([]byte, BloomByteSize)
+
+	for _, item := range items {
+		itemBytes, _ := hex.DecodeString(item)
+		hash := crypto.Keccak256(itemBytes)
+
+		for i := 0; i < 3; i++ {
+			// Get first 2 bytes at position i*2
+			first2bytes := uint16(hash[i*2])<<8 | uint16(hash[i*2+1])
+
+			// Calculate bit position
+			loc := BloomMask & first2bytes
+			byteLoc := loc >> 3
+			bitLoc := uint8(1 << (loc % 8))
+
+			// Set the bit in the bitvector
+			bitvector[BloomByteSize-int(byteLoc)-1] |= bitLoc
+		}
+	}
+
+	return fmt.Sprintf("0x%s", hex.EncodeToString(bitvector))
+}
+
+func removeLeadingZeroes(str string) string {
+	return fmt.Sprintf("0x%s", strings.TrimLeft(strings.TrimPrefix(str, "0x"), "0"))
+}
+
+func parseFee(fee string) string {
+	if fee == "" || fee == "0x" {
+		return "0x0"
+	}
+	return removeLeadingZeroes(fee)
+}
+
+// Helper function to parse timestamp seconds from a string like "1234567890.123456789"
+func parseTimestampSeconds(timestamp string) (int64, error) {
+	parts := strings.Split(timestamp, ".")
+	if len(parts) == 0 {
+		return 0, fmt.Errorf("invalid timestamp format: %s", timestamp)
+	}
+
+	seconds, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("could not parse timestamp seconds: %s", err)
+	}
+
+	return seconds, nil
+}
+
+func convertToWeibars(balance int64) string {
+	weibars := big.NewInt(balance)
+	weibars = weibars.Mul(weibars, big.NewInt(TinybarToWeibarCoef))
+	return fmt.Sprintf("0x%x", weibars)
+}
+
+func computeTransactionHash(transactionData []byte) string {
+	hash := crypto.Keccak256(transactionData)
+	return fmt.Sprintf("0x%s", hex.EncodeToString(hash[:]))
 }
