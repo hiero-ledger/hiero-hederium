@@ -34,6 +34,9 @@ const (
 	// Nonce too low (32001): Nonce is too low
 	NonceTooLow = 32001
 
+	// Nonce too high (32002): Nonce is too high
+	NonceTooHigh = 32002
+
 	// Insufficient funds (-32018): Insufficient funds for transfer
 	InsufficientFunds = -32018
 
