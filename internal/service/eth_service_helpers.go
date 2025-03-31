@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/LimeChain/Hederium/internal/domain"
 	"github.com/ethereum/go-ethereum/common"
@@ -18,7 +19,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/rlp"
 	"go.uber.org/zap"
 )
 
@@ -832,24 +832,30 @@ func (s *EthService) getTransactionByBlockAndIndex(queryParamas map[string]inter
 	return ProcessTransaction(*transaction), nil
 }
 
-func ParseTransaction(rawTxHex string) (*types.Transaction, error) {
+// ParseTransactgion returns transaction and raw transaction bytes
+func ParseTransaction(rawTxHex string) (*types.Transaction, []byte, error) {
 	if rawTxHex == "" {
-		return nil, errors.New("transaction data is empty")
+		return nil, nil, errors.New("transaction data is empty")
 	}
 
 	rawTxHex = strings.TrimPrefix(rawTxHex, "0x")
 
 	rawTx, err := hex.DecodeString(rawTxHex)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode hex string: %w", err)
+		return nil, nil, fmt.Errorf("failed to decode hex string: %w", err)
+	}
+	var tx types.Transaction
+	err = tx.UnmarshalBinary(rawTx)
+	if err == nil {
+		fmt.Println("tx", tx.ChainId())
+		v, r, s := tx.RawSignatureValues()
+		fmt.Println("v", v)
+		fmt.Println("r", r)
+		fmt.Println("s", s)
+		return &tx, rawTx, nil
 	}
 
-	tx := new(types.Transaction)
-	if err := rlp.DecodeBytes(rawTx, tx); err != nil {
-		return nil, fmt.Errorf("failed to decode transaction: %w", err)
-	}
-
-	return tx, nil
+	return nil, nil, fmt.Errorf("failed to decode transaction: %w", err)
 }
 
 // Add 10% buffer to the gas price
@@ -859,11 +865,11 @@ func AddBuffer(weibars *big.Int) *big.Int {
 }
 
 // ProcessRawTransaction handles the processing of a raw Ethereum transaction for Hedera
-func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *types.Transaction, gasPrice int64) (*string, error) {
+func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *types.Transaction, gasPriceInTinyBars int64) (*string, *domain.RPCError) {
 	// Get the sender address for event tracking
 	fromAddress, err := GetFromAddress(tx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get sender address: %w", err)
+		return nil, domain.NewInternalError(fmt.Sprintf("Failed to get sender address: %s", err.Error()))
 	}
 
 	// Get the recipient address for event tracking
@@ -872,52 +878,97 @@ func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *typ
 		toAddress = tx.To().String()
 	}
 
+	isSubmitted := false
+
 	// Send the raw transaction using the client's implementation
-	response, err := s.hClient.SendRawTransaction(transactionData, gasPrice, fromAddress)
-	if err != nil {
+	response, saveErr := s.hClient.SendRawTransaction(transactionData, gasPriceInTinyBars, fromAddress)
+	if saveErr != nil {
 		s.logger.Error("Failed to send raw transaction",
-			zap.Error(err),
-			zap.String("from", fromAddress.String()),
-			zap.String("to", toAddress),
-			zap.Int64("gasPrice", gasPrice))
-		return nil, fmt.Errorf("failed to send raw transaction: %w", err)
+			zap.Error(saveErr),
+			zap.Any("transactionData", tx))
 	}
 
-	subbmitedTransactionId := response.TransactionID
-
-	transactionIDRegex := regexp.MustCompile(`\d{1}\.\d{1}\.\d{1,10}\@\d{1,10}\.\d{1,9}`)
-	if !transactionIDRegex.MatchString(subbmitedTransactionId) {
-		s.logger.Error("Invalid transaction ID format", zap.String("transactionID", subbmitedTransactionId))
-		return nil, fmt.Errorf("invalid transaction ID format: %s", subbmitedTransactionId)
-	}
-
-	if subbmitedTransactionId != "" {
-		transactionId := ConvertTransactionID(subbmitedTransactionId)
-		contractResult := s.mClient.RepeatGetContractResult(transactionId, 10)
-		if contractResult == nil {
-			s.logger.Error("Failed to get contract result",
-				zap.String("transactionID", transactionId))
-			return nil, fmt.Errorf("no matching transaction record retrieved: %s", transactionId)
+	if response != nil {
+		subbmitedTransactionId := response.TransactionID
+		fileId := response.FileID
+		isSubmitted = true
+		transactionIDRegex := regexp.MustCompile(`\d{1}\.\d{1}\.\d{1,10}\@\d{1,10}\.\d{1,9}`)
+		if !transactionIDRegex.MatchString(subbmitedTransactionId) {
+			s.logger.Error("Invalid transaction ID format", zap.String("transactionID", subbmitedTransactionId))
+			return nil, domain.NewInternalError(fmt.Sprintf("Invalid transaction ID format: %s", subbmitedTransactionId))
 		}
 
-		hash := contractResult.Hash
-
-		if hash == "" {
-			s.logger.Error("Transaction returned a null transaction hash:",
-				zap.String("transactionID", subbmitedTransactionId))
-			return nil, fmt.Errorf("no matching transaction record retrieved: %s", subbmitedTransactionId)
+		// trqbva da se iztrie file-a tuk
+		if fileId != nil {
+			err := s.hClient.DeleteFile(fileId)
+			if err != nil {
+				s.logger.Error("Failed to delete file", zap.Error(err))
+			}
 		}
 
-		s.logger.Info("Transaction sent successfully",
-			zap.String("transactionID", hash),
-			zap.String("from", fromAddress.String()),
-			zap.String("to", toAddress),
-			zap.Int64("gasPrice", gasPrice))
+		if subbmitedTransactionId != "" {
+			transactionId := ConvertTransactionID(subbmitedTransactionId)
+			contractResult := s.mClient.RepeatGetContractResult(transactionId, 10)
+			if contractResult == nil {
+				s.logger.Error("Failed to get contract result",
+					zap.String("transactionID", transactionId))
+				return nil, domain.NewInternalError(fmt.Sprintf("No matching transaction record retrieved: %s", transactionId))
+			}
 
-		return &hash, nil
+			hash := contractResult.Hash
+
+			if hash == "" {
+				s.logger.Error("Transaction returned a null transaction hash:",
+					zap.String("transactionID", subbmitedTransactionId))
+				return nil, domain.NewInternalError(fmt.Sprintf("no matching transaction record retrieved: %s", subbmitedTransactionId))
+			}
+
+			s.logger.Info("Transaction sent successfully",
+				zap.String("transactionID", hash),
+				zap.String("from", fromAddress.String()),
+				zap.String("to", toAddress),
+				zap.Int64("gasPrice", gasPriceInTinyBars))
+
+			return &hash, nil
+		}
 	}
 
-	return nil, fmt.Errorf("failed to send transaction: %w", err)
+	if strings.Contains(saveErr.Error(), "WRONG_NONCE") {
+		// note: because this is a WRONG_NONCE error handler, the nonce of the account is expected to be different from the nonce of the parsedTx
+		//       running a polling loop to give mirror node enough time to update account nonce
+		var accountNonce uint64
+		var flag bool
+		for i := 0; i < 10; i++ {
+			time.Sleep(100 * time.Millisecond)
+			accountInfo, err := s.mClient.GetAccountById(fromAddress.String())
+			if err != nil {
+				return nil, domain.NewInternalError(fmt.Sprintf("failed to get account info: %s", err.Error()))
+			}
+
+			if uint64(accountInfo.EthereumNonce) != tx.Nonce() && accountInfo.Account != "" {
+				accountNonce = uint64(accountInfo.EthereumNonce)
+				flag = true
+				break
+			}
+		}
+
+		if !flag {
+			return nil, domain.NewInternalError("Cannot find updated account nonce for WRONG_NONCE error.")
+		}
+
+		if tx.Nonce() <= accountNonce {
+			return nil, domain.NewRPCError(domain.NonceTooLow, fmt.Sprintf("Nonce too low. Provided nonce: %d, current nonce: %d", tx.Nonce(), accountNonce))
+		} else {
+			return nil, domain.NewRPCError(domain.NonceTooHigh, fmt.Sprintf("Nonce too high. Provided nonce: %d, current nonce: %d", tx.Nonce(), accountNonce))
+		}
+	}
+
+	if isSubmitted {
+		str := computeTransactionHash(transactionData)
+		return &str, nil
+	}
+
+	return nil, domain.NewInternalError("Failed to send transaction")
 }
 
 func (s *EthService) getCurrentGasPriceForBlock(blockHash string) (string, error) {
@@ -930,7 +981,7 @@ func (s *EthService) getCurrentGasPriceForBlock(blockHash string) (string, error
 	return fmt.Sprintf("0x%x", gasPriceForTimestamp), nil
 }
 func GetFromAddress(tx *types.Transaction) (*common.Address, error) {
-	signer := types.NewEIP155Signer(tx.ChainId())
+	signer := types.LatestSignerForChainID(tx.ChainId())
 	from, err := types.Sender(signer, tx)
 	if err != nil {
 		return nil, err
@@ -1086,4 +1137,9 @@ func convertToWeibars(balance int64) string {
 	weibars := big.NewInt(balance)
 	weibars = weibars.Mul(weibars, big.NewInt(TinybarToWeibarCoef))
 	return fmt.Sprintf("0x%x", weibars)
+}
+
+func computeTransactionHash(transactionData []byte) string {
+	hash := crypto.Keccak256(transactionData)
+	return fmt.Sprintf("0x%s", hex.EncodeToString(hash[:]))
 }
