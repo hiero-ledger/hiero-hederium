@@ -12,6 +12,7 @@ import (
 	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
 	"github.com/LimeChain/Hederium/internal/infrastructure/logger"
 	"github.com/LimeChain/Hederium/internal/transport/http_server"
+	"github.com/LimeChain/Hederium/internal/transport/ws_server"
 )
 
 func main() {
@@ -26,6 +27,8 @@ func main() {
 		viper.GetString("hedera.network"),
 		viper.GetString("hedera.operatorId"),
 		viper.GetString("hedera.operatorKey"),
+		viper.GetString("hedera.operatorKeyFormat"),
+		viper.GetStringMapString("hedera.networkConfig"),
 	)
 	if err != nil {
 		log.Fatal("Failed to initialize Hedera client", zap.Error(err))
@@ -38,14 +41,24 @@ func main() {
 
 	cacheService := cache.NewMemoryCache(viper.GetDuration("cache.defaultExpiration"), viper.GetDuration("cache.cleanupInterval"))
 
-	mClient := hedera.NewMirrorClient(viper.GetString("mirrorNode.baseUrl"), viper.GetInt("mirrorNode.timeoutSeconds"), log, cacheService)
+	mClient := hedera.NewMirrorClient(viper.GetString("mirrorNode.baseUrl"), viper.GetString("mirrorNode.web3Url"), viper.GetInt("mirrorNode.timeoutSeconds"), log, cacheService)
 
 	enforceAPIKey := viper.GetBool("features.enforceApiKey")
+	filterApiEnabled := viper.GetBool("features.filterApiEnabled")
+	debugApiEnabled := viper.GetBool("features.debugApiEnabled")
 
 	port := viper.GetString("server.port")
+	serverType := viper.GetString("server.type")
 
-	server := http_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, cacheService, port)
-	if err := server.Start(); err != nil {
-		log.Fatal("Failed to start server", zap.Error(err))
+	if serverType == "http" {
+		server := http_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, cacheService, port, filterApiEnabled, debugApiEnabled)
+		if err := server.Start(); err != nil {
+			log.Fatal("Failed to start server", zap.Error(err))
+		}
+	} else if serverType == "ws" {
+		server := ws_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, cacheService, port, filterApiEnabled, debugApiEnabled)
+		if err := server.Start(); err != nil {
+			log.Fatal("Failed to start server", zap.Error(err))
+		}
 	}
 }

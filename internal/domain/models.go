@@ -13,9 +13,9 @@ type Fee struct {
 }
 
 type FeeHistory struct {
-	BaseFeePerGas []string   `json:"base_fee_per_gas"`
-	GasUsedRatio  []float64  `json:"gas_used_ratio"`
-	OldestBlock   string     `json:"oldest_block"`
+	BaseFeePerGas []string   `json:"baseFeePerGas"`
+	GasUsedRatio  []float64  `json:"gasUsedRatio"`
+	OldestBlock   string     `json:"oldestBlock"`
 	Reward        [][]string `json:"reward,omitempty"`
 }
 
@@ -177,7 +177,7 @@ type AccountResponse struct {
 		ValidStartTimestamp  string `json:"valid_start_timestamp"`
 	} `json:"transactions"`
 	Links struct {
-		Next string `json:"next"`
+		Next *string `json:"next"`
 	} `json:"links"`
 }
 
@@ -241,32 +241,32 @@ type ContractResponse struct {
 }
 
 type TokenResponse struct {
-	AdminKey          ProtobufEncodedKey `json:"admin_key"`
-	AutoRenewAccount  string             `json:"auto_renew_account"`
-	AutoRenewPeriod   *string            `json:"auto_renew_period"`
-	CreatedTimestamp  string             `json:"created_timestamp"`
-	Deleted           bool               `json:"deleted"`
-	Decimals          int                `json:"decimals"`
-	ExpiryTimestamp   *string            `json:"expiry_timestamp"`
-	FreezeDefault     bool               `json:"freeze_default"`
-	FreezeKey         ProtobufEncodedKey `json:"freeze_key"`
-	InitialSupply     int                `json:"initial_supply"`
-	KycKey            ProtobufEncodedKey `json:"kyc_key"`
-	MaxSupply         int64              `json:"max_supply"`
-	Memo              string             `json:"memo"`
-	ModifiedTimestamp string             `json:"modified_timestamp"`
-	Name              string             `json:"name"`
-	PauseKey          ProtobufEncodedKey `json:"pause_key"`
-	PauseStatus       string             `json:"pause_status"`
-	SupplyKey         ProtobufEncodedKey `json:"supply_key"`
-	SupplyType        string             `json:"supply_type"`
-	Symbol            string             `json:"symbol"`
-	TokenId           string             `json:"token_id"`
-	TotalSupply       int                `json:"total_supply"`
-	TreasuryAccountId string             `json:"treasury_account_id"`
-	Type              string             `json:"type"`
-	WipeKey           ProtobufEncodedKey `json:"wipe_key"`
-	CustomFees        CustomFees         `json:"custom_fees"`
+	AdminKey          *ProtobufEncodedKey `json:"admin_key"`
+	AutoRenewAccount  *string             `json:"auto_renew_account"`
+	AutoRenewPeriod   int64               `json:"auto_renew_period"`
+	CreatedTimestamp  string              `json:"created_timestamp"`
+	Deleted           bool                `json:"deleted"`
+	Decimals          string              `json:"decimals"`
+	ExpiryTimestamp   float64             `json:"expiry_timestamp"`
+	FreezeDefault     bool                `json:"freeze_default"`
+	FreezeKey         *ProtobufEncodedKey `json:"freeze_key"`
+	InitialSupply     string              `json:"initial_supply"`
+	KycKey            *ProtobufEncodedKey `json:"kyc_key"`
+	MaxSupply         string              `json:"max_supply"`
+	Memo              string              `json:"memo"`
+	ModifiedTimestamp string              `json:"modified_timestamp"`
+	Name              string              `json:"name"`
+	PauseKey          *ProtobufEncodedKey `json:"pause_key"`
+	PauseStatus       string              `json:"pause_status"`
+	SupplyKey         *ProtobufEncodedKey `json:"supply_key"`
+	SupplyType        string              `json:"supply_type"`
+	Symbol            string              `json:"symbol"`
+	TokenId           string              `json:"token_id"`
+	TotalSupply       string              `json:"total_supply"`
+	TreasuryAccountId string              `json:"treasury_account_id"`
+	Type              string              `json:"type"`
+	WipeKey           *ProtobufEncodedKey `json:"wipe_key"`
+	CustomFees        CustomFees          `json:"custom_fees"`
 }
 
 type ProtobufEncodedKey struct {
@@ -329,4 +329,87 @@ func (a *Address) UnmarshalJSON(data []byte) error {
 	}
 	*a = Address(addressArray)
 	return nil
+}
+
+type Opcode struct {
+	PC      int64             `json:"pc,omitempty"`
+	Op      string            `json:"op,omitempty"`
+	Gas     int64             `json:"gas,omitempty"`
+	GasCost int64             `json:"gas_cost,omitempty"`
+	Depth   int               `json:"depth,omitempty"`
+	Stack   []string          `json:"stack,omitempty"`
+	Memory  []string          `json:"memory,omitempty"`
+	Storage map[string]string `json:"storage,omitempty"`
+	Reason  string            `json:"reason,omitempty"`
+}
+
+type OpcodesResponse struct {
+	Address     string   `json:"address,omitempty"`
+	ContractID  string   `json:"contract_id,omitempty"`
+	Gas         int64    `json:"gas,omitempty"`
+	Failed      bool     `json:"failed,omitempty"`
+	ReturnValue string   `json:"return_value,omitempty"`
+	Opcodes     []Opcode `json:"opcodes,omitempty"`
+}
+
+type ActionsResponse struct {
+	Actions []Action `json:"actions"`
+	Links   struct {
+		Next *string `json:"next"`
+	} `json:"links"`
+}
+
+type Action struct {
+	CallDepth         int    `json:"call_depth"`
+	CallOperationType string `json:"call_operation_type"`
+	CallType          string `json:"call_type"`
+	Caller            string `json:"caller"`
+	CallerType        string `json:"caller_type"`
+	From              string `json:"from"`
+	Gas               int64  `json:"gas"`
+	GasUsed           int64  `json:"gas_used"`
+	Index             int    `json:"index"`
+	Input             string `json:"input"`
+	Recipient         string `json:"recipient"`
+	RecipientType     string `json:"recipient_type"`
+	ResultData        string `json:"result_data"`
+	ResultDataType    string `json:"result_data_type"`
+	Timestamp         string `json:"timestamp"`
+	To                string `json:"to"`
+	Value             int64  `json:"value"`
+}
+
+type CallTracerResult struct {
+	Type         string           `json:"type"`
+	From         string           `json:"from"`
+	To           string           `json:"to"`
+	Value        string           `json:"value"`
+	Gas          string           `json:"gas"`
+	GasUsed      string           `json:"gasUsed"`
+	Input        string           `json:"input"`
+	Output       string           `json:"output"`
+	Error        string           `json:"error,omitempty"`
+	RevertReason string           `json:"revertReason,omitempty"`
+	Calls        []ContractAction `json:"calls,omitempty"`
+}
+
+type ContractAction struct {
+	Type    string `json:"type"`
+	From    string `json:"from"`
+	To      string `json:"to"`
+	Gas     string `json:"gas"`
+	GasUsed string `json:"gasUsed"`
+	Value   string `json:"value"`
+	Input   string `json:"input"`
+	Output  string `json:"output"`
+}
+
+type CallTracerConfig struct {
+	OnlyTopCall bool `json:"onlyTopCall"`
+}
+
+type OpcodeLoggerConfig struct {
+	EnableMemory   bool `json:"enableMemory"`
+	DisableStack   bool `json:"disableStack"`
+	DisableStorage bool `json:"disableStorage"`
 }
