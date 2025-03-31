@@ -1042,17 +1042,6 @@ func TestGetAccountById(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Add cache expectations
-			setup.cacheService.EXPECT().
-				Get(gomock.Any(), "getAccountById_"+tc.accountId, gomock.Any()).
-				Return(ErrCacheMiss)
-
-			if !tc.expectError {
-				setup.cacheService.EXPECT().
-					Set(gomock.Any(), "getAccountById_"+tc.accountId, tc.mockResponse, gomock.Any()).
-					Return(nil)
-			}
-
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, "/api/v1/accounts/"+tc.accountId+"?transactions=false", r.URL.String())
 				assert.Equal(t, http.MethodGet, r.Method)
@@ -1131,17 +1120,6 @@ func TestGetContractById(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Add cache expectations
-			setup.cacheService.EXPECT().
-				Get(gomock.Any(), "getContractById_"+tc.contractId, gomock.Any()).
-				Return(ErrCacheMiss)
-
-			if !tc.expectError {
-				setup.cacheService.EXPECT().
-					Set(gomock.Any(), "getContractById_"+tc.contractId, tc.mockResponse, gomock.Any()).
-					Return(nil)
-			}
-
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, "/api/v1/contracts/"+tc.contractId, r.URL.String())
 				assert.Equal(t, http.MethodGet, r.Method)
