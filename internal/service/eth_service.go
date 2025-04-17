@@ -275,6 +275,16 @@ func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) str
 			}
 		}
 	}
+
+	latestBlock, err := s.mClient.GetLatestBlock()
+	if err != nil {
+		s.logger.Error("Failed to get latest block", zap.Error(err))
+	}
+	if float64(block.Number+10) >= latestBlock["number"].(float64) {
+		balance := s.mClient.GetBalance(address, "0")
+		return balance
+	}
+
 	balance := s.mClient.GetBalance(address, block.Timestamp.To)
 
 	return balance
