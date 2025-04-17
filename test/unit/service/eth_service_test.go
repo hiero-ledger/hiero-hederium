@@ -1121,6 +1121,11 @@ func TestGetBalance(t *testing.T) {
 						},
 					})
 				mockClient.EXPECT().
+					GetLatestBlock().
+					Return(map[string]interface{}{
+						"number": float64(100),
+					}, nil)
+				mockClient.EXPECT().
 					GetBalance("0x1234567890123456789012345678901234567890", "2023-01-01T00:00:00.000Z").
 					Return("0x32")
 			},
@@ -1138,6 +1143,11 @@ func TestGetBalance(t *testing.T) {
 							To: "2023-06-01T00:00:00.000Z",
 						},
 					})
+				mockClient.EXPECT().
+					GetLatestBlock().
+					Return(map[string]interface{}{
+						"number": float64(100),
+					}, nil)
 				mockClient.EXPECT().
 					GetBalance("0x1234567890123456789012345678901234567890", "2023-06-01T00:00:00.000Z").
 					Return("0x96")
@@ -1220,6 +1230,13 @@ func TestGetBalance_Earliest(t *testing.T) {
 			},
 		})
 
+	// Setup expectations for getting latest block
+	mockClient.EXPECT().
+		GetLatestBlock().
+		Return(map[string]interface{}{
+			"number": float64(100),
+		}, nil)
+
 	// Setup expectations for getting balance
 	mockClient.EXPECT().
 		GetBalance("0x123", "2023-01-01T00:00:00.000Z").
@@ -1240,42 +1257,48 @@ func TestGetBalance_Earliest(t *testing.T) {
 }
 
 func TestGetBalance_SpecificBlock(t *testing.T) {
+	// Create mock controller
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	cfg := zap.NewDevelopmentConfig()
-	cfg.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
-	logger, _ := cfg.Build()
+	// Create mock client
+	mockClient := mocks.NewMockMirrorClient(ctrl)
 
+	// Create logger
+	logger := zap.NewNop()
+
+	// Create cache service
 	cacheService := mocks.NewMockCacheService(ctrl)
 
-	mockClient := mocks.NewMockMirrorClient(ctrl)
+	// Create service
+	s := service.NewEthService(nil, mockClient, nil, logger, nil, defaultChainId, cacheService)
 
 	// Setup expectations for getting specific block
 	mockClient.EXPECT().
 		GetBlockByHashOrNumber("100").
 		Return(&domain.BlockResponse{
+			Number: 100,
 			Timestamp: domain.Timestamp{
 				To: "1234567890.000000000",
 			},
 		})
+
+	// Setup expectations for getting latest block - set it far from block 100
+	mockClient.EXPECT().
+		GetLatestBlock().
+		Return(map[string]interface{}{
+			"number": float64(200), // Set this much higher than 100 to ensure we use block timestamp
+		}, nil)
 
 	// Setup expectations for getting balance
 	mockClient.EXPECT().
 		GetBalance("0x123", "1234567890.000000000").
 		Return("0x64")
 
-	s := service.NewEthService(
-		nil,
-		mockClient,
-		nil,
-		logger,
-		nil,
-		defaultChainId,
-		cacheService,
-	)
+	// Call the method
+	result := s.GetBalance("0x123", "100")
 
-	result := s.GetBalance("0x123", "0x64") // hex for 100
+	// Assert the result
 	assert.Equal(t, "0x64", result)
 }
 
