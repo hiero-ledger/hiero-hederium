@@ -22,14 +22,25 @@ export default function () {
 
   const res = http.post(config.endpoint, payload, { headers: headers });
 
-  // Validate common JSON-RPC structure
-  const passed = validateJsonRpcResponse(res, "eth_accounts");
-
-  // Additional checks specific to eth_accounts
+  // First check if the request was successful
   check(res, {
-    "result is an empty array": (r) => {
-      const body = r.json();
-      return Array.isArray(body.result) && body.result.length === 0;
-    },
+    "status is 200": (r) => r.status === 200,
   });
+
+  // Only proceed with JSON validation if we got a successful response
+  if (res.status === 200) {
+    try {
+      const body = res.json();
+      
+      // Validate the response structure
+      check(res, {
+        "jsonrpc is 2.0": (r) => body.jsonrpc === "2.0",
+        "id matches request": (r) => body.id === 1,
+        "result is an array": (r) => Array.isArray(body.result),
+        "result is empty": (r) => body.result.length === 0,
+      });
+    } catch (e) {
+      console.error("Failed to parse JSON response:", e);
+    }
+  }
 }
