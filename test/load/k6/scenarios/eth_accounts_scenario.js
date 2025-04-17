@@ -1,16 +1,17 @@
-import { config } from "../common.js";
+import { default as test } from "../scripts/eth_accounts_test.js";
 
 export let options = {
-  vus: config.vus,
-  duration: config.duration,
   thresholds: {
     http_req_duration: ["p(95)<500"], // 95th percentile under 500ms
     http_req_failed: ["rate<0.01"], // less than 1% of requests should fail
   },
   stages: [
-    { duration: "10s", target: 5 }, // Ramp up to 5 users
-    { duration: "20s", target: 10 }, // Ramp up to 10 users
-    { duration: "30s", target: 10 }, // Stay at 10 users
+    { duration: "10s", target: 50 }, // Ramp up to 50 users
+    { duration: "30s", target: 1000 }, // Ramp up to 1000 users
+    { duration: "30s", target: 2000 }, // Ramp up to 2000 users
+    { duration: "30s", target: 5000 }, // Stay at 5000 users
     { duration: "10s", target: 0 }, // Ramp down to 0 users
   ],
 };
+
+export default test;
