@@ -36,6 +36,7 @@ apiKeys:
 
 features:
   enforceApiKey: false
+  enableBatchRequests: true
 
 cache:
   defaultExpiration: "1h"

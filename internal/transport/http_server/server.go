@@ -24,14 +24,15 @@ type Server interface {
 }
 
 type server struct {
-	router          *gin.Engine
-	logger          *zap.Logger
-	port            string
-	serviceProvider service.ServiceProvider
-	apiKeyStore     *limiter.APIKeyStore
-	tieredLimiter   *limiter.TieredLimiter
-	enforceAPIKey   bool
-	rpcHandler      rpc.RPCHandler
+	router              *gin.Engine
+	logger              *zap.Logger
+	port                string
+	serviceProvider     service.ServiceProvider
+	apiKeyStore         *limiter.APIKeyStore
+	tieredLimiter       *limiter.TieredLimiter
+	enforceAPIKey       bool
+	enableBatchRequests bool
+	rpcHandler          rpc.RPCHandler
 }
 
 func NewServer(
@@ -43,6 +44,7 @@ func NewServer(
 	apiKeyStore *limiter.APIKeyStore,
 	tieredLimiter *limiter.TieredLimiter,
 	enforceAPIKey bool,
+	enableBatchRequests bool,
 	cacheService cache.CacheService,
 	port string,
 ) Server {
@@ -56,14 +58,15 @@ func NewServer(
 	)
 
 	s := &server{
-		router:          router,
-		logger:          logger,
-		port:            port,
-		serviceProvider: serviceProvider,
-		apiKeyStore:     apiKeyStore,
-		tieredLimiter:   tieredLimiter,
-		enforceAPIKey:   enforceAPIKey,
-		rpcHandler:      rpcHandler,
+		router:              router,
+		logger:              logger,
+		port:                port,
+		serviceProvider:     serviceProvider,
+		apiKeyStore:         apiKeyStore,
+		tieredLimiter:       tieredLimiter,
+		enforceAPIKey:       enforceAPIKey,
+		enableBatchRequests: enableBatchRequests,
+		rpcHandler:          rpcHandler,
 	}
 
 	if enforceAPIKey {
@@ -132,9 +135,122 @@ func (s *server) authAndRateLimitMiddleware() gin.HandlerFunc {
 	}
 }
 
+type batchResponse struct {
+	index    int
+	response rpc.JSONRPCResponse
+	err      error
+}
+
+func (s *server) handleBatchRequest(ctx *gin.Context, requests []rpc.JSONRPCRequest) {
+	// Create a context with timeout for the entire batch
+	batchCtx, cancel := context.WithTimeout(ctx.Request.Context(), 30*time.Second)
+	defer cancel()
+
+	// Create a worker pool with a reasonable size
+	workerCount := 10
+	if len(requests) < workerCount {
+		workerCount = len(requests)
+	}
+
+	// Create channels for work distribution and results
+	workChan := make(chan int, len(requests))
+	resultsChan := make(chan batchResponse, len(requests))
+	errorChan := make(chan error, 1)
+
+	// Start workers
+	for i := 0; i < workerCount; i++ {
+		go func() {
+			for index := range workChan {
+				select {
+				case <-batchCtx.Done():
+					// Context was cancelled, stop processing
+					return
+				default:
+					// Process the request
+					req := requests[index]
+					resp := s.rpcHandler.HandleRequest(batchCtx, &req)
+					resultsChan <- batchResponse{
+						index:    index,
+						response: *resp,
+					}
+				}
+			}
+		}()
+	}
+
+	// Send work to workers
+	go func() {
+		defer close(workChan)
+		for i := range requests {
+			select {
+			case <-batchCtx.Done():
+				return
+			case workChan <- i:
+			}
+		}
+	}()
+
+	// Collect results
+	responses := make([]rpc.JSONRPCResponse, len(requests))
+	completed := 0
+
+	for completed < len(requests) {
+		select {
+		case <-batchCtx.Done():
+			// Timeout or cancellation occurred
+			ctx.JSON(http.StatusRequestTimeout, rpc.JSONRPCResponse{
+				JSONRPC: "2.0",
+				Error:   domain.NewRPCError(domain.ServerError, "Batch request timeout"),
+			})
+			return
+		case result := <-resultsChan:
+			responses[result.index] = result.response
+			completed++
+		case err := <-errorChan:
+			// An error occurred in one of the workers
+			ctx.JSON(http.StatusInternalServerError, rpc.JSONRPCResponse{
+				JSONRPC: "2.0",
+				Error:   domain.NewRPCError(domain.ServerError, err.Error()),
+			})
+			return
+		}
+	}
+
+	ctx.JSON(http.StatusOK, responses)
+}
+
 func (s *server) handleRPCRequest(ctx *gin.Context) {
-	var req rpc.JSONRPCRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
+	// First try to parse as a batch request
+	var batchReq []rpc.JSONRPCRequest
+	if err := ctx.ShouldBindJSON(&batchReq); err == nil {
+		// It's a batch request
+		if len(batchReq) > 1 && !s.enableBatchRequests {
+			ctx.JSON(http.StatusBadRequest, rpc.JSONRPCResponse{
+				JSONRPC: "2.0",
+				Error:   domain.NewRPCError(domain.InvalidRequest, "Batch requests are disabled"),
+			})
+			return
+		}
+
+		// Handle single request in batch format
+		if len(batchReq) == 1 {
+			resp := s.rpcHandler.HandleRequest(ctx.Request.Context(), &batchReq[0])
+			if resp.Error != nil {
+				ctx.JSON(http.StatusBadRequest, resp)
+			} else {
+				ctx.JSON(http.StatusOK, resp)
+			}
+			return
+		}
+
+		// Handle multiple requests in parallel
+		s.handleBatchRequest(ctx, batchReq)
+		return
+	}
+
+	// Try to parse as a single request
+	var singleReq rpc.JSONRPCRequest
+	if err := ctx.ShouldBindJSON(&singleReq); err != nil {
 		ctx.JSON(http.StatusBadRequest, rpc.JSONRPCResponse{
 			JSONRPC: "2.0",
 			Error:   domain.NewRPCError(domain.InvalidRequest, "Invalid Request"),
@@ -142,8 +258,7 @@ func (s *server) handleRPCRequest(ctx *gin.Context) {
 		return
 	}
 
-	resp := s.rpcHandler.HandleRequest(ctx.Request.Context(), &req)
-
+	resp := s.rpcHandler.HandleRequest(ctx.Request.Context(), &singleReq)
 	if resp.Error != nil {
 		ctx.JSON(http.StatusBadRequest, resp)
 	} else {
