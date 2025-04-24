@@ -2,6 +2,7 @@ package http_server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -220,9 +221,19 @@ func (s *server) handleBatchRequest(ctx *gin.Context, requests []rpc.JSONRPCRequ
 }
 
 func (s *server) handleRPCRequest(ctx *gin.Context) {
-	// First try to parse as a batch request
+	// Read the request body once
+	body, err := ctx.GetRawData()
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, rpc.JSONRPCResponse{
+			JSONRPC: "2.0",
+			Error:   domain.NewRPCError(domain.InvalidRequest, "Failed to read request body"),
+		})
+		return
+	}
+
+	// Try to parse as a batch request
 	var batchReq []rpc.JSONRPCRequest
-	if err := ctx.ShouldBindJSON(&batchReq); err == nil {
+	if err := json.Unmarshal(body, &batchReq); err == nil {
 		// It's a batch request
 		if len(batchReq) > 1 && !s.enableBatchRequests {
 			ctx.JSON(http.StatusBadRequest, rpc.JSONRPCResponse{
@@ -250,7 +261,7 @@ func (s *server) handleRPCRequest(ctx *gin.Context) {
 
 	// Try to parse as a single request
 	var singleReq rpc.JSONRPCRequest
-	if err := ctx.ShouldBindJSON(&singleReq); err != nil {
+	if err := json.Unmarshal(body, &singleReq); err != nil {
 		ctx.JSON(http.StatusBadRequest, rpc.JSONRPCResponse{
 			JSONRPC: "2.0",
 			Error:   domain.NewRPCError(domain.InvalidRequest, "Invalid Request"),
