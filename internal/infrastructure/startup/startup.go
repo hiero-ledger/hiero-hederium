@@ -18,7 +18,7 @@ const logo = `
 
 func LogStartup() {
 	// Print ASCII logo
-	fmt.Println(logo)
+	fmt.Print(logo)
 
 	// Print application version
 	version := viper.GetString("application.version")
