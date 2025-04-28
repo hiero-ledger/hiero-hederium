@@ -11,6 +11,7 @@ import (
 	"github.com/LimeChain/Hederium/internal/infrastructure/hedera"
 	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
 	"github.com/LimeChain/Hederium/internal/infrastructure/logger"
+	"github.com/LimeChain/Hederium/internal/infrastructure/startup"
 	"github.com/LimeChain/Hederium/internal/transport/http_server"
 )
 
@@ -19,8 +20,11 @@ func main() {
 		fmt.Printf("Failed to load configuration: %v\n", err)
 		return
 	}
-	log := logger.InitLogger("debug")
+	log := logger.InitLogger(viper.GetString("logging.level"))
 	defer log.Sync()
+
+	// Log startup information
+	startup.LogStartup()
 
 	hClient, err := hedera.NewHederaClient(
 		viper.GetString("hedera.network"),
@@ -41,10 +45,11 @@ func main() {
 	mClient := hedera.NewMirrorClient(viper.GetString("mirrorNode.baseUrl"), viper.GetInt("mirrorNode.timeoutSeconds"), log, cacheService)
 
 	enforceAPIKey := viper.GetBool("features.enforceApiKey")
+	enableBatchRequests := viper.GetBool("features.enableBatchRequests")
 
 	port := viper.GetString("server.port")
 
-	server := http_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, cacheService, port)
+	server := http_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, enableBatchRequests, cacheService, port)
 	if err := server.Start(); err != nil {
 		log.Fatal("Failed to start server", zap.Error(err))
 	}
