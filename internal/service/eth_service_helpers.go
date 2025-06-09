@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"math/big"
 	"regexp"
 	"strconv"
@@ -13,11 +12,8 @@ import (
 	"sync"
 
 	"github.com/LimeChain/Hederium/internal/domain"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/asm"
+	"github.com/LimeChain/Hederium/internal/util"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/rlp"
 	"go.uber.org/zap"
 )
 
@@ -734,7 +730,7 @@ func ParseTransaction(rawTxHex string) (*types.Transaction, error) {
 	}
 
 	tx := new(types.Transaction)
-	if err := rlp.DecodeBytes(rawTx, tx); err != nil {
+	if err := util.DecodeBytes(rawTx, tx); err != nil {
 		return nil, fmt.Errorf("failed to decode transaction: %w", err)
 	}
 
@@ -762,11 +758,11 @@ func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *typ
 	}
 
 	// Send the raw transaction using the client's implementation
-	response, err := s.hClient.SendRawTransaction(transactionData, gasPrice, fromAddress.String())
+	response, err := s.hClient.SendRawTransaction(transactionData, gasPrice, fromAddress)
 	if err != nil {
 		s.logger.Error("Failed to send raw transaction",
 			zap.Error(err),
-			zap.String("from", fromAddress.String()),
+			zap.String("from", fromAddress),
 			zap.String("to", toAddress),
 			zap.Int64("gasPrice", gasPrice))
 		return nil, fmt.Errorf("failed to send raw transaction: %w", err)
@@ -799,7 +795,7 @@ func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *typ
 
 		s.logger.Info("Transaction sent successfully",
 			zap.String("transactionID", hash),
-			zap.String("from", fromAddress.String()),
+			zap.String("from", fromAddress),
 			zap.String("to", toAddress),
 			zap.Int64("gasPrice", gasPrice))
 
@@ -818,13 +814,14 @@ func (s *EthService) getCurrentGasPriceForBlock(blockHash string) (string, error
 
 	return fmt.Sprintf("0x%x", gasPriceForTimestamp), nil
 }
-func GetFromAddress(tx *types.Transaction) (*common.Address, error) {
+
+func GetFromAddress(tx *types.Transaction) (string, error) {
 	signer := types.NewEIP155Signer(tx.ChainId())
 	from, err := types.Sender(signer, tx)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return &from, nil
+	return from.String(), nil
 }
 
 func ConvertTransactionID(transactionID string) string {
@@ -833,28 +830,6 @@ func ConvertTransactionID(transactionID string) string {
 	parts[1] = strings.ReplaceAll(parts[1], ".", "-")
 
 	return parts[0] + "-" + parts[1]
-}
-
-// TODO: Move it to a separate file
-var prohibitedOpcodes = map[vm.OpCode]bool{
-	vm.CALLCODE:     true,
-	vm.DELEGATECALL: true,
-	vm.SELFDESTRUCT: true,
-}
-
-func hasProhibitedOpcodes(bytecode []byte) bool {
-	ops, err := asm.Disassemble(bytecode)
-	if err != nil {
-		log.Printf("Error disassembling bytecode: %v", err)
-		return false
-	}
-
-	for _, op := range ops {
-		if prohibitedOpcodes[vm.OpCode(vm.StringToOp(op))] {
-			return true
-		}
-	}
-	return false
 }
 
 func truncateString(s string, maxLength int) string {

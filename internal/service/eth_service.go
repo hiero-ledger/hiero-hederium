@@ -11,7 +11,7 @@ import (
 	"github.com/LimeChain/Hederium/internal/infrastructure/cache"
 	infrahedera "github.com/LimeChain/Hederium/internal/infrastructure/hedera"
 	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
-	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/LimeChain/Hederium/internal/util"
 	"go.uber.org/zap"
 )
 
@@ -824,13 +824,13 @@ func (s *EthService) GetCode(address string, blockNumberOrTag string) (interface
 	case *domain.ContractResponse:
 		contract := result
 		if contract.RuntimeBytecode != nil && *contract.RuntimeBytecode != zeroHex32Bytes {
-			bytecode, err := hexutil.Decode(*contract.RuntimeBytecode)
+			bytecode, err := util.Decode(*contract.RuntimeBytecode)
 			if err != nil {
 				s.logger.Error("Failed to decode bytecode", zap.Error(err))
 				return nil, domain.NewRPCError(domain.ServerError, "Failed to decode bytecode")
 			}
 
-			if !hasProhibitedOpcodes(bytecode) {
+			if !util.HasProhibitedOpcodes(bytecode) {
 				if err = s.cacheService.Set(s.ctx, cachedKey, *contract.RuntimeBytecode, DefaultExpiration); err != nil {
 					s.logger.Debug("Failed to cache contract bytecode", zap.Error(err))
 				}
