@@ -91,6 +91,21 @@ func (mr *MockMirrorClientMockRecorder) GetBlockByHashOrNumber(hashOrNumber inte
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlockByHashOrNumber", reflect.TypeOf((*MockMirrorClient)(nil).GetBlockByHashOrNumber), hashOrNumber)
 }
 
+// GetBlocks mocks base method.
+func (m *MockMirrorClient) GetBlocks(blockNumber string) ([]map[string]interface{}, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBlocks", blockNumber)
+	ret0, _ := ret[0].([]map[string]interface{})
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBlocks indicates an expected call of GetBlocks.
+func (mr *MockMirrorClientMockRecorder) GetBlocks(blockNumber interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlocks", reflect.TypeOf((*MockMirrorClient)(nil).GetBlocks), blockNumber)
+}
+
 // GetContractById mocks base method.
 func (m *MockMirrorClient) GetContractById(contractIdOrAddress string) (*domain.ContractResponse, error) {
 	m.ctrl.T.Helper()
@@ -265,19 +280,4 @@ func (m *MockMirrorClient) RepeatGetContractResult(transactionIdOrHash string, r
 func (mr *MockMirrorClientMockRecorder) RepeatGetContractResult(transactionIdOrHash, retries interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RepeatGetContractResult", reflect.TypeOf((*MockMirrorClient)(nil).RepeatGetContractResult), transactionIdOrHash, retries)
-}
-
-// GetBlocks mocks base method
-func (m *MockMirrorClient) GetBlocks(blockHash string) ([]map[string]interface{}, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetBlocks", blockHash)
-	ret0, _ := ret[0].([]map[string]interface{})
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetBlocks indicates an expected call of GetBlocks.
-func (mr *MockMirrorClientMockRecorder) GetBlocks(blockHash string) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlocks", reflect.TypeOf((*MockMirrorClient)(nil).GetBlocks), blockHash)
 }

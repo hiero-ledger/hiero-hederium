@@ -762,7 +762,7 @@ func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *typ
 	}
 
 	// Send the raw transaction using the client's implementation
-	response, err := s.hClient.SendRawTransaction(transactionData, gasPrice, fromAddress)
+	response, err := s.hClient.SendRawTransaction(transactionData, gasPrice, fromAddress.String())
 	if err != nil {
 		s.logger.Error("Failed to send raw transaction",
 			zap.Error(err),

@@ -4,13 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/hashgraph/hedera-sdk-go/v2"
 )
 
 type HederaNodeClient interface {
 	GetNetworkFees() (int64, error)
-	SendRawTransaction(transactionData []byte, networkGasPriceInWeiBars int64, callerId *common.Address) (*TransactionResponse, error)
+	SendRawTransaction(transactionData []byte, networkGasPriceInWeiBars int64, callerId string) (*TransactionResponse, error)
 	GetContractByteCode(shard, realm int64, address string) ([]byte, error)
 	GetOperatorPublicKey() string
 }
@@ -83,7 +82,7 @@ type TransactionResponse struct {
 
 // SendRawTransaction submits an Ethereum transaction to the Hedera network.
 // It handles large call data by creating a file if needed and validates gas prices.
-func (h *HederaClient) SendRawTransaction(transactionData []byte, networkGasPriceInWeiBars int64, callerId *common.Address) (*TransactionResponse, error) {
+func (h *HederaClient) SendRawTransaction(transactionData []byte, networkGasPriceInWeiBars int64, callerId string) (*TransactionResponse, error) {
 	ethereumTx := hedera.NewEthereumTransaction()
 
 	var fileID *hedera.FileID
