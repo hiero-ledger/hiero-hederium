@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"math/big"
 	"regexp"
 	"strconv"
@@ -13,11 +12,7 @@ import (
 	"sync"
 
 	"github.com/LimeChain/Hederium/internal/domain"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/asm"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/LimeChain/Hederium/internal/util"
 	"go.uber.org/zap"
 )
 
@@ -721,7 +716,7 @@ func (s *EthService) getTransactionByBlockAndIndex(queryParamas map[string]inter
 	return ProcessTransaction(*transaction), nil
 }
 
-func ParseTransaction(rawTxHex string) (*types.Transaction, error) {
+func ParseTransaction(rawTxHex string) (*util.Tx, error) {
 	if rawTxHex == "" {
 		return nil, errors.New("transaction data is empty")
 	}
@@ -733,8 +728,8 @@ func ParseTransaction(rawTxHex string) (*types.Transaction, error) {
 		return nil, fmt.Errorf("failed to decode hex string: %w", err)
 	}
 
-	tx := new(types.Transaction)
-	if err := rlp.DecodeBytes(rawTx, tx); err != nil {
+	tx, err := util.DecodeTx(rawTx)
+	if err != nil {
 		return nil, fmt.Errorf("failed to decode transaction: %w", err)
 	}
 
@@ -748,17 +743,17 @@ func AddBuffer(weibars *big.Int) *big.Int {
 }
 
 // ProcessRawTransaction handles the processing of a raw Ethereum transaction for Hedera
-func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *types.Transaction, gasPrice int64) (*string, error) {
+func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *util.Tx, gasPrice int64) (*string, error) {
 	// Get the sender address for event tracking
-	fromAddress, err := GetFromAddress(tx)
+	fromAddress, err := tx.Sender()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sender address: %w", err)
 	}
 
 	// Get the recipient address for event tracking
 	var toAddress string
-	if tx.To() != nil {
-		toAddress = tx.To().String()
+	if tx.To != "" {
+		toAddress = tx.To
 	}
 
 	// Send the raw transaction using the client's implementation
@@ -766,7 +761,7 @@ func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *typ
 	if err != nil {
 		s.logger.Error("Failed to send raw transaction",
 			zap.Error(err),
-			zap.String("from", fromAddress.String()),
+			zap.String("from", fromAddress),
 			zap.String("to", toAddress),
 			zap.Int64("gasPrice", gasPrice))
 		return nil, fmt.Errorf("failed to send raw transaction: %w", err)
@@ -799,7 +794,7 @@ func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *typ
 
 		s.logger.Info("Transaction sent successfully",
 			zap.String("transactionID", hash),
-			zap.String("from", fromAddress.String()),
+			zap.String("from", fromAddress),
 			zap.String("to", toAddress),
 			zap.Int64("gasPrice", gasPrice))
 
@@ -818,14 +813,6 @@ func (s *EthService) getCurrentGasPriceForBlock(blockHash string) (string, error
 
 	return fmt.Sprintf("0x%x", gasPriceForTimestamp), nil
 }
-func GetFromAddress(tx *types.Transaction) (*common.Address, error) {
-	signer := types.NewEIP155Signer(tx.ChainId())
-	from, err := types.Sender(signer, tx)
-	if err != nil {
-		return nil, err
-	}
-	return &from, nil
-}
 
 func ConvertTransactionID(transactionID string) string {
 	parts := strings.Split(transactionID, "@")
@@ -833,28 +820,6 @@ func ConvertTransactionID(transactionID string) string {
 	parts[1] = strings.ReplaceAll(parts[1], ".", "-")
 
 	return parts[0] + "-" + parts[1]
-}
-
-// TODO: Move it to a separate file
-var prohibitedOpcodes = map[vm.OpCode]bool{
-	vm.CALLCODE:     true,
-	vm.DELEGATECALL: true,
-	vm.SELFDESTRUCT: true,
-}
-
-func hasProhibitedOpcodes(bytecode []byte) bool {
-	ops, err := asm.Disassemble(bytecode)
-	if err != nil {
-		log.Printf("Error disassembling bytecode: %v", err)
-		return false
-	}
-
-	for _, op := range ops {
-		if prohibitedOpcodes[vm.OpCode(vm.StringToOp(op))] {
-			return true
-		}
-	}
-	return false
 }
 
 func truncateString(s string, maxLength int) string {
