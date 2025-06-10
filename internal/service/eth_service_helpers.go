@@ -13,7 +13,6 @@ import (
 
 	"github.com/LimeChain/Hederium/internal/domain"
 	"github.com/LimeChain/Hederium/internal/util"
-	"github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
 )
 
@@ -717,7 +716,7 @@ func (s *EthService) getTransactionByBlockAndIndex(queryParamas map[string]inter
 	return ProcessTransaction(*transaction), nil
 }
 
-func ParseTransaction(rawTxHex string) (*types.Transaction, error) {
+func ParseTransaction(rawTxHex string) (*util.Tx, error) {
 	if rawTxHex == "" {
 		return nil, errors.New("transaction data is empty")
 	}
@@ -729,8 +728,8 @@ func ParseTransaction(rawTxHex string) (*types.Transaction, error) {
 		return nil, fmt.Errorf("failed to decode hex string: %w", err)
 	}
 
-	tx := new(types.Transaction)
-	if err := util.DecodeBytes(rawTx, tx); err != nil {
+	tx, err := util.DecodeTx(rawTx)
+	if err != nil {
 		return nil, fmt.Errorf("failed to decode transaction: %w", err)
 	}
 
@@ -744,17 +743,17 @@ func AddBuffer(weibars *big.Int) *big.Int {
 }
 
 // ProcessRawTransaction handles the processing of a raw Ethereum transaction for Hedera
-func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *types.Transaction, gasPrice int64) (*string, error) {
+func (s *EthService) SendRawTransactionProcessor(transactionData []byte, tx *util.Tx, gasPrice int64) (*string, error) {
 	// Get the sender address for event tracking
-	fromAddress, err := GetFromAddress(tx)
+	fromAddress, err := tx.Sender()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sender address: %w", err)
 	}
 
 	// Get the recipient address for event tracking
 	var toAddress string
-	if tx.To() != nil {
-		toAddress = tx.To().String()
+	if tx.To != "" {
+		toAddress = tx.To
 	}
 
 	// Send the raw transaction using the client's implementation
@@ -813,15 +812,6 @@ func (s *EthService) getCurrentGasPriceForBlock(blockHash string) (string, error
 	}
 
 	return fmt.Sprintf("0x%x", gasPriceForTimestamp), nil
-}
-
-func GetFromAddress(tx *types.Transaction) (string, error) {
-	signer := types.NewEIP155Signer(tx.ChainId())
-	from, err := types.Sender(signer, tx)
-	if err != nil {
-		return "", err
-	}
-	return from.String(), nil
 }
 
 func ConvertTransactionID(transactionID string) string {
