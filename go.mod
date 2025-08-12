@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/eko/gocache/store/go_cache/v4 v4.2.2
-	github.com/gin-gonic/gin v1.10.0
+	github.com/gin-gonic/gin v1.10.1
 	github.com/golang/mock v1.6.0
 	github.com/hashgraph/hedera-sdk-go/v2 v2.51.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
