@@ -5,7 +5,7 @@ RUN go mod download
 COPY . .
 RUN go build -o hederium ./cmd/server
 
-FROM alpine:3.17
+FROM alpine:3.22
 WORKDIR /app
 COPY --from=builder /app/hederium .
 COPY --from=builder /app/configs ./configs
