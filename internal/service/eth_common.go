@@ -92,7 +92,7 @@ func (s *commonService) ValidateBlockRangeAndAddTimestampToParams(params map[str
 	var toBlockNum int64
 
 	if blockTagIsLatestOrPending(&toBlock) {
-		toBlock = "latest"
+		toBlock = domain.BlockTagLatest
 		toBlockNum = latestBlockNum
 	} else {
 		toBlockNum, errRpc = s.GetBlockNumberByNumberOrTag(toBlock)
@@ -112,7 +112,7 @@ func (s *commonService) ValidateBlockRangeAndAddTimestampToParams(params map[str
 	var fromBlockNum int64
 
 	if blockTagIsLatestOrPending(&fromBlock) {
-		fromBlock = "latest"
+		fromBlock = domain.BlockTagLatest
 		fromBlockNum = latestBlockNum
 	} else {
 		fromBlockNum, errRpc = s.GetBlockNumberByNumberOrTag(fromBlock)
@@ -261,7 +261,7 @@ func (s *commonService) GetLogsWithParams(address []string, params map[string]in
 func (s *commonService) GetBlockNumberByNumberOrTag(blockNumberOrTag string) (int64, *domain.RPCError) {
 	s.logger.Debug("Getting block number by hash or tag", zap.String("blockHashOrTag", blockNumberOrTag))
 	switch blockNumberOrTag {
-	case "latest", "pending":
+	case domain.BlockTagLatest, domain.BlockTagPending:
 		latestBlock, errMap := s.GetBlockNumber()
 		if errMap != nil {
 			s.logger.Error("Failed to get latest block number", zap.Error(errMap))
@@ -282,7 +282,7 @@ func (s *commonService) GetBlockNumberByNumberOrTag(blockNumberOrTag string) (in
 		}
 		return latestBlockNum, nil
 
-	case "earliest":
+	case domain.BlockTagEarliest:
 		return int64(0), nil
 	default:
 		// Convert hex string to int, remove "0x" prefix
@@ -363,8 +363,8 @@ func (s *commonService) ValidateBlockRange(fromBlock, toBlock string) *domain.RP
 
 func blockTagIsLatestOrPending(tag *string) bool {
 	return tag == nil ||
-		*tag == "latest" ||
-		*tag == "pending" ||
-		*tag == "safe" ||
-		*tag == "finalized"
+		*tag == domain.BlockTagLatest ||
+		*tag == domain.BlockTagPending ||
+		*tag == domain.BlockTagSafe ||
+		*tag == domain.BlockTagFinalized
 }

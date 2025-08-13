@@ -189,7 +189,8 @@ func (s *filterService) GetFilterChanges(filterID string) (interface{}, *domain.
 	var blockResult []string
 	var result interface{}
 
-	if filter.Type == "log" {
+	switch filter.Type {
+	case "log":
 		logParams := domain.LogParams{
 			FromBlock: filter.FromBlock,
 			ToBlock:   filter.ToBlock,
@@ -220,7 +221,7 @@ func (s *filterService) GetFilterChanges(filterID string) (interface{}, *domain.
 		filter.LastQueried = fmt.Sprintf("0x%x", latestBlock)
 
 		result = logResult
-	} else if filter.Type == "new_block" {
+	case "new_block":
 
 		var blockNum string
 		if filter.LastQueried != "" {
@@ -258,7 +259,7 @@ func (s *filterService) GetFilterChanges(filterID string) (interface{}, *domain.
 
 		result = blockResult
 
-	} else {
+	default:
 		return nil, domain.NewUnsupportedMethodError("eth_getFilterChanges")
 	}
 

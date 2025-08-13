@@ -42,20 +42,20 @@ const (
 	ShortExpiration   = 1 * time.Second
 
 	// Fungible token creation selectors
-	CreateFungibleTokenV1         string = "0x83062e38"
-	CreateFungibleTokenV2         string = "0x6577761c"
-	CreateFungibleTokenV3         string = "0x6c42689c"
-	CreateFungibleTokenWithFeesV1 string = "0x6446e17e"
-	CreateFungibleTokenWithFeesV2 string = "0x8f4eb604"
-	CreateFungibleTokenWithFeesV3 string = "0x5c14dd49"
+	CreateFungibleTokenV1         string = "0x83062e38" //nolint:gosec
+	CreateFungibleTokenV2         string = "0x6577761c" //nolint:gosec
+	CreateFungibleTokenV3         string = "0x6c42689c" //nolint:gosec
+	CreateFungibleTokenWithFeesV1 string = "0x6446e17e" //nolint:gosec
+	CreateFungibleTokenWithFeesV2 string = "0x8f4eb604" //nolint:gosec
+	CreateFungibleTokenWithFeesV3 string = "0x5c14dd49" //nolint:gosec
 
 	// Non-fungible token creation selectors
-	CreateNonFungibleTokenV1         string = "0x5e724461"
-	CreateNonFungibleTokenV2         string = "0x5a3c15af"
-	CreateNonFungibleTokenV3         string = "0x5d24ea56"
-	CreateNonFungibleTokenWithFeesV1 string = "0x5e9a79c9"
-	CreateNonFungibleTokenWithFeesV2 string = "0x5f99d676"
-	CreateNonFungibleTokenWithFeesV3 string = "0x5e0c7ee3"
+	CreateNonFungibleTokenV1         string = "0x5e724461" //nolint:gosec
+	CreateNonFungibleTokenV2         string = "0x5a3c15af" //nolint:gosec
+	CreateNonFungibleTokenV3         string = "0x5d24ea56" //nolint:gosec
+	CreateNonFungibleTokenWithFeesV1 string = "0x5e9a79c9" //nolint:gosec
+	CreateNonFungibleTokenWithFeesV2 string = "0x5f99d676" //nolint:gosec
+	CreateNonFungibleTokenWithFeesV3 string = "0x5e0c7ee3" //nolint:gosec
 
 	MaxTimestampParamRange = 604800 // 7 days in seconds
 

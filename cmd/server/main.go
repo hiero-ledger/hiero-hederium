@@ -21,7 +21,7 @@ func main() {
 		return
 	}
 	log := logger.InitLogger(viper.GetString("logging.level"))
-	defer log.Sync()
+	defer func() { _ = log.Sync() }()
 
 	// Log startup information
 	startup.LogStartup()
@@ -32,7 +32,9 @@ func main() {
 		viper.GetString("hedera.operatorKey"),
 	)
 	if err != nil {
-		log.Fatal("Failed to initialize Hedera client", zap.Error(err))
+		// log.Fatal exits immediately; ensure sync happens before exiting
+		log.Error("Failed to initialize Hedera client", zap.Error(err))
+		return
 	}
 
 	applicationVersion := viper.GetString("application.version")
@@ -51,6 +53,7 @@ func main() {
 
 	server := http_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, enableBatchRequests, cacheService, port)
 	if err := server.Start(); err != nil {
-		log.Fatal("Failed to start server", zap.Error(err))
+		log.Error("Failed to start server", zap.Error(err))
+		return
 	}
 }

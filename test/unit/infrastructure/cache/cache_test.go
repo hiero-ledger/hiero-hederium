@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func setupTest(t *testing.T) (*zap.Logger, cache.CacheService) {
+func setupTest(t *testing.T) (*zap.Logger, cache.CacheService) { // nolint:unused
 	logger, _ := zap.NewDevelopment()
 	cacheService := cache.NewMemoryCache(time.Minute*5, time.Minute)
 	return logger, cacheService

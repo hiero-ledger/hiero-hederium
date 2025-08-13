@@ -139,7 +139,6 @@ func (s *server) authAndRateLimitMiddleware() gin.HandlerFunc {
 type batchResponse struct {
 	index    int
 	response rpc.JSONRPCResponse
-	err      error
 }
 
 func (s *server) handleBatchRequest(ctx *gin.Context, requests []rpc.JSONRPCRequest) {

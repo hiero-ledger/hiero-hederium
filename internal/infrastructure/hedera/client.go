@@ -185,6 +185,9 @@ func (h *HederaClient) deleteFile(fileID hedera.FileID) error {
 
 func (h *HederaClient) GetContractByteCode(shard, realm int64, address string) ([]byte, error) {
 	address = strings.TrimPrefix(address, "0x")
+	if shard < 0 || realm < 0 {
+		return nil, fmt.Errorf("invalid shard/realm: %d/%d", shard, realm)
+	}
 	contractID, err := hedera.ContractIDFromEvmAddress(uint64(shard), uint64(realm), address)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create contract ID from EVM address: %w", err)

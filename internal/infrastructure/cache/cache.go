@@ -33,7 +33,7 @@ func (m *MemoryCache) Set(ctx context.Context, key string, value any, ttl time.D
 	if err != nil {
 		return err
 	}
-	return m.cache.Set(ctx, key, []byte(data), store.WithExpiration(ttl))
+	return m.cache.Set(ctx, key, data, store.WithExpiration(ttl))
 }
 
 func (m *MemoryCache) Get(ctx context.Context, key string, out any) error {

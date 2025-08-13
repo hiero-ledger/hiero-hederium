@@ -411,15 +411,15 @@ func FormatTransactionCallObject(s *EthService, transactionCallObject *domain.Tr
 	}
 
 	// Handle input/data field consistency - prioritize input over data if both are present
-	if transactionCallObject.Input != "" && transactionCallObject.Data != "" {
-		// If both are present and different, return error
+	switch {
+	case transactionCallObject.Input != "" && transactionCallObject.Data != "":
 		if transactionCallObject.Input != transactionCallObject.Data {
 			return nil, fmt.Errorf("both input and data fields are present with different values")
 		}
 		result["data"] = transactionCallObject.Input
-	} else if transactionCallObject.Input != "" {
+	case transactionCallObject.Input != "":
 		result["data"] = transactionCallObject.Input
-	} else if transactionCallObject.Data != "" {
+	case transactionCallObject.Data != "":
 		result["data"] = transactionCallObject.Data
 	}
 
@@ -593,7 +593,7 @@ func (s *EthService) getRepeatedFeeHistory(blockCount, oldestBlockInt int64, rew
 
 	feeHistory.BaseFeePerGas[blockCount] = fee
 
-	//Check if there are any reward percentiles
+	// Check if there are any reward percentiles
 	if len(rewardPercentiles) > 0 {
 		rewards := make([][]string, blockCount)
 		for i := range rewards {
@@ -830,10 +830,10 @@ func truncateString(s string, maxLength int) string {
 }
 
 func (s *EthService) isLatestBlockRequest(blockNumberOrTag string, blockNumber int64) bool {
-	if blockNumberOrTag == "latest" || blockNumberOrTag == "pending" {
+	if blockNumberOrTag == domain.BlockTagLatest || blockNumberOrTag == domain.BlockTagPending {
 		return true
 	}
-	if blockNumberOrTag == "earliest" {
+	if blockNumberOrTag == domain.BlockTagEarliest {
 		return false
 	}
 

@@ -249,10 +249,10 @@ func (p *EthGetLogsParams) FromPositionalParams(params []interface{}) error {
 		}
 	} else {
 		if p.ToBlock == "" {
-			p.ToBlock = "latest"
+			p.ToBlock = BlockTagLatest
 		}
 		if p.FromBlock == "" {
-			p.FromBlock = "latest"
+			p.FromBlock = BlockTagLatest
 		}
 	}
 
@@ -289,7 +289,7 @@ func (p *EthGetBalanceParams) FromPositionalParams(params []interface{}) error {
 		}
 		p.BlockNumber = blockNumber
 	} else {
-		p.BlockNumber = "latest"
+		p.BlockNumber = BlockTagLatest
 	}
 
 	return nil
@@ -314,7 +314,7 @@ func (p *EthGetTransactionCountParams) FromPositionalParams(params []interface{}
 		}
 		p.BlockNumber = blockNumber
 	} else {
-		p.BlockNumber = "latest"
+		p.BlockNumber = BlockTagLatest
 	}
 
 	return nil
@@ -527,7 +527,7 @@ func (p *EthGetStorageAtParams) FromPositionalParams(params []interface{}) error
 		}
 		p.BlockNumber = blockNumber
 	} else {
-		p.BlockNumber = "latest"
+		p.BlockNumber = BlockTagLatest
 	}
 
 	return nil
@@ -654,8 +654,8 @@ func (p *EthNewFilterParams) FromPositionalParams(params []interface{}) error {
 	if len(params) > 0 {
 		filterObj, ok := params[0].(map[string]interface{})
 		if !ok {
-			p.FromBlock = "latest"
-			p.ToBlock = "latest"
+			p.FromBlock = BlockTagLatest
+			p.ToBlock = BlockTagLatest
 			return nil
 		}
 		if fromBlock, ok := filterObj["fromBlock"].(string); ok {
@@ -672,10 +672,10 @@ func (p *EthNewFilterParams) FromPositionalParams(params []interface{}) error {
 		}
 	}
 	if p.FromBlock == "" {
-		p.FromBlock = "latest"
+		p.FromBlock = BlockTagLatest
 	}
 	if p.ToBlock == "" {
-		p.ToBlock = "latest"
+		p.ToBlock = BlockTagLatest
 	}
 	return nil
 }

@@ -135,7 +135,7 @@ func (p *precheck) Nonce(tx *util.Tx, accountInfoNonce int64) error {
 
 	p.logger.Debug("Nonce precheck", zap.Uint64("tx.nonce", tx.Nonce), zap.Int64("accountInfoNonce", accountInfoNonce))
 
-	if uint64(accountInfoNonce) > tx.Nonce {
+	if accountInfoNonce < 0 || uint64(accountInfoNonce) > tx.Nonce {
 		return fmt.Errorf("nonce too low: provided nonce: %d, current nonce: %d", tx.Nonce, accountInfoNonce)
 	}
 
@@ -208,7 +208,7 @@ func (p *precheck) Balance(tx *util.Tx, account *domain.AccountResponse) error {
 		txGasPrice = new(big.Int).Add(maxFeePerGas, maxPriorityFeePerGas)
 	}
 
-	gasLimit := big.NewInt(int64(tx.GasLimit))
+	gasLimit := new(big.Int).SetUint64(tx.GasLimit)
 	gasCost := new(big.Int).Mul(txGasPrice, gasLimit)
 	totalValue := new(big.Int).Add(tx.Value, gasCost)
 
