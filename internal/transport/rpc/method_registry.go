@@ -10,9 +10,9 @@ import (
 type HandlerFunc func(ctx context.Context, params domain.RPCParams, services service.ServiceProvider) (interface{}, *domain.RPCError)
 
 type MethodInfo struct {
-	Name          string
-	ParamCreator func() domain.RPCParams 
-	Handler       HandlerFunc
+	Name         string
+	ParamCreator func() domain.RPCParams
+	Handler      HandlerFunc
 }
 
 type Methods struct {

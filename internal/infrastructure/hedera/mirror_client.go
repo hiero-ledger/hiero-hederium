@@ -64,7 +64,7 @@ func (m *MirrorClient) GetLatestBlock() (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
@@ -102,7 +102,7 @@ func (m *MirrorClient) GetBlocks(blockNumber string) ([]map[string]interface{}, 
 	if err != nil {
 		return nil, fmt.Errorf("error getting blocks: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
@@ -141,7 +141,7 @@ func (m *MirrorClient) GetBlockByHashOrNumber(hashOrNumber string) *domain.Block
 		m.logger.Error("Error getting block by hash or number", zap.Error(err))
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
 		return nil
@@ -186,12 +186,12 @@ func (m *MirrorClient) GetNetworkFees(timestampTo, order string) (int64, error) 
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	// TODO: If the mirror node does not return fee then ask the SDK for the fee
 	var checkSDK bool
 	if resp.StatusCode != http.StatusOK {
 		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
-		//return 0, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
+		// return 0, fmt.Errorf("mirror node returned status %d", resp.StatusCode)
 		checkSDK = true
 	}
 	// For now the default fee is 23
@@ -240,7 +240,7 @@ func (m *MirrorClient) GetContractResults(timestamp domain.Timestamp) []domain.C
 			m.logger.Error("Error making request", zap.Error(err))
 			return []domain.ContractResults{} // Return empty array instead of nil
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != http.StatusOK {
 			m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
@@ -296,7 +296,7 @@ func (m *MirrorClient) GetBalance(address string, timestampTo string) string {
 		m.logger.Error("Error getting balance", zap.Error(err))
 		return "0x0"
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
@@ -346,7 +346,7 @@ func (m *MirrorClient) GetAccount(address string, timestampTo string) interface{
 		m.logger.Error("Error getting account", zap.Error(err))
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
@@ -389,7 +389,7 @@ func (m *MirrorClient) GetContractResult(transactionIdOrHash string) interface{}
 		m.logger.Error("Error getting contract result", zap.Error(err))
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
@@ -450,7 +450,7 @@ func (m *MirrorClient) PostCall(callObject map[string]interface{}) interface{} {
 		m.logger.Error("Error making contract call", zap.Error(err))
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		m.logger.Error("Mirror node returned non-OK status", zap.Int("status", resp.StatusCode))
@@ -499,7 +499,7 @@ func (m *MirrorClient) GetContractStateByAddressAndSlot(address string, slot str
 		m.logger.Error("Error getting contract state", zap.Error(err))
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
@@ -591,7 +591,7 @@ func (m *MirrorClient) fetchLogsPages(url string) (*domain.ContractResultsLogRes
 		m.logger.Error("Error making request", zap.Error(err))
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
@@ -654,7 +654,7 @@ func (m *MirrorClient) GetContractResultWithRetry(queryParams map[string]interfa
 			m.logger.Error("Error making request", zap.Error(err))
 			return nil, err
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != http.StatusOK {
 			m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
@@ -742,7 +742,7 @@ func (m *MirrorClient) GetContractById(contractIdOrAddress string) (*domain.Cont
 		m.logger.Error("Error making request", zap.Error(err))
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
@@ -788,7 +788,7 @@ func (m *MirrorClient) GetAccountById(idOrAliasOrEvmAddress string) (*domain.Acc
 		m.logger.Error("Error making request", zap.Error(err))
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))
@@ -834,7 +834,7 @@ func (m *MirrorClient) GetTokenById(tokenId string) (*domain.TokenResponse, erro
 		m.logger.Error("Error making request", zap.Error(err))
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		m.logger.Error("Mirror node returned status", zap.Int("status", resp.StatusCode))

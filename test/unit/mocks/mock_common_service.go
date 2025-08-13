@@ -134,4 +134,4 @@ func (m *MockCommonService) GetBlockNumber() (interface{}, *domain.RPCError) {
 func (mr *MockCommonServiceMockRecorder) GetBlockNumber() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlockNumber", reflect.TypeOf((*MockCommonService)(nil).GetBlockNumber))
-} 
+}

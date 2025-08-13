@@ -53,6 +53,11 @@ func NewServer(
 
 	router := gin.Default()
 
+	// Register custom validators used by request structs
+	if err := rpc.RegisterCustomValidators(); err != nil {
+		logger.Error("Failed to register custom validators", zap.Error(err))
+	}
+
 	rpcHandler := rpc.NewHandler(
 		logger,
 		serviceProvider,
@@ -139,7 +144,6 @@ func (s *server) authAndRateLimitMiddleware() gin.HandlerFunc {
 type batchResponse struct {
 	index    int
 	response rpc.JSONRPCResponse
-	err      error
 }
 
 func (s *server) handleBatchRequest(ctx *gin.Context, requests []rpc.JSONRPCRequest) {

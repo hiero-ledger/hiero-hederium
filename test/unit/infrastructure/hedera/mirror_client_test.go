@@ -69,7 +69,7 @@ func TestGetLatestBlock_Success(t *testing.T) {
 			},
 		}
 
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -91,7 +91,7 @@ func TestGetLatestBlock_EmptyResponse(t *testing.T) {
 		}{
 			Blocks: []map[string]interface{}{},
 		}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -128,7 +128,7 @@ func TestGetBlockByHashOrNumber_Success(t *testing.T) {
 		assert.Equal(t, "/api/v1/blocks/123", r.URL.String())
 		assert.Equal(t, http.MethodGet, r.Method)
 
-		json.NewEncoder(w).Encode(expectedBlock)
+		_ = json.NewEncoder(w).Encode(expectedBlock)
 	}))
 	defer server.Close()
 
@@ -182,7 +182,7 @@ func TestGetNetworkFees_Success(t *testing.T) {
 		assert.Equal(t, "/api/v1/network/fees", r.URL.String())
 		assert.Equal(t, http.MethodGet, r.Method)
 
-		json.NewEncoder(w).Encode(expectedResponse)
+		_ = json.NewEncoder(w).Encode(expectedResponse)
 	}))
 	defer server.Close()
 
@@ -241,11 +241,11 @@ func TestGetContractResults_Success(t *testing.T) {
 			// First call should have the timestamp parameters
 			assert.Contains(t, r.URL.String(), "timestamp=gte:"+timestamp.From)
 			assert.Contains(t, r.URL.String(), "timestamp=lte:"+timestamp.To)
-			json.NewEncoder(w).Encode(firstPage)
+			_ = json.NewEncoder(w).Encode(firstPage)
 		} else {
 			// Second call should use the next link
 			assert.Equal(t, nextLink, r.URL.String())
-			json.NewEncoder(w).Encode(secondPage)
+			_ = json.NewEncoder(w).Encode(secondPage)
 		}
 		callCount++
 	}))
@@ -288,7 +288,7 @@ func TestGetNetworkFees_NoEthereumFee(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -382,7 +382,7 @@ func TestGetBalance(t *testing.T) {
 
 				w.WriteHeader(tc.statusCode)
 				if tc.mockResponse != nil {
-					json.NewEncoder(w).Encode(tc.mockResponse)
+					_ = json.NewEncoder(w).Encode(tc.mockResponse)
 				}
 			}))
 			defer server.Close()
@@ -425,7 +425,7 @@ func TestGetBalance_Success(t *testing.T) {
 			},
 		}
 
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -477,7 +477,7 @@ func TestGetAccount_Success(t *testing.T) {
 			EthereumNonce: 5,
 		}
 
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -566,7 +566,7 @@ func TestPostCall(t *testing.T) {
 
 				w.WriteHeader(tc.statusCode)
 				if tc.mockResponse != nil {
-					json.NewEncoder(w).Encode(tc.mockResponse)
+					_ = json.NewEncoder(w).Encode(tc.mockResponse)
 				}
 			}))
 			defer server.Close()
@@ -839,7 +839,7 @@ func TestGetContractResultsLogsWithRetry(t *testing.T) {
 
 				w.WriteHeader(tc.statusCode)
 				if callCount < len(tc.mockResponses) {
-					json.NewEncoder(w).Encode(tc.mockResponses[callCount])
+					_ = json.NewEncoder(w).Encode(tc.mockResponses[callCount])
 				}
 				callCount++
 			}))
@@ -940,7 +940,7 @@ func TestGetAccountById(t *testing.T) {
 
 				w.WriteHeader(tc.statusCode)
 				if tc.mockResponse != nil {
-					json.NewEncoder(w).Encode(tc.mockResponse)
+					_ = json.NewEncoder(w).Encode(tc.mockResponse)
 				}
 			}))
 			defer server.Close()

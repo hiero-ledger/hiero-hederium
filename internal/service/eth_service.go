@@ -100,7 +100,7 @@ func (s *EthService) GetBlockNumber() (interface{}, *domain.RPCError) {
 		return cachedBlockNumber, nil
 	}
 
-	blockNumber, err := s.commonService.GetBlockNumber()
+	blockNumber, _ := s.commonService.GetBlockNumber()
 
 	if err := s.cacheService.Set(s.ctx, GetBlockNumber, blockNumber, ShortExpiration); err != nil {
 		s.logger.Debug("Failed to cache block number", zap.Error(err))
@@ -238,24 +238,24 @@ func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) str
 	var block *domain.BlockResponse
 
 	switch blockNumberTagOrHash {
-	case "latest", "pending":
+	case domain.BlockTagLatest, domain.BlockTagPending:
 		balance := s.mClient.GetBalance(address, "0")
 		return balance
-	case "earliest":
+	case domain.BlockTagEarliest:
 		block = s.mClient.GetBlockByHashOrNumber("0")
 		if block == nil {
 			s.logger.Debug("Earliest block not found")
 			return "0x0"
 		}
 	default:
-		// Check if it's a 32 byte hash (0x + 64 hex chars)
-		if len(blockNumberTagOrHash) == 66 && strings.HasPrefix(blockNumberTagOrHash, "0x") {
+		switch {
+		case len(blockNumberTagOrHash) == 66 && strings.HasPrefix(blockNumberTagOrHash, "0x"):
 			block = s.mClient.GetBlockByHashOrNumber(blockNumberTagOrHash)
 			if block == nil {
 				s.logger.Debug("Block not found for hash", zap.String("hash", blockNumberTagOrHash))
 				return "0x0"
 			}
-		} else if strings.HasPrefix(blockNumberTagOrHash, "0x") {
+		case strings.HasPrefix(blockNumberTagOrHash, "0x"):
 			// If it's a hex number, convert it to decimal
 			num, err := strconv.ParseInt(blockNumberTagOrHash[2:], 16, 64)
 			if err != nil {
@@ -267,7 +267,7 @@ func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) str
 				s.logger.Debug("Block not found for number", zap.String("number", blockNumberTagOrHash))
 				return "0x0"
 			}
-		} else {
+		default:
 			block = s.mClient.GetBlockByHashOrNumber(blockNumberTagOrHash)
 			if block == nil {
 				s.logger.Debug("Block not found for number", zap.String("number", blockNumberTagOrHash))
@@ -518,7 +518,7 @@ func (s *EthService) GetTransactionReceipt(hash string) (interface{}, *domain.RP
 func (s *EthService) FeeHistory(blockCount string, newestBlock string, rewardPercentiles []string) (interface{}, *domain.RPCError) {
 	s.logger.Info("Getting fee history", zap.String("blockCount", blockCount), zap.String("newestBlock", newestBlock), zap.Any("rewardPercentiles", rewardPercentiles))
 
-	//Get the block number of the newest block
+	// Get the block number of the newest block
 	latestBlockNumber, errRpc := s.GetBlockNumber()
 	if errRpc != nil {
 		return nil, errRpc
@@ -537,14 +537,14 @@ func (s *EthService) FeeHistory(blockCount string, newestBlock string, rewardPer
 		return nil, errRpc
 	}
 
-	//Convert the block number to decimal
+	// Convert the block number to decimal
 	blockCountInt, err := HexToDec(blockCount)
 	if err != nil {
 		s.logger.Error("Failed to parse block count", zap.Error(err))
 		return nil, domain.NewRPCError(domain.ServerError, "Failed to parse block count:")
 	}
 
-	//Check if the blockCount is greater then the one we need
+	// Check if the blockCount is greater then the one we need
 	if blockCountInt > int64(maxBlockCountForResult) {
 		blockCountInt = int64(maxBlockCountForResult)
 	}

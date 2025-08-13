@@ -1,0 +1,51 @@
+version: 2
+run:
+  timeout: 5m
+  tests: false
+  skip-dirs:
+    - third_party
+    - builtin
+    - examples
+    - test
+
+issues:
+  exclude-generated: true
+  exclude-rules:
+    - path: _test\.go$
+      linters: [errcheck, dogsled, goconst, unused, unparam, staticcheck, gosec, gocritic]
+
+linters:
+  disable-all: true
+  enable:
+    - bodyclose
+    - dogsled
+    - errcheck
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - gocyclo
+    - gosec
+    - govet
+    - ineffassign
+    - nakedret
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+
+linters-settings:
+  gosec:
+    excludes:
+      - G115
+      - G101
+  goconst:
+    min-occurrences: 10
+  gocritic:
+    disabled-checks:
+      - exitAfterDefer
+  staticcheck:
+    checks:
+      - all
+      - '-ST1003'
+      - '-QF1008'
+

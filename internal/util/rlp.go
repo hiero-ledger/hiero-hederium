@@ -113,7 +113,8 @@ func DecodeTx(raw []byte) (*Tx, error) {
 				return nil, fmt.Errorf("failed to decode field %d: %w", i, err)
 			}
 			// Convert uint to bytes
-			fields[i] = new(big.Int).SetUint64(uint64(uintVal.Get())).Bytes()
+			// value already uint64, avoid redundant conversion
+			fields[i] = new(big.Int).SetUint64(uintVal.Get()).Bytes()
 		}
 	}
 
