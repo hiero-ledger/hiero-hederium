@@ -12,7 +12,7 @@
     "format": "prettier --write \"**/*.{ts,sol}\""
   },
   "dependencies": {
-    "hardhat": "^2.19.4",
+    "hardhat": "^3.0.3",
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",
     "@nomicfoundation/hardhat-ethers": "^3.0.5",
     "ethers": "^6.10.0",
