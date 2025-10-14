@@ -8,6 +8,8 @@
 [![CI - Dev Tool Tests](https://github.com/LimeChain/Hederium/actions/workflows/dev-tool-test.yml/badge.svg?branch=main)](https://github.com/LimeChain/Hederium/actions/workflows/dev-tool-test.yml)
 [![License](https://img.shields.io/badge/license-apache2-blue.svg)](LICENSE)
 [![Made With](https://img.shields.io/badge/made_with-go-blue)](https://golang.org/)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hiero-ledger/hiero-hederium/badge)](https://scorecard.dev/viewer/?uri=github.com/hiero-ledger/hiero-hederium)
+[![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/10697/badge)](https://bestpractices.coreinfrastructure.org/projects/10697)
 
 Hederium is designed to implement the Hashio protocol in Go, offering high performance, reliability, and scalability. This implementation follows Go best practices and provides a comprehensive suite of features for building distributed applications.
 
@@ -77,10 +79,18 @@ go test ./... -v
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
+Please read our [contributing guide](https://github.com/hiero-ledger/.github/blob/main/CONTRIBUTING.md) to see how you can get involved.
+
+## Code of Conduct
+
+Hiero uses the Linux Foundation Decentralised Trust [Code of Conduct](https://www.lfdecentralizedtrust.org/code-of-conduct).
+
 ## License
 
 This project is licensed under the terms of the LICENSE file included in the repository.
 
 ## Contact
 
-Project Link: [https://github.com/LimeChain/Hederium](https://github.com/LimeChain/Hederium)
+Project Link: [https://github.com/LimeChain/Hederium](https://github.com/LimeChain/Hederium).
+Join our [community discussions](https://discord.lfdecentralizedtrust.org/) on discord.
+Attend our [community calls](https://zoom-lfx.platform.linuxfoundation.org/meetings/hiero?view=week). 
