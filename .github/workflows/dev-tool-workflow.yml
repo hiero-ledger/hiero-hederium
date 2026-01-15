@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   dev-tool-workflow:
-    runs-on: ubuntu-latest
+    runs-on: hl-hdium-lin-md
     permissions:
       contents: write
       actions: read
