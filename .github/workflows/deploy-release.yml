@@ -52,8 +52,10 @@ jobs:
       #     location: unknown-for-now
 
       - name: Update Helm Charts
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
-          sed -i "s/^appVersion:.*/appVersion: \"${{ steps.version.outputs.VERSION }}\"/" charts/Chart.yaml
+          sed -i "s|^appVersion:.*|appVersion: \"${VERSION}\"|" charts/Chart.yaml
 
       # TODO: Uncomment this when we have a production cluster
       # - name: Deploy to GKE
