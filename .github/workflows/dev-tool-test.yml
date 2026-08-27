@@ -11,11 +11,14 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
-  actions: read
+  contents: read
+
 jobs:
   hardhat:
     name: Hardhat
+    permissions:
+      contents: write
+      actions: read
     uses: ./.github/workflows/dev-tool-workflow.yml
     with:
       command: sleep 80 && cd ./tools/hardhat/ && cp hardhat.config.ts.example hardhat.config.ts && npx hardhat test --network hedera_testnet
