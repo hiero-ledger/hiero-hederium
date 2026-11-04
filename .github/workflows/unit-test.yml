@@ -14,6 +14,40 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@6c439dc8bdf85cadbbce9ed30d1c7b959517bc49 # v2.12.2
+        with:
+          egress-policy: audit
+
+      - name: Check out repository
+        uses: actions/checkout@eef61447b9ff4aafe5dcd4e0bbf5d482be7e7871 # v4.2.1
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.22.2' # use a valid Go version
+
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l ./cmd ./internal ./test)"
+          if [ -n "$unformatted" ]; then
+            echo "Files not formatted with gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0
+
   build-and-test:
     runs-on: ubuntu-latest
 
@@ -34,5 +68,16 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
-      - name: Run unit tests
-        run: go test ./... -v
+      - name: Build
+        run: go build ./...
+
+      # Tests live in test/unit, outside the packages they cover, so plain
+      # `go test -cover` reports 0%; -coverpkg measures ./internal/... instead.
+      - name: Run unit tests with race detector and coverage
+        run: go test -race -covermode=atomic -coverpkg=./internal/... -coverprofile=coverage.out ./...
+
+      - name: Report coverage
+        run: |
+          total="$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}')"
+          echo "Total coverage of ./internal/...: $total"
+          echo "### Unit test coverage of \`./internal/...\`: $total" >> "$GITHUB_STEP_SUMMARY"
