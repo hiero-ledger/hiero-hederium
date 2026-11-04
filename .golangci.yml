@@ -1,21 +1,8 @@
-version: 2
+version: "2"
 run:
-  timeout: 5m
   tests: false
-  skip-dirs:
-    - third_party
-    - builtin
-    - examples
-    - test
-
-issues:
-  exclude-generated: true
-  exclude-rules:
-    - path: _test\.go$
-      linters: [errcheck, dogsled, goconst, unused, unparam, staticcheck, gosec, gocritic]
-
 linters:
-  disable-all: true
+  default: none
   enable:
     - bodyclose
     - dogsled
@@ -32,20 +19,49 @@ linters:
     - unconvert
     - unparam
     - unused
-
-linters-settings:
-  gosec:
-    excludes:
-      - G115
-      - G101
-  goconst:
-    min-occurrences: 10
-  gocritic:
-    disabled-checks:
-      - exitAfterDefer
-  staticcheck:
-    checks:
-      - all
-      - '-ST1003'
-      - '-QF1008'
-
+  settings:
+    goconst:
+      min-occurrences: 10
+    gocritic:
+      disabled-checks:
+        - exitAfterDefer
+    gosec:
+      excludes:
+        - G115
+        - G101
+    staticcheck:
+      checks:
+        - all
+        - -QF1008
+        - -ST1003
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - dogsled
+          - errcheck
+          - goconst
+          - gocritic
+          - gosec
+          - staticcheck
+          - unparam
+          - unused
+        path: _test\.go$
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      - ^test/
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      - ^test/
