@@ -7,8 +7,8 @@ package mocks
 import (
 	reflect "reflect"
 
-	domain "github.com/LimeChain/Hederium/internal/domain"
 	gomock "github.com/golang/mock/gomock"
+	domain "github.com/hiero-ledger/hiero-hederium/internal/domain"
 )
 
 // MockMirrorClient is a mock of MirrorNodeClient interface.

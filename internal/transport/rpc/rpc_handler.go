@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/LimeChain/Hederium/internal/domain"
-	"github.com/LimeChain/Hederium/internal/service"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
+	"github.com/hiero-ledger/hiero-hederium/internal/domain"
+	"github.com/hiero-ledger/hiero-hederium/internal/service"
 	"go.uber.org/zap"
 )
 

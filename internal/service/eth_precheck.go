@@ -6,9 +6,9 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/LimeChain/Hederium/internal/domain"
-	infrahedera "github.com/LimeChain/Hederium/internal/infrastructure/hedera"
-	"github.com/LimeChain/Hederium/internal/util"
+	"github.com/hiero-ledger/hiero-hederium/internal/domain"
+	infrahedera "github.com/hiero-ledger/hiero-hederium/internal/infrastructure/hedera"
+	"github.com/hiero-ledger/hiero-hederium/internal/util"
 	"go.uber.org/zap"
 )
 

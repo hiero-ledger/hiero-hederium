@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/LimeChain/Hederium/internal/domain"
-	"github.com/LimeChain/Hederium/internal/infrastructure/cache"
-	infrahedera "github.com/LimeChain/Hederium/internal/infrastructure/hedera"
+	"github.com/hiero-ledger/hiero-hederium/internal/domain"
+	"github.com/hiero-ledger/hiero-hederium/internal/infrastructure/cache"
+	infrahedera "github.com/hiero-ledger/hiero-hederium/internal/infrastructure/hedera"
 	"go.uber.org/zap"
 )
 

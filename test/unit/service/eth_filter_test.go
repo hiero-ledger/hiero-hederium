@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/LimeChain/Hederium/internal/domain"
-	"github.com/LimeChain/Hederium/internal/service"
-	"github.com/LimeChain/Hederium/test/unit/mocks"
 	"github.com/golang/mock/gomock"
+	"github.com/hiero-ledger/hiero-hederium/internal/domain"
+	"github.com/hiero-ledger/hiero-hederium/internal/service"
+	"github.com/hiero-ledger/hiero-hederium/test/unit/mocks"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )

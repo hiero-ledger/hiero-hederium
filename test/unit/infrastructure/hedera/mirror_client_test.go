@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/LimeChain/Hederium/internal/domain"
-	"github.com/LimeChain/Hederium/internal/infrastructure/hedera"
-	"github.com/LimeChain/Hederium/test/unit/mocks"
 	"github.com/golang/mock/gomock"
+	"github.com/hiero-ledger/hiero-hederium/internal/domain"
+	"github.com/hiero-ledger/hiero-hederium/internal/infrastructure/hedera"
+	"github.com/hiero-ledger/hiero-hederium/test/unit/mocks"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )

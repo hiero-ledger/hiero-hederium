@@ -6,13 +6,13 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
-	"github.com/LimeChain/Hederium/internal/infrastructure/cache"
-	"github.com/LimeChain/Hederium/internal/infrastructure/config"
-	"github.com/LimeChain/Hederium/internal/infrastructure/hedera"
-	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
-	"github.com/LimeChain/Hederium/internal/infrastructure/logger"
-	"github.com/LimeChain/Hederium/internal/infrastructure/startup"
-	"github.com/LimeChain/Hederium/internal/transport/http_server"
+	"github.com/hiero-ledger/hiero-hederium/internal/infrastructure/cache"
+	"github.com/hiero-ledger/hiero-hederium/internal/infrastructure/config"
+	"github.com/hiero-ledger/hiero-hederium/internal/infrastructure/hedera"
+	"github.com/hiero-ledger/hiero-hederium/internal/infrastructure/limiter"
+	"github.com/hiero-ledger/hiero-hederium/internal/infrastructure/logger"
+	"github.com/hiero-ledger/hiero-hederium/internal/infrastructure/startup"
+	"github.com/hiero-ledger/hiero-hederium/internal/transport/http_server"
 )
 
 func main() {

@@ -7,8 +7,8 @@ package mocks
 import (
 	reflect "reflect"
 
-	hedera "github.com/LimeChain/Hederium/internal/infrastructure/hedera"
 	gomock "github.com/golang/mock/gomock"
+	hedera "github.com/hiero-ledger/hiero-hederium/internal/infrastructure/hedera"
 )
 
 // MockHederaNodeClient is a mock of HederaNodeClient interface.

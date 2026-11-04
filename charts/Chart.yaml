@@ -4,7 +4,7 @@ type: application
 version: 0.1.0
 name: hederium
 description: A Helm chart for Hederium
-home: https://github.com/LimeChain/Hederium
+home: https://github.com/hiero-ledger/hiero-hederium
 keywords:
 - hederium
 - json-rpc-relay

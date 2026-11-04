@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/LimeChain/Hederium/internal/domain"
-	"github.com/LimeChain/Hederium/internal/infrastructure/cache"
-	infrahedera "github.com/LimeChain/Hederium/internal/infrastructure/hedera"
-	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
-	"github.com/LimeChain/Hederium/internal/util"
+	"github.com/hiero-ledger/hiero-hederium/internal/domain"
+	"github.com/hiero-ledger/hiero-hederium/internal/infrastructure/cache"
+	infrahedera "github.com/hiero-ledger/hiero-hederium/internal/infrastructure/hedera"
+	"github.com/hiero-ledger/hiero-hederium/internal/infrastructure/limiter"
+	"github.com/hiero-ledger/hiero-hederium/internal/util"
 	"go.uber.org/zap"
 )
 

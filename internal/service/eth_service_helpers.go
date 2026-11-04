@@ -11,8 +11,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/LimeChain/Hederium/internal/domain"
-	"github.com/LimeChain/Hederium/internal/util"
+	"github.com/hiero-ledger/hiero-hederium/internal/domain"
+	"github.com/hiero-ledger/hiero-hederium/internal/util"
 	"go.uber.org/zap"
 )
 
