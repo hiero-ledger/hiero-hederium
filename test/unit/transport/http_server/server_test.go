@@ -36,7 +36,7 @@ type rpcResponse struct {
 
 // newStubMirror answers the given paths (with their query) and returns 404 for
 // everything else.
-func newStubMirror(t *testing.T, routes map[string]func(http.ResponseWriter)) *httptest.Server {
+func newStubMirror(t testing.TB, routes map[string]func(http.ResponseWriter)) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.URL.Path
@@ -61,18 +61,18 @@ func jsonBody(body string) func(http.ResponseWriter) {
 	}
 }
 
-func shortBlockHashMirror(t *testing.T) *httptest.Server {
+func shortBlockHashMirror(t testing.TB) *httptest.Server {
 	return newStubMirror(t, map[string]func(http.ResponseWriter){
 		"/api/v1/contracts/results/" + receiptHash: jsonBody(`{"block_hash":"0x12","block_number":1,"hash":"` + receiptHash + `"}`),
 	})
 }
 
-func newTestServer(t *testing.T, mirrorURL string) http.Handler {
+func newTestServer(t testing.TB, mirrorURL string) http.Handler {
 	t.Helper()
 	return newTestServerWithKeys(t, mirrorURL, limiter.NewAPIKeyStore(nil), false)
 }
 
-func newTestServerWithKeys(t *testing.T, mirrorURL string, keys *limiter.APIKeyStore, enforceAPIKey bool) http.Handler {
+func newTestServerWithKeys(t testing.TB, mirrorURL string, keys *limiter.APIKeyStore, enforceAPIKey bool) http.Handler {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	logger := zap.NewNop()

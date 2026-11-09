@@ -81,3 +81,8 @@ jobs:
           total="$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}')"
           echo "Total coverage of ./internal/...: $total"
           echo "### Unit test coverage of \`./internal/...\`: $total" >> "$GITHUB_STEP_SUMMARY"
+
+      # Arbitrary bodies through the real router must never crash the process.
+      # Minimizing each new interesting input for the default 60s stalls the run.
+      - name: Fuzz JSON-RPC requests
+        run: go test ./test/unit/transport/http_server -run '^$' -fuzz '^FuzzRPCRequest$' -fuzztime 60s -fuzzminimizetime 1s
