@@ -199,6 +199,23 @@ func TestServer_PanicInMiddlewareReturnsJSONRPCInternalError(t *testing.T) {
 	assert.Equal(t, domain.InternalError, resp.Error.Code)
 }
 
+// A panic after the reply started cannot be turned into a JSON-RPC error: the
+// status line is out, and a second JSON document would corrupt the body.
+func TestJSONRPCRecovery_PanicAfterResponseStartedWritesNothingMore(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(http_server.JSONRPCRecovery(zap.NewNop()))
+	router.POST("/", func(c *gin.Context) {
+		c.String(http.StatusOK, `{"partial":`)
+		panic("boom")
+	})
+
+	rec := post(t, router, `{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}`)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, `{"partial":`, rec.Body.String())
+}
+
 // The router's own recovery covers panics outside the JSON-RPC handler (e.g. in
 // middleware or while writing the response) with a JSON-RPC body instead of
 // gin's empty HTTP 500.
