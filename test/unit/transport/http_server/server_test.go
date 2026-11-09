@@ -133,6 +133,37 @@ func TestBatch_PanicInOneItemOnlyFailsThatItem(t *testing.T) {
 	assert.Equal(t, "relay/test", responses[2].Result)
 }
 
+// The crash from the gap report (E-1): eth_getBalance for an older block in a
+// batch while the mirror node's latest-block endpoint fails. That item now
+// gets an error and the rest of the batch is answered.
+func TestBatch_GetBalanceWhileLatestBlockFails(t *testing.T) {
+	mirror := newStubMirror(t, map[string]func(http.ResponseWriter){
+		"/api/v1/blocks/1": jsonBody(`{"number":1,"hash":"0x` + strings.Repeat("1", 96) + `","timestamp":{"from":"1.0","to":"2.0"}}`),
+		"/api/v1/blocks?order=desc&limit=1": func(w http.ResponseWriter) {
+			w.WriteHeader(http.StatusInternalServerError)
+		},
+	})
+	handler := newTestServer(t, mirror.URL)
+
+	rec := post(t, handler, `[
+		{"jsonrpc":"2.0","id":1,"method":"eth_getBalance","params":["0x`+strings.Repeat("1", 40)+`","0x1"]},
+		{"jsonrpc":"2.0","id":2,"method":"eth_chainId","params":[]}
+	]`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var responses []rpcResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &responses), rec.Body.String())
+	require.Len(t, responses, 2)
+
+	assert.Equal(t, float64(1), responses[0].ID)
+	require.NotNil(t, responses[0].Error)
+	assert.Equal(t, domain.InternalError, responses[0].Error.Code)
+	assert.Equal(t, "Failed to get latest block", responses[0].Error.Message)
+
+	assert.Equal(t, float64(2), responses[1].ID)
+	assert.Equal(t, chainID, responses[1].Result)
+}
+
 // A panic in a single request used to reach gin's default recovery, which
 // answers HTTP 500 with an empty body.
 func TestSingleRequest_PanicReturnsJSONRPCInternalError(t *testing.T) {

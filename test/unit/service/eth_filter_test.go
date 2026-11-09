@@ -9,6 +9,7 @@ import (
 	"github.com/hiero-ledger/hiero-hederium/internal/service"
 	"github.com/hiero-ledger/hiero-hederium/test/unit/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -433,4 +434,28 @@ func TestGetFilterChanges(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A block from the mirror node without a string hash used to panic the filter poll.
+func TestGetFilterChanges_BlockHashOfWrongType(t *testing.T) {
+	ctrl, mockClient, mockCache, _, filterService := setupFilterTest(t)
+	defer ctrl.Finish()
+
+	mockCache.EXPECT().
+		Get(gomock.Any(), "filterId_0x123abc", gomock.Any()).
+		DoAndReturn(func(_ interface{}, _ string, value interface{}) error {
+			*value.(*domain.Filter) = domain.Filter{ID: "0x123abc", Type: "new_block", BlockAtCreation: "0x1"}
+			return nil
+		})
+	mockClient.EXPECT().GetBlocks("0x1").Return([]map[string]interface{}{
+		{"hash": "0xblockhash1", "number": float64(1)},
+		{"hash": nil, "number": float64(2)},
+	}, nil)
+
+	var result interface{}
+	var errRpc *domain.RPCError
+	require.NotPanics(t, func() { result, errRpc = filterService.GetFilterChanges("0x123abc") })
+	assert.Nil(t, result)
+	require.NotNil(t, errRpc)
+	assert.Equal(t, domain.InternalError, errRpc.Code)
 }

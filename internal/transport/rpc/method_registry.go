@@ -80,7 +80,7 @@ func (m *Methods) registerEthMethods() {
 		},
 		Handler: func(ctx context.Context, params domain.RPCParams, services service.ServiceProvider) (interface{}, *domain.RPCError) {
 			p := params.(*domain.EthGetBalanceParams)
-			return services.EthService().GetBalance(p.Address, p.BlockNumber), nil
+			return services.EthService().GetBalance(p.Address, p.BlockNumber)
 		},
 	})
 
