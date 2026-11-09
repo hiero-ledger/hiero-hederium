@@ -10,13 +10,13 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/LimeChain/Hederium/internal/domain"
-	"github.com/LimeChain/Hederium/internal/infrastructure/cache"
-	"github.com/LimeChain/Hederium/internal/infrastructure/hedera"
-	"github.com/LimeChain/Hederium/internal/infrastructure/limiter"
-	"github.com/LimeChain/Hederium/internal/service"
-	"github.com/LimeChain/Hederium/internal/transport/rpc"
 	"github.com/gin-gonic/gin"
+	"github.com/hiero-ledger/hiero-hederium/internal/domain"
+	"github.com/hiero-ledger/hiero-hederium/internal/infrastructure/cache"
+	"github.com/hiero-ledger/hiero-hederium/internal/infrastructure/hedera"
+	"github.com/hiero-ledger/hiero-hederium/internal/infrastructure/limiter"
+	"github.com/hiero-ledger/hiero-hederium/internal/service"
+	"github.com/hiero-ledger/hiero-hederium/internal/transport/rpc"
 	"go.uber.org/zap"
 )
 

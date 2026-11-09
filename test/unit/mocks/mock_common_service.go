@@ -6,8 +6,8 @@ package mocks
 import (
 	"reflect"
 
-	"github.com/LimeChain/Hederium/internal/domain"
 	gomock "github.com/golang/mock/gomock"
+	"github.com/hiero-ledger/hiero-hederium/internal/domain"
 )
 
 // MockCommonService is a mock of CommonService interface.

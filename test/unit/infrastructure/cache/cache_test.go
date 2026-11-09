@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/LimeChain/Hederium/internal/infrastructure/cache"
+	"github.com/hiero-ledger/hiero-hederium/internal/infrastructure/cache"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )

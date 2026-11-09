@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/LimeChain/Hederium/internal/domain"
-	"github.com/LimeChain/Hederium/internal/infrastructure/cache"
+	"github.com/hiero-ledger/hiero-hederium/internal/domain"
+	"github.com/hiero-ledger/hiero-hederium/internal/infrastructure/cache"
 	"go.uber.org/zap"
 )
 

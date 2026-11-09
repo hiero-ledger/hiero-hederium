@@ -3,7 +3,7 @@ package service_test
 import (
 	"testing"
 
-	"github.com/LimeChain/Hederium/internal/service"
+	"github.com/hiero-ledger/hiero-hederium/internal/service"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )

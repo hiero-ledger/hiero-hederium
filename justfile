@@ -4,6 +4,10 @@ build: format lint
 test-unit: build
 	go test ./test/unit/... -v
 
+test-cover:
+	go test -race -covermode=atomic -coverpkg=./internal/... -coverprofile=coverage.out ./...
+	go tool cover -func=coverage.out | tail -1
+
 test-load:
 	go test ./test/load/... -v || true
 

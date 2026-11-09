@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/LimeChain/Hederium/internal/infrastructure/cache"
-	"github.com/LimeChain/Hederium/test/unit/mocks"
 	"github.com/golang/mock/gomock"
+	"github.com/hiero-ledger/hiero-hederium/internal/infrastructure/cache"
+	"github.com/hiero-ledger/hiero-hederium/test/unit/mocks"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -23,3 +23,6 @@ go.work.sum
 
 # env file
 .env
+
+# Server binary built by `go build -o hederium ./cmd/server`
+/hederium

@@ -1,4 +1,4 @@
-module github.com/LimeChain/Hederium
+module github.com/hiero-ledger/hiero-hederium
 
 go 1.22
 
