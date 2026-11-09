@@ -46,12 +46,28 @@ func NewHandler(
 	}
 }
 
-func (h *rpcHandler) HandleRequest(ctx context.Context, req *JSONRPCRequest) *JSONRPCResponse {
+// HandleRequest dispatches one JSON-RPC request. A panic in the method becomes
+// an internal error (-32603) for this request only, as in the relay; batch
+// items run in their own goroutines, where an unrecovered panic would end the
+// process.
+func (h *rpcHandler) HandleRequest(ctx context.Context, req *JSONRPCRequest) (resp *JSONRPCResponse) {
 	methodName := req.Method
 	h.logger.Info("JSON-RPC method called", zap.String("method", methodName))
 
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			h.logger.Error("Recovered from panic in JSON-RPC method",
+				zap.String("method", methodName),
+				zap.Any("panic", recovered),
+				zap.Stack("stack"),
+			)
+			// The panic value can carry internal details, so the client gets a generic message.
+			resp = &JSONRPCResponse{JSONRPC: "2.0", ID: req.ID, Error: domain.NewInternalError("Internal error")}
+		}
+	}()
+
 	result, rpcErr := h.dispatchMethod(ctx, methodName, req.Params)
-	resp := &JSONRPCResponse{JSONRPC: "2.0", ID: req.ID}
+	resp = &JSONRPCResponse{JSONRPC: "2.0", ID: req.ID}
 	if rpcErr != nil {
 		resp.Error = rpcErr
 	} else {

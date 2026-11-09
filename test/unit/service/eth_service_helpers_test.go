@@ -818,3 +818,45 @@ func TestProcessTransactionResponse(t *testing.T) {
 func stringPtr(s string) *string {
 	return &s
 }
+
+// A panic in one of the parallel mirror lookups that resolve an address used to
+// end the process: the lookups run in their own goroutines. Now that lookup
+// counts as failed and the others still resolve the address.
+func TestProcessTransactionResponse_PanickingAddressLookupIsIgnored(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockMirrorClient := mocks.NewMockMirrorClient(ctrl)
+	mockCacheService := mocks.NewMockCacheService(ctrl)
+
+	from := "0x" + strings.Repeat("3", 40)
+	to := "0x" + strings.Repeat("4", 40)
+	resolvedFrom := "0x" + strings.Repeat("e", 40)
+	resolvedTo := "0x" + strings.Repeat("f", 40)
+
+	mockCacheService.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("cache miss")).AnyTimes()
+	mockCacheService.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	mockMirrorClient.EXPECT().GetContractById(from).DoAndReturn(func(string) (*domain.ContractResponse, error) {
+		panic("boom: contract lookup")
+	})
+	mockMirrorClient.EXPECT().GetAccountById(from).Return(&domain.AccountResponse{EvmAddress: resolvedFrom}, nil)
+	mockMirrorClient.EXPECT().GetContractById(to).Return(&domain.ContractResponse{EvmAddress: resolvedTo}, nil)
+	mockMirrorClient.EXPECT().GetAccountById(to).DoAndReturn(func(string) (*domain.AccountResponse, error) {
+		panic("boom: account lookup")
+	})
+
+	s := service.NewEthService(nil, mockMirrorClient, nil, zap.NewNop(), nil, defaultChainId, mockCacheService)
+
+	result := s.ProcessTransactionResponse(domain.ContractResultResponse{
+		BlockHash: "0x" + strings.Repeat("1", 64),
+		Hash:      "0x" + strings.Repeat("2", 64),
+		From:      from,
+		To:        to,
+	})
+
+	tx, ok := result.(domain.Transaction)
+	assert.True(t, ok, "Expected Transaction type")
+	assert.Equal(t, resolvedFrom, tx.From)
+	assert.Equal(t, resolvedTo, *tx.To)
+}
