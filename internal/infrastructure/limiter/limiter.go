@@ -29,11 +29,18 @@ func NewTieredLimiter(cfg map[string]interface{}, operatorHbarBudget int) *Tiere
 	}
 
 	for tierName, val := range cfg {
-		if m, ok := val.(map[interface{}]interface{}); ok {
-			tl.tierConfigs[tierName] = &TierConfig{
-				RequestsPerMinute: m["requestsPerMinute"].(int),
-				HbarLimit:         m["hbarLimit"].(int),
-			}
+		m, ok := val.(map[interface{}]interface{})
+		if !ok {
+			continue
+		}
+		requestsPerMinute, rpmOk := m["requestsPerMinute"].(int)
+		hbarLimit, hbarOk := m["hbarLimit"].(int)
+		if !rpmOk || !hbarOk {
+			continue
+		}
+		tl.tierConfigs[tierName] = &TierConfig{
+			RequestsPerMinute: requestsPerMinute,
+			HbarLimit:         hbarLimit,
 		}
 	}
 	return tl
