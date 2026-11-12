@@ -23,7 +23,7 @@ type EthServicer interface {
 	EstimateGas(transaction interface{}, blockParam interface{}) (string, *domain.RPCError)
 	FeeHistory(blockCount string, newestBlock string, rewardPercentiles []string) (interface{}, *domain.RPCError)
 	GetAccounts() (interface{}, *domain.RPCError)
-	GetBalance(address string, blockNumberTagOrHash string) string
+	GetBalance(address string, blockNumberTagOrHash string) (string, *domain.RPCError)
 	GetBlockByHash(hash string, showDetails bool) (interface{}, *domain.RPCError)
 	GetBlockByNumber(numberOrTag string, showDetails bool) (interface{}, *domain.RPCError)
 	GetBlockNumber() (interface{}, *domain.RPCError)
@@ -232,7 +232,7 @@ func (s *EthService) GetBlockByNumber(numberOrTag string, showDetails bool) (int
 }
 
 // TODO: Add error handling
-func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) string {
+func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) (string, *domain.RPCError) {
 	s.logger.Info("Getting balance", zap.String("address", address), zap.String("blockNumberTagOrHash", blockNumberTagOrHash))
 
 	var block *domain.BlockResponse
@@ -240,12 +240,12 @@ func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) str
 	switch blockNumberTagOrHash {
 	case domain.BlockTagLatest, domain.BlockTagPending:
 		balance := s.mClient.GetBalance(address, "0")
-		return balance
+		return balance, nil
 	case domain.BlockTagEarliest:
 		block = s.mClient.GetBlockByHashOrNumber("0")
 		if block == nil {
 			s.logger.Debug("Earliest block not found")
-			return "0x0"
+			return "0x0", nil
 		}
 	default:
 		switch {
@@ -253,25 +253,25 @@ func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) str
 			block = s.mClient.GetBlockByHashOrNumber(blockNumberTagOrHash)
 			if block == nil {
 				s.logger.Debug("Block not found for hash", zap.String("hash", blockNumberTagOrHash))
-				return "0x0"
+				return "0x0", nil
 			}
 		case strings.HasPrefix(blockNumberTagOrHash, "0x"):
 			// If it's a hex number, convert it to decimal
 			num, err := strconv.ParseInt(blockNumberTagOrHash[2:], 16, 64)
 			if err != nil {
 				s.logger.Debug("Failed to parse block number", zap.Error(err))
-				return "0x0"
+				return "0x0", nil
 			}
 			block = s.mClient.GetBlockByHashOrNumber(strconv.FormatInt(num, 10))
 			if block == nil {
 				s.logger.Debug("Block not found for number", zap.String("number", blockNumberTagOrHash))
-				return "0x0"
+				return "0x0", nil
 			}
 		default:
 			block = s.mClient.GetBlockByHashOrNumber(blockNumberTagOrHash)
 			if block == nil {
 				s.logger.Debug("Block not found for number", zap.String("number", blockNumberTagOrHash))
-				return "0x0"
+				return "0x0", nil
 			}
 		}
 	}
@@ -279,15 +279,21 @@ func (s *EthService) GetBalance(address string, blockNumberTagOrHash string) str
 	latestBlock, err := s.mClient.GetLatestBlock()
 	if err != nil {
 		s.logger.Error("Failed to get latest block", zap.Error(err))
+		return "", domain.NewInternalError("Failed to get latest block")
 	}
-	if float64(block.Number+10) >= latestBlock["number"].(float64) {
+	latestBlockNumber, ok := latestBlock["number"].(float64)
+	if !ok {
+		s.logger.Error("Latest block has no numeric block number", zap.Any("number", latestBlock["number"]))
+		return "", domain.NewInternalError("Failed to get latest block")
+	}
+	if float64(block.Number+10) >= latestBlockNumber {
 		balance := s.mClient.GetBalance(address, "0")
-		return balance
+		return balance, nil
 	}
 
 	balance := s.mClient.GetBalance(address, block.Timestamp.To)
 
-	return balance
+	return balance, nil
 }
 
 // TODO: Add error handling
@@ -311,7 +317,11 @@ func (s *EthService) GetTransactionCount(address string, blockNumberOrTag string
 	if account == nil {
 		return "0x0"
 	}
-	accountResponse := account.(domain.AccountResponse)
+	accountResponse, ok := account.(domain.AccountResponse)
+	if !ok {
+		s.logger.Error("Unexpected account response type", zap.String("type", fmt.Sprintf("%T", account)))
+		return "0x0"
+	}
 
 	if requestingLatest {
 		return fmt.Sprintf("0x%x", accountResponse.EthereumNonce)
@@ -325,7 +335,11 @@ func (s *EthService) GetTransactionCount(address string, blockNumberOrTag string
 	if contractResult == nil {
 		return "0x0"
 	}
-	contractResultResponse := contractResult.(domain.ContractResultResponse)
+	contractResultResponse, ok := contractResult.(domain.ContractResultResponse)
+	if !ok {
+		s.logger.Error("Unexpected contract result type", zap.String("type", fmt.Sprintf("%T", contractResult)))
+		return "0x0"
+	}
 
 	nonce := fmt.Sprintf("0x%x", contractResultResponse.Nonce+1) // We add 1 here, because of the nature nonce is incremented.
 
@@ -354,8 +368,14 @@ func (s *EthService) EstimateGas(transaction interface{}, blockParam interface{}
 		return "0x0", domain.NewRPCError(domain.ServerError, "Failed to post call")
 	}
 
+	gasHex, ok := callResult.(string)
+	if !ok {
+		s.logger.Error("Unexpected gas estimate type", zap.String("type", fmt.Sprintf("%T", callResult)))
+		return "0x0", domain.NewInternalError("Unexpected gas estimate from mirror node")
+	}
+
 	// Remove leading zeros from the result string
-	result := NormalizeHexString(callResult.(string))
+	result := NormalizeHexString(gasHex)
 
 	s.logger.Info("Returning gas", zap.Any("gas", result))
 	return result, nil
@@ -402,7 +422,11 @@ func (s *EthService) GetTransactionByHash(hash string) (interface{}, *domain.RPC
 		// TODO: Here we should handle synthetic transactions
 		return nil, nil
 	}
-	contractResultResponse := contractResult.(domain.ContractResultResponse)
+	contractResultResponse, ok := contractResult.(domain.ContractResultResponse)
+	if !ok {
+		s.logger.Error("Unexpected contract result type", zap.String("type", fmt.Sprintf("%T", contractResult)))
+		return nil, domain.NewInternalError("Unexpected contract result from mirror node")
+	}
 
 	transaction := s.ProcessTransactionResponse(contractResultResponse)
 
@@ -429,7 +453,11 @@ func (s *EthService) GetTransactionReceipt(hash string) (interface{}, *domain.RP
 		// TODO: Here we should handle synthetic transactions
 		return nil, nil
 	}
-	contractResultResponse := contractResult.(domain.ContractResultResponse)
+	contractResultResponse, ok := contractResult.(domain.ContractResultResponse)
+	if !ok {
+		s.logger.Error("Unexpected contract result type", zap.String("type", fmt.Sprintf("%T", contractResult)))
+		return nil, domain.NewInternalError("Unexpected contract result from mirror node")
+	}
 
 	// Convert logs
 	logs := make([]domain.Log, len(contractResultResponse.Logs))
@@ -769,7 +797,13 @@ func (s *EthService) SendRawTransaction(data string) (interface{}, *domain.RPCEr
 		return nil, rpcErr
 	}
 
-	gasPrice, err := HexToDec(gasPriceHex.(string))
+	gasPriceStr, ok := gasPriceHex.(string)
+	if !ok {
+		s.logger.Error("Unexpected gas price type", zap.String("type", fmt.Sprintf("%T", gasPriceHex)))
+		return nil, domain.NewInternalError("Failed to parse gas price")
+	}
+
+	gasPrice, err := HexToDec(gasPriceStr)
 	if err != nil {
 		s.logger.Error("Failed to parse gas price", zap.Error(err))
 		return nil, domain.NewRPCError(domain.ServerError, "Failed to parse gas price")

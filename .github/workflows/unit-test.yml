@@ -81,3 +81,18 @@ jobs:
           total="$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}')"
           echo "Total coverage of ./internal/...: $total"
           echo "### Unit test coverage of \`./internal/...\`: $total" >> "$GITHUB_STEP_SUMMARY"
+
+      # Arbitrary bodies through the real router must never crash the process.
+      # Minimizing each new interesting input for the default 60s stalls the run.
+      - name: Fuzz JSON-RPC requests
+        id: fuzz
+        run: go test ./test/unit/transport/http_server -run '^$' -fuzz '^FuzzRPCRequest$' -fuzztime 60s -fuzzminimizetime 1s
+
+      # A failing input is written under testdata/fuzz; keep it to reproduce with
+      # `go test ./test/unit/transport/http_server -run FuzzRPCRequest/<file>`.
+      - name: Upload failing fuzz input
+        if: failure() && steps.fuzz.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-failing-input
+          path: test/unit/transport/http_server/testdata/fuzz/
