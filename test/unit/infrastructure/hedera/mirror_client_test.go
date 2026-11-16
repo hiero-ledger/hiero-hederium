@@ -49,6 +49,16 @@ func TestNewMirrorClient(t *testing.T) {
 	assert.Equal(t, time.Duration(timeoutSeconds)*time.Second, client.Timeout)
 }
 
+func TestNewMirrorClientWithTimeout_KeepsSubSecondTimeout(t *testing.T) {
+	setup := setupTest(t)
+	defer setup.ctrl.Finish()
+
+	client := hedera.NewMirrorClientWithTimeout("http://test.com", 500*time.Millisecond, setup.logger, setup.cacheService)
+
+	assert.Equal(t, "http://test.com", client.BaseURL)
+	assert.Equal(t, 500*time.Millisecond, client.Timeout)
+}
+
 func TestGetLatestBlock_Success(t *testing.T) {
 	setup := setupTest(t)
 	defer setup.ctrl.Finish()
