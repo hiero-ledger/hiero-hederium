@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 
-	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
 	"github.com/hiero-ledger/hiero-hederium/internal/infrastructure/cache"
@@ -16,20 +17,21 @@ import (
 )
 
 func main() {
-	if err := config.LoadConfig(); err != nil {
-		fmt.Printf("Failed to load configuration: %v\n", err)
-		return
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
+		os.Exit(1)
 	}
-	log := logger.InitLogger(viper.GetString("logging.level"))
+	log := logger.InitLogger(cfg.Logging.Level)
 	defer func() { _ = log.Sync() }()
 
 	// Log startup information
-	startup.LogStartup()
+	startup.LogStartup(cfg)
 
 	hClient, err := hedera.NewHederaClient(
-		viper.GetString("hedera.network"),
-		viper.GetString("hedera.operatorId"),
-		viper.GetString("hedera.operatorKey"),
+		cfg.Hedera.Network,
+		cfg.Hedera.OperatorID,
+		cfg.Hedera.OperatorKey.Reveal(),
 	)
 	if err != nil {
 		// log.Fatal exits immediately; ensure sync happens before exiting
@@ -37,21 +39,20 @@ func main() {
 		return
 	}
 
-	applicationVersion := viper.GetString("application.version")
-	chainId := viper.GetString("hedera.chainId")
-	apiKeyStore := limiter.NewAPIKeyStore(viper.Get("apiKeys"))
-	tieredLimiter := limiter.NewTieredLimiter(viper.GetStringMap("limiter"), viper.GetInt("hedera.hbarBudget"))
+	apiKeyStore := limiter.NewAPIKeyStore(cfg.APIKeys)
+	tieredLimiter := limiter.NewTieredLimiter(cfg.Limiter, cfg.Hedera.HbarBudget)
 
-	cacheService := cache.NewMemoryCache(viper.GetDuration("cache.defaultExpiration"), viper.GetDuration("cache.cleanupInterval"))
+	cacheService := cache.NewMemoryCache(cfg.Cache.DefaultExpiration, cfg.Cache.CleanupInterval)
 
-	mClient := hedera.NewMirrorClient(viper.GetString("mirrorNode.baseUrl"), viper.GetInt("mirrorNode.timeoutSeconds"), log, cacheService)
+	mClient := hedera.NewMirrorClientWithTimeout(cfg.MirrorNode.BaseURL, cfg.MirrorNode.Timeout, log, cacheService)
 
-	enforceAPIKey := viper.GetBool("features.enforceApiKey")
-	enableBatchRequests := viper.GetBool("features.enableBatchRequests")
-
-	port := viper.GetString("server.port")
-
-	server := http_server.NewServer(hClient, mClient, log, applicationVersion, chainId, apiKeyStore, tieredLimiter, enforceAPIKey, enableBatchRequests, cacheService, port)
+	server := http_server.NewServer(
+		hClient, mClient, log,
+		cfg.Application.Version, cfg.Hedera.ChainID,
+		apiKeyStore, tieredLimiter,
+		cfg.Features.EnforceAPIKey, cfg.Features.EnableBatchRequests,
+		cacheService, strconv.Itoa(cfg.Server.Port),
+	)
 	if err := server.Start(); err != nil {
 		log.Error("Failed to start server", zap.Error(err))
 		return
