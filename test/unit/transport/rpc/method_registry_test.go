@@ -69,13 +69,16 @@ func TestMethods_RegistersEveryMethodWithItsParamsType(t *testing.T) {
 }
 
 // A handler given params of another type answers with an internal error
-// instead of panicking on the type assertion.
+// before it runs, instead of panicking on the type assertion. Methods without
+// parameters are checked too: their handlers ignore the params, but the
+// wrapper still asserts the type.
 func TestMethods_HandlerRejectsParamsOfAnotherType(t *testing.T) {
 	methods := rpc.NewMethods()
 
 	for name, paramsType := range registeredMethods {
+		var wrongType domain.RPCParams = &domain.NoParameters{}
 		if paramsType == "*domain.NoParameters" {
-			continue // these handlers ignore their params
+			wrongType = &domain.EthGetBalanceParams{}
 		}
 		info, ok := methods.GetMethod(name)
 		require.True(t, ok, name)
@@ -83,7 +86,7 @@ func TestMethods_HandlerRejectsParamsOfAnotherType(t *testing.T) {
 		var result interface{}
 		var errRpc *domain.RPCError
 		require.NotPanics(t, func() {
-			result, errRpc = info.Handler(context.Background(), &domain.NoParameters{}, fakeServiceProvider{})
+			result, errRpc = info.Handler(context.Background(), wrongType, fakeServiceProvider{})
 		}, name)
 		assert.Nil(t, result, name)
 		require.NotNil(t, errRpc, name)
