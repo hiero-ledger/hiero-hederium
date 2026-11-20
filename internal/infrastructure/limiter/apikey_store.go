@@ -8,11 +8,16 @@ func NewAPIKeyStore(apiKeys interface{}) *APIKeyStore {
 	keys := make(map[string]string)
 	if kArr, ok := apiKeys.([]interface{}); ok {
 		for _, kv := range kArr {
-			if keyMap, ok := kv.(map[interface{}]interface{}); ok {
-				apikey := keyMap["key"].(string)
-				tier := keyMap["tier"].(string)
-				keys[apikey] = tier
+			keyMap, ok := kv.(map[interface{}]interface{})
+			if !ok {
+				continue
 			}
+			apikey, keyOk := keyMap["key"].(string)
+			tier, tierOk := keyMap["tier"].(string)
+			if !keyOk || !tierOk {
+				continue
+			}
+			keys[apikey] = tier
 		}
 	}
 	return &APIKeyStore{keys: keys}

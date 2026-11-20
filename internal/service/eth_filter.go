@@ -254,7 +254,12 @@ func (s *filterService) GetFilterChanges(filterID string) (interface{}, *domain.
 		}
 		filter.LastQueried = fmt.Sprintf("0x%x", latestBlock)
 		for _, b := range blocks {
-			blockResult = append(blockResult, b["hash"].(string))
+			hash, ok := b["hash"].(string)
+			if !ok {
+				s.logger.Error("block from mirror node has no string hash", zap.Any("hash", b["hash"]))
+				return nil, domain.NewInternalError("unexpected error")
+			}
+			blockResult = append(blockResult, hash)
 		}
 
 		result = blockResult

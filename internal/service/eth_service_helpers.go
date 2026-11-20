@@ -646,6 +646,17 @@ func (s *EthService) resolveAddressType(address string) (interface{}, error) {
 
 	tryResolve := func(f func() (interface{}, error)) {
 		defer wg.Done()
+		// Each lookup runs in its own goroutine, out of reach of the per-request
+		// recover, so a panic counts as a failed lookup here.
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				s.logger.Error("Recovered from panic while resolving address type",
+					zap.String("address", address),
+					zap.Any("panic", recovered),
+					zap.Stack("stack"),
+				)
+			}
+		}()
 		if data, err := f(); err == nil && data != nil {
 			select {
 			case res <- data:

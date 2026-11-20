@@ -35,10 +35,15 @@ type rpcHandler struct {
 	services service.ServiceProvider
 }
 
+// NewHandler builds the JSON-RPC handler. A nil logger is replaced with a
+// no-op one, because the panic recovery in HandleRequest logs through it.
 func NewHandler(
 	logger *zap.Logger,
 	services service.ServiceProvider,
 ) RPCHandler {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	return &rpcHandler{
 		logger:   logger,
 		registry: NewMethods(),
@@ -46,12 +51,33 @@ func NewHandler(
 	}
 }
 
-func (h *rpcHandler) HandleRequest(ctx context.Context, req *JSONRPCRequest) *JSONRPCResponse {
+// HandleRequest dispatches one JSON-RPC request. A panic anywhere after the
+// nil check, logging included, becomes an internal error (-32603) for this
+// request only, as in the relay; batch items run in their own goroutines,
+// where an unrecovered panic would end the process.
+func (h *rpcHandler) HandleRequest(ctx context.Context, req *JSONRPCRequest) (resp *JSONRPCResponse) {
+	// Checked before the defer, because the recovery reads req.
+	if req == nil {
+		return &JSONRPCResponse{JSONRPC: "2.0", Error: domain.NewInvalidRequestError("Invalid Request")}
+	}
+
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			h.logger.Error("Recovered from panic in JSON-RPC method",
+				zap.String("method", req.Method),
+				zap.Any("panic", recovered),
+				zap.Stack("stack"),
+			)
+			// The panic value can carry internal details, so the client gets a generic message.
+			resp = &JSONRPCResponse{JSONRPC: "2.0", ID: req.ID, Error: domain.NewInternalError("Internal error")}
+		}
+	}()
+
 	methodName := req.Method
 	h.logger.Info("JSON-RPC method called", zap.String("method", methodName))
 
 	result, rpcErr := h.dispatchMethod(ctx, methodName, req.Params)
-	resp := &JSONRPCResponse{JSONRPC: "2.0", ID: req.ID}
+	resp = &JSONRPCResponse{JSONRPC: "2.0", ID: req.ID}
 	if rpcErr != nil {
 		resp.Error = rpcErr
 	} else {

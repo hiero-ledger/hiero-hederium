@@ -232,7 +232,10 @@ func (p *EthGetLogsParams) FromPositionalParams(params []interface{}) error {
 		return fmt.Errorf("failed to unmarshal filter object: %v", err)
 	}
 
-	validate := binding.Validator.Engine().(*validator.Validate)
+	validate, ok := binding.Validator.Engine().(*validator.Validate)
+	if !ok {
+		return fmt.Errorf("unexpected validator engine %T", binding.Validator.Engine())
+	}
 	if err := validate.Struct(&filter); err != nil {
 		return fmt.Errorf("invalid filter parameters: %v", err)
 	}

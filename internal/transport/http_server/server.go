@@ -22,6 +22,8 @@ import (
 
 type Server interface {
 	Start() error
+	// Handler returns the HTTP handler that serves JSON-RPC requests.
+	Handler() http.Handler
 }
 
 type server struct {
@@ -51,7 +53,8 @@ func NewServer(
 ) Server {
 	serviceProvider := service.NewServiceProvider(hClient, mClient, logger, applicationVersion, chainId, apiKeyStore, tieredLimiter, cacheService)
 
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Logger(), JSONRPCRecovery(logger))
 
 	// Register custom validators used by request structs
 	if err := rpc.RegisterCustomValidators(); err != nil {
@@ -82,6 +85,10 @@ func NewServer(
 	}
 
 	return s
+}
+
+func (s *server) Handler() http.Handler {
+	return s.router
 }
 
 func (s *server) Start() error {

@@ -1170,7 +1170,8 @@ func TestGetBalance(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.setupMock()
-			result := s.GetBalance(tc.address, tc.blockParam)
+			result, errRpc := s.GetBalance(tc.address, tc.blockParam)
+			assert.Nil(t, errRpc)
 			assert.Equal(t, tc.expectedResult, result)
 		})
 	}
@@ -1205,7 +1206,8 @@ func TestGetBalance_Latest(t *testing.T) {
 		cacheService,
 	)
 
-	result := s.GetBalance("0x123", "latest")
+	result, errRpc := s.GetBalance("0x123", "latest")
+	assert.Nil(t, errRpc)
 	assert.Equal(t, "0x2a", result)
 }
 
@@ -1252,7 +1254,8 @@ func TestGetBalance_Earliest(t *testing.T) {
 		cacheService,
 	)
 
-	result := s.GetBalance("0x123", "earliest")
+	result, errRpc := s.GetBalance("0x123", "earliest")
+	assert.Nil(t, errRpc)
 	assert.Equal(t, "0x0", result)
 }
 
@@ -1296,7 +1299,8 @@ func TestGetBalance_SpecificBlock(t *testing.T) {
 		Return("0x64")
 
 	// Call the method
-	result := s.GetBalance("0x123", "100")
+	result, errRpc := s.GetBalance("0x123", "100")
+	assert.Nil(t, errRpc)
 
 	// Assert the result
 	assert.Equal(t, "0x64", result)
@@ -1329,7 +1333,8 @@ func TestGetBalance_BlockNotFound(t *testing.T) {
 		cacheService,
 	)
 
-	result := s.GetBalance("0x123", "999999")
+	result, errRpc := s.GetBalance("0x123", "999999")
+	assert.Nil(t, errRpc)
 	assert.Equal(t, "0x0", result)
 }
 
