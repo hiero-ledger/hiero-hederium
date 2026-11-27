@@ -108,7 +108,29 @@ func (r *resolver) httpURL(s setting) string {
 		r.problem("%s must be an http or https URL", f.source)
 		return ""
 	}
-	return f.raw
+	// The mirror client appends "/api/v1/...", so a trailing slash would give
+	// "//api/v1/...", which the mirror node answers with 404. The relay accepts
+	// the URL with or without one.
+	return strings.TrimRight(f.raw, "/")
+}
+
+// networks are the names NewHederaClient accepts.
+var networks = []string{"mainnet", "testnet", "previewnet", "local"}
+
+// network reads the Hedera network name. Like the relay, it ignores case.
+func (r *resolver) network(s setting) string {
+	f, ok := r.need(s)
+	if !ok {
+		return ""
+	}
+	name := strings.ToLower(f.raw)
+	for _, known := range networks {
+		if name == known {
+			return name
+		}
+	}
+	r.problem("%s must be one of %s", f.source, strings.Join(networks, ", "))
+	return ""
 }
 
 // zapLevels maps the level names the relay accepts (pino's), and zap's own, to

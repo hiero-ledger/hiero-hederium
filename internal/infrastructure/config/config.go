@@ -180,7 +180,7 @@ func LoadFrom(dir string) (*Config, error) {
 			Port: r.integer(serverPort, 7546, 1, 65535),
 		},
 		Hedera: Hedera{
-			Network:     r.mandatory(hederaNetwork),
+			Network:     r.network(hederaNetwork),
 			ChainID:     r.chainID(hederaChainID),
 			OperatorID:  r.mandatory(hederaOperatorID),
 			OperatorKey: Secret(r.mandatory(hederaOperatorKey)),

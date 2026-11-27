@@ -360,6 +360,7 @@ func TestLoad_BadValueIsRefusedAndNamed(t *testing.T) {
 		{"BATCH_REQUESTS_ENABLED", []string{"yes", "1", "on"}, "BATCH_REQUESTS_ENABLED must be true or false"},
 		{"FEATURES_ENFORCEAPIKEY", []string{"no"}, "FEATURES_ENFORCEAPIKEY must be true or false"},
 		{"LOG_LEVEL", []string{"loud", "verbose"}, "LOG_LEVEL must be one of trace, debug, info, warn, error, fatal, silent"},
+		{"HEDERA_NETWORK", []string{"mainet", "devnet", "test net", `{"127.0.0.1:50211":"0.0.3"}`}, "HEDERA_NETWORK must be one of mainnet, testnet, previewnet, local"},
 	}
 	for _, tt := range tests {
 		for _, value := range tt.values {
@@ -376,6 +377,54 @@ func TestLoad_BadValueIsRefusedAndNamed(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestLoad_NetworkIgnoresCase(t *testing.T) {
+	for given, want := range map[string]string{
+		"TESTNET":    "testnet",
+		"Mainnet":    "mainnet",
+		"previewnet": "previewnet",
+		"LOCAL":      "local",
+	} {
+		t.Run(given, func(t *testing.T) {
+			isolate(t)
+			setEnv(t, mandatoryEnv)
+			t.Setenv("HEDERA_NETWORK", given)
+
+			cfg, err := config.LoadFrom(noFile(t))
+			require.NoError(t, err)
+			assert.Equal(t, want, cfg.Hedera.Network)
+		})
+	}
+}
+
+func TestLoad_MirrorNodeURLLosesTrailingSlashes(t *testing.T) {
+	for given, want := range map[string]string{
+		"https://mirror.example/":         "https://mirror.example",
+		"https://mirror.example//":        "https://mirror.example",
+		"http://127.0.0.1:5551/mirror/":   "http://127.0.0.1:5551/mirror",
+		"https://mirror.example/no-slash": "https://mirror.example/no-slash",
+	} {
+		t.Run("env "+given, func(t *testing.T) {
+			isolate(t)
+			setEnv(t, mandatoryEnv)
+			t.Setenv("MIRROR_NODE_URL", given)
+
+			cfg, err := config.LoadFrom(noFile(t))
+			require.NoError(t, err)
+			assert.Equal(t, want, cfg.MirrorNode.BaseURL)
+		})
+	}
+
+	t.Run("file", func(t *testing.T) {
+		isolate(t)
+		setEnv(t, mandatoryEnv)
+		t.Setenv("MIRROR_NODE_URL", "")
+
+		cfg, err := config.LoadFrom(writeFile(t, "mirrorNode:\n  baseUrl: \"https://mirror.example/\"\n"))
+		require.NoError(t, err)
+		assert.Equal(t, "https://mirror.example", cfg.MirrorNode.BaseURL)
+	})
 }
 
 func TestLoad_BadValueInFileNamesTheKey(t *testing.T) {

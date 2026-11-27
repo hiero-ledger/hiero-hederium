@@ -12,26 +12,26 @@ data:
       version: {{ .Values.config.application.version | quote }}
     
     server:
-      port: {{ .Values.config.server.port }}
+      port: {{ .Values.config.server.port | int64 }}
     
     hedera:
       network: {{ .Values.config.hedera.network | quote }}
       operatorId: {{ .Values.config.hedera.operatorId | quote }}
       operatorKey: {{ .Values.config.hedera.operatorKey | quote }}
       chainId: {{ .Values.config.hedera.chainId | quote }}
-      hbarBudget: {{ .Values.config.hedera.hbarBudget | quote }}
+      hbarBudget: {{ .Values.config.hedera.hbarBudget | int64 }}
     
     mirrorNode:
       baseUrl: {{ .Values.config.mirrorNode.baseUrl | quote }}
-      timeoutSeconds: {{ .Values.config.mirrorNode.timeoutSeconds | quote }}
+      timeoutSeconds: {{ .Values.config.mirrorNode.timeoutSeconds | int64 }}
     
     limiter:
       free:
-        requestsPerMinute: {{ .Values.config.limiter.free.requestsPerMinute | quote }}
-        hbarLimit: {{ .Values.config.limiter.free.hbarLimit | quote }}
+        requestsPerMinute: {{ .Values.config.limiter.free.requestsPerMinute | int64 }}
+        hbarLimit: {{ .Values.config.limiter.free.hbarLimit | int64 }}
       premium:
-        requestsPerMinute: {{ .Values.config.limiter.premium.requestsPerMinute | quote }}
-        hbarLimit: {{ .Values.config.limiter.premium.hbarLimit | quote }}
+        requestsPerMinute: {{ .Values.config.limiter.premium.requestsPerMinute | int64 }}
+        hbarLimit: {{ .Values.config.limiter.premium.hbarLimit | int64 }}
     
     logging:
       level: {{ .Values.config.logging.level | quote }}
@@ -45,6 +45,7 @@ data:
     
     features:
       enforceApiKey: {{ .Values.config.features.enforceApiKey }}
+      enableBatchRequests: {{ .Values.config.features.enableBatchRequests }}
     
     cache:
       defaultExpiration: {{ .Values.config.cache.defaultExpiration | quote }}

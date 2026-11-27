@@ -17,9 +17,9 @@ An environment variable that is set but empty counts as not set.
 
 | Relay variable | Hederium variable | YAML key | Default | Description |
 | --- | --- | --- | --- | --- |
-| `HEDERA_NETWORK` | `HEDERA_NETWORK` | `hedera.network` | none, mandatory | Network to connect to: `mainnet`, `testnet`, `previewnet` or `local` |
+| `HEDERA_NETWORK` | `HEDERA_NETWORK` | `hedera.network` | none, mandatory | Network to connect to: `mainnet`, `testnet`, `previewnet` or `local`, in any letter case |
 | `CHAIN_ID` | `HEDERA_CHAINID` | `hedera.chainId` | none, mandatory | Chain ID, in decimal (`296`) or hex (`0x128`) |
-| `MIRROR_NODE_URL` | `MIRRORNODE_BASEURL` | `mirrorNode.baseUrl` | none, mandatory | Base URL of the Mirror Node REST API (`http` or `https`) |
+| `MIRROR_NODE_URL` | `MIRRORNODE_BASEURL` | `mirrorNode.baseUrl` | none, mandatory | Base URL of the Mirror Node REST API (`http` or `https`), without `/api/v1`. A trailing `/` is ignored |
 | `OPERATOR_ID_MAIN` | `HEDERA_OPERATORID` | `hedera.operatorId` | none, mandatory | Operator account ID |
 | `OPERATOR_KEY_MAIN` | `HEDERA_OPERATORKEY` | `hedera.operatorKey` | none, mandatory | Operator private key. Never printed or logged |
 | `MIRROR_NODE_TIMEOUT` | `MIRRORNODE_TIMEOUTSECONDS` | `mirrorNode.timeoutSeconds` | 10 seconds | Timeout of a Mirror Node request, above zero. See [Units](#units) |
@@ -63,6 +63,8 @@ Hederium logs with zap, which has no `trace` or `silent` level. `trace` runs as 
 - Only the relay variables in the table above are read. Other relay variables are ignored.
 - The relay reads a boolean other than `true` as false, and a `CHAIN_ID` that is not a number as `0xNaN`. Hederium refuses both at start-up.
 - Hederium has no read-only mode, so the operator ID and key are always mandatory.
+- The relay also accepts a JSON map of consensus nodes in `HEDERA_NETWORK`. Hederium accepts only the four network names.
+- The relay adds `https://` to a `MIRROR_NODE_URL` without a scheme. Hederium refuses such a URL.
 - Hederium does not read a `.env` file. Pass the variables through the environment, for example with `docker run --env-file`.
 
 ## Examples

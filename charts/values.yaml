@@ -90,6 +90,9 @@ config:
   
   features:
     enforceApiKey: false
+    # Off keeps the behaviour of earlier chart versions. Hederium itself, like the
+    # relay, accepts batch requests when this is not set.
+    enableBatchRequests: false
   
   cache:
     defaultExpiration: "1h"
