@@ -43,9 +43,15 @@ type MirrorClient struct {
 }
 
 func NewMirrorClient(baseURL string, timeoutSeconds int, logger *zap.Logger, cacheService cache.CacheService) *MirrorClient {
+	return NewMirrorClientWithTimeout(baseURL, time.Duration(timeoutSeconds)*time.Second, logger, cacheService)
+}
+
+// NewMirrorClientWithTimeout is NewMirrorClient with a timeout of any
+// precision, so one given in milliseconds is not rounded to whole seconds.
+func NewMirrorClientWithTimeout(baseURL string, timeout time.Duration, logger *zap.Logger, cacheService cache.CacheService) *MirrorClient {
 	return &MirrorClient{
 		BaseURL:      baseURL,
-		Timeout:      time.Duration(timeoutSeconds) * time.Second,
+		Timeout:      timeout,
 		logger:       logger,
 		cacheService: cacheService,
 	}

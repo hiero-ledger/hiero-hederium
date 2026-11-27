@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/spf13/viper"
+	"github.com/hiero-ledger/hiero-hederium/internal/infrastructure/config"
 )
 
 const logo = `
@@ -16,54 +16,44 @@ const logo = `
 ╚═╝  ╚═╝╚══════╝╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝ ╚═════╝ ╚═╝     ╚═╝
 `
 
-func LogStartup() {
+// LogStartup prints the banner and the settings the server starts with. It
+// prints no secrets: the operator key is left out and API keys are masked.
+func LogStartup(cfg *config.Config) {
 	// Print ASCII logo
 	fmt.Print(logo)
 
 	// Print application version
-	version := viper.GetString("application.version")
-	fmt.Printf("Starting Hederium v%s\n\n", version)
+	fmt.Printf("Starting Hederium v%s\n\n", cfg.Application.Version)
 
 	// Print network configuration
-	network := viper.GetString("hedera.network")
-	chainId := viper.GetString("hedera.chainId")
 	fmt.Println("Network Configuration:")
-	fmt.Printf("  Network: %s\n", network)
-	fmt.Printf("  Chain ID: %s\n\n", chainId)
+	fmt.Printf("  Network: %s\n", cfg.Hedera.Network)
+	fmt.Printf("  Chain ID: %s\n\n", cfg.Hedera.ChainID)
 
 	// Print server configuration
-	port := viper.GetString("server.port")
-	enforceAPIKey := viper.GetBool("features.enforceApiKey")
-	enableBatchRequests := viper.GetBool("features.enableBatchRequests")
 	fmt.Println("Server Configuration:")
-	fmt.Printf("  Port: %s\n", port)
-	fmt.Printf("  Enforce API Key: %v\n", enforceAPIKey)
-	fmt.Printf("  Enable Batch Requests: %v\n\n", enableBatchRequests)
+	fmt.Printf("  Port: %d\n", cfg.Server.Port)
+	fmt.Printf("  Enforce API Key: %v\n", cfg.Features.EnforceAPIKey)
+	fmt.Printf("  Enable Batch Requests: %v\n\n", cfg.Features.EnableBatchRequests)
 
 	// Print cache configuration
-	cacheExpiration := viper.GetDuration("cache.defaultExpiration")
-	cacheCleanup := viper.GetDuration("cache.cleanupInterval")
 	fmt.Println("Cache Configuration:")
-	fmt.Printf("  Default Expiration: %s\n", cacheExpiration)
-	fmt.Printf("  Cleanup Interval: %s\n\n", cacheCleanup)
+	fmt.Printf("  Default Expiration: %s\n", cfg.Cache.DefaultExpiration)
+	fmt.Printf("  Cleanup Interval: %s\n\n", cfg.Cache.CleanupInterval)
 
 	// Print mirror node configuration
-	mirrorNodeURL := viper.GetString("mirrorNode.baseUrl")
-	mirrorNodeTimeout := viper.GetInt("mirrorNode.timeoutSeconds")
 	fmt.Println("Mirror Node Configuration:")
-	fmt.Printf("  Base URL: %s\n", mirrorNodeURL)
-	fmt.Printf("  Timeout: %d seconds\n\n", mirrorNodeTimeout)
+	fmt.Printf("  Base URL: %s\n", cfg.MirrorNode.BaseURL)
+	fmt.Printf("  Timeout: %s\n\n", cfg.MirrorNode.Timeout)
 
 	// Print rate limiting configuration
-	hbarBudget := viper.GetInt("hedera.hbarBudget")
 	fmt.Println("Rate Limiting Configuration:")
-	fmt.Printf("  HBAR Budget: %d\n\n", hbarBudget)
+	fmt.Printf("  HBAR Budget: %d\n\n", cfg.Hedera.HbarBudget)
 
 	// Print API keys if present
-	apiKeys := viper.Get("apiKeys")
-	if apiKeys != nil {
+	if cfg.APIKeys != nil {
 		fmt.Println("API Keys Configuration:")
-		apiKeysSlice, ok := apiKeys.([]interface{})
+		apiKeysSlice, ok := cfg.APIKeys.([]interface{})
 		if ok {
 			for i, key := range apiKeysSlice {
 				if keyStr, ok := key.(string); ok {

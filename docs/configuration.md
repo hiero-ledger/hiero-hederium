@@ -1,60 +1,88 @@
 # Configuration
 
-This document describes all available configuration options for the Hederium service. The configuration can be provided through a YAML file located at `configs/config.yaml`.
+Hederium reads its settings once, at start-up, from environment variables and an optional YAML file. If a setting is missing or has a bad value, the server does not start and prints every problem it found.
 
-## Overview
+## Where a setting comes from
 
-The configuration is structured into several main sections:
-- Environment
-- Application
-- Server
-- Hedera
-- Mirror Node
-- Rate Limiter
-- Logging
-- API Keys
-- Features
-- Cache
+Each setting is looked up in four places. The first one that has a value wins:
 
-## Configuration Options
+1. **The relay's environment variable.** Hederium accepts the names the [Hedera JSON-RPC relay](https://github.com/hiero-ledger/hiero-json-rpc-relay) uses, such as `MIRROR_NODE_URL`, so a relay deployment can reuse its environment.
+2. **Hederium's own environment variable.** This is the YAML key in upper case with `_` in place of `.`, such as `MIRRORNODE_BASEURL`. The older dotted form, `MIRRORNODE.BASEURL`, still works.
+3. **The file `configs/config.yaml`**, relative to the working directory. The file is optional.
+4. **The default.**
 
-| Section | Option | Type | Default Value | Description |
-|---------|--------|------|---------------|-------------|
-| `environment` | - | string | `"development"` | Application environment setting |
-| **Application** |
-| `application.version` | - | string | `"0.1.0"` | Version of the application |
-| **Server** |
-| `server.port` | - | integer | `7546` | HTTP server port |
-| **Hedera** |
-| `hedera.network` | - | string | `"testnet"` | Hedera network to connect to |
-| `hedera.operatorId` | - | string | `"0.0.1466"` | Hedera operator account ID |
-| `hedera.operatorKey` | - | string | - | Hedera operator private key |
-| `hedera.chainId` | - | string | `"0x128"` | Chain ID in hexadecimal format |
-| `hedera.hbarBudget` | - | integer | `1000` | HBAR budget limit |
-| **Mirror Node** |
-| `mirrorNode.baseUrl` | - | string | `"https://testnet.mirrornode.hedera.com"` | Base URL for the Hedera Mirror Node |
-| `mirrorNode.timeoutSeconds` | - | integer | `10` | Timeout for mirror node requests |
-| **Rate Limiter** |
-| `limiter.free.requestsPerMinute` | - | integer | `100` | Request limit per minute for free tier |
-| `limiter.free.hbarLimit` | - | integer | `10` | HBAR limit for free tier |
-| `limiter.premium.requestsPerMinute` | - | integer | `1000` | Request limit per minute for premium tier |
-| `limiter.premium.hbarLimit` | - | integer | `10000` | HBAR limit for premium tier |
-| **Logging** |
-| `logging.level` | - | string | `"debug"` | Log level (debug, info, warn, error) |
-| `logging.DisableCaller` | - | boolean | `true` | Disable caller information in logs |
-| **API Keys** |
-| `apiKeys` | - | array | - | List of API keys and their tiers |
-| **Features** |
-| `features.enforceApiKey` | - | boolean | `false` | Enable/disable API key enforcement |
-| **Cache** |
-| `cache.defaultExpiration` | - | duration | `"1h"` | Default cache entry expiration time |
-| `cache.cleanupInterval` | - | duration | `"30m"` | Cache cleanup interval |
+An environment variable that is set but empty counts as not set.
 
-## Example Configuration
+## Settings
+
+| Relay variable | Hederium variable | YAML key | Default | Description |
+| --- | --- | --- | --- | --- |
+| `HEDERA_NETWORK` | `HEDERA_NETWORK` | `hedera.network` | none, mandatory | Network to connect to: `mainnet`, `testnet`, `previewnet` or `local`, in any letter case |
+| `CHAIN_ID` | `HEDERA_CHAINID` | `hedera.chainId` | none, mandatory | Chain ID, in decimal (`296`) or hex (`0x128`) |
+| `MIRROR_NODE_URL` | `MIRRORNODE_BASEURL` | `mirrorNode.baseUrl` | none, mandatory | Base URL of the Mirror Node REST API (`http` or `https`), without `/api/v1`. A trailing `/` is ignored |
+| `OPERATOR_ID_MAIN` | `HEDERA_OPERATORID` | `hedera.operatorId` | none, mandatory | Operator account ID |
+| `OPERATOR_KEY_MAIN` | `HEDERA_OPERATORKEY` | `hedera.operatorKey` | none, mandatory | Operator private key. Never printed or logged |
+| `MIRROR_NODE_TIMEOUT` | `MIRRORNODE_TIMEOUTSECONDS` | `mirrorNode.timeoutSeconds` | 10 seconds | Timeout of a Mirror Node request, above zero. See [Units](#units) |
+| `SERVER_PORT` | `SERVER_PORT` | `server.port` | `7546` | HTTP port, 1 to 65535 |
+| `LOG_LEVEL` | `LOGGING_LEVEL` | `logging.level` | `trace` | `trace`, `debug`, `info`, `warn`, `error`, `fatal` or `silent`. See [Log levels](#log-levels) |
+| `BATCH_REQUESTS_ENABLED` | `FEATURES_ENABLEBATCHREQUESTS` | `features.enableBatchRequests` | `true` | Accept JSON-RPC batch requests |
+| `CACHE_TTL` | `CACHE_DEFAULTEXPIRATION` | `cache.defaultExpiration` | 1 hour | Default lifetime of a cache entry. Zero means entries never expire. See [Units](#units) |
+| | `CACHE_CLEANUPINTERVAL` | `cache.cleanupInterval` | `30m` | How often expired cache entries are removed. Zero turns the clean-up off |
+| | `FEATURES_ENFORCEAPIKEY` | `features.enforceApiKey` | `false` | Require an `X-API-KEY` header on every request |
+| | `APPLICATION_VERSION` | `application.version` | `0.1.0` | Version reported by `web3_clientVersion` |
+| | `HEDERA_HBARBUDGET` | `hedera.hbarBudget` | `0` | Operator HBAR budget. Not enforced yet |
+
+Booleans are `true` or `false`, in any letter case. Any other value is refused.
+
+The API-key settings, `apiKeys` and `limiter`, are lists and maps, so they can only be set in the YAML file:
+
+| YAML key | Description |
+| --- | --- |
+| `apiKeys` | List of `key` and `tier` pairs |
+| `limiter.<tier>.requestsPerMinute` | Requests per minute for one API key of that tier |
+| `limiter.<tier>.hbarLimit` | HBAR limit for one API key of that tier |
+
+### Units
+
+A duration's unit depends on the name it is set through:
+
+| Setting | Relay variable | Hederium variable and YAML key |
+| --- | --- | --- |
+| Mirror Node timeout | `MIRROR_NODE_TIMEOUT`: whole milliseconds, `10000` | `MIRRORNODE_TIMEOUTSECONDS`, `mirrorNode.timeoutSeconds`: whole seconds, `10` |
+| Cache lifetime | `CACHE_TTL`: whole milliseconds, `3600000` | `CACHE_DEFAULTEXPIRATION`, `cache.defaultExpiration`: Go duration, `1h` |
+| Cache clean-up | | `CACHE_CLEANUPINTERVAL`, `cache.cleanupInterval`: Go duration, `30m` |
+
+A Go duration is a number with a unit, such as `90s`, `30m` or `1h`.
+
+### Log levels
+
+Hederium logs with zap, which has no `trace` or `silent` level. `trace` runs as `debug`, and `silent` runs as `fatal`, the quietest level zap has.
+
+## Differences from the relay
+
+- Only the relay variables in the table above are read. Other relay variables are ignored.
+- The relay reads a boolean other than `true` as false, and a `CHAIN_ID` that is not a number as `0xNaN`. Hederium refuses both at start-up.
+- Hederium has no read-only mode, so the operator ID and key are always mandatory.
+- The relay also accepts a JSON map of consensus nodes in `HEDERA_NETWORK`. Hederium accepts only the four network names.
+- The relay adds `https://` to a `MIRROR_NODE_URL` without a scheme. Hederium refuses such a URL.
+- Hederium does not read a `.env` file. Pass the variables through the environment, for example with `docker run --env-file`.
+
+## Examples
+
+Environment only, with relay names:
+
+```bash
+export HEDERA_NETWORK=testnet
+export CHAIN_ID=0x128
+export MIRROR_NODE_URL=https://testnet.mirrornode.hedera.com
+export OPERATOR_ID_MAIN=0.0.1234
+export OPERATOR_KEY_MAIN=<operator private key>
+./hederium
+```
+
+The same settings in `configs/config.yaml`:
 
 ```yaml
-environment: "development"
-
 application:
   version: "0.1.0"
 
@@ -63,35 +91,20 @@ server:
 
 hedera:
   network: "testnet"
-  operatorId: "0.0.1466"
-  operatorKey: "your-operator-key"
+  operatorId: "0.0.1234"
+  operatorKey: "<operator private key>"
   chainId: "0x128"
-  hbarBudget: 1000
 
 mirrorNode:
   baseUrl: "https://testnet.mirrornode.hedera.com"
   timeoutSeconds: 10
 
-limiter:
-  free:
-    requestsPerMinute: 100
-    hbarLimit: 10
-  premium:
-    requestsPerMinute: 1000
-    hbarLimit: 10000
-
 logging:
-  level: "debug"
-  DisableCaller: true
-
-apiKeys:
-  - key: "FREE-USER-API-KEY-123"
-    tier: "free"
-  - key: "PREMIUM-USER-API-KEY-456"
-    tier: "premium"
+  level: "info"
 
 features:
   enforceApiKey: false
+  enableBatchRequests: true
 
 cache:
   defaultExpiration: "1h"
@@ -100,8 +113,5 @@ cache:
 
 ## Notes
 
-- The `hedera.operatorKey` should be kept secure and not shared publicly
-- Duration values (like cache settings) support Go duration format (e.g., "1h", "30m", "24h")
-- Log levels supported: "debug", "info", "warn", "error"
-- API keys should be properly secured and not committed to version control
-- Chain ID must be provided in hexadecimal format
+- Keep the operator key and API keys out of version control. Prefer the environment, or a secret store that sets it, over the YAML file.
+- Error messages name the setting that is wrong and never repeat its value.
